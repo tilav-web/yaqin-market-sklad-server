@@ -92,10 +92,11 @@ export class AuthService {
     await this.redis.client.del(key);
 
     const user = await this.users.upsertByPhone(phone);
-    const tokens = await this.issueTokens({ sub: user.id, phone: user.phone });
+    const roles = await this.users.computeRoles(user);
+    const tokens = await this.issueTokens({ sub: user.id, phone: user.phone, roles });
 
     return {
-      user: { id: user.id, phone: user.phone, name: user.name, avatarUrl: user.avatarUrl },
+      user: { id: user.id, phone: user.phone, name: user.name, avatarUrl: user.avatarUrl, roles },
       tokens,
     };
   }
@@ -107,7 +108,8 @@ export class AuthService {
       });
       const user = await this.users.findById(payload.sub);
       if (!user) throw new UnauthorizedException();
-      return this.issueTokens({ sub: user.id, phone: user.phone });
+      const roles = await this.users.computeRoles(user);
+      return this.issueTokens({ sub: user.id, phone: user.phone, roles });
     } catch {
       throw new UnauthorizedException('Refresh token noto\'g\'ri yoki muddati o\'tgan');
     }

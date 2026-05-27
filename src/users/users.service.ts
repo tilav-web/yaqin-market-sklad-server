@@ -2,6 +2,8 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
+import { Role } from '../auth/role.enum';
+import { ShopStaff } from '../shops/entities/shop-staff.entity';
 import { UserAddress } from './entities/user-address.entity';
 import { User } from './entities/user.entity';
 
@@ -12,7 +14,33 @@ export class UsersService {
     private readonly users: Repository<User>,
     @InjectRepository(UserAddress)
     private readonly addresses: Repository<UserAddress>,
+    @InjectRepository(ShopStaff)
+    private readonly shopStaff: Repository<ShopStaff>,
   ) {}
+
+  /**
+   * Computes effective roles for a user from their flags + shop_staff membership.
+   * Persists the result on the user row so guards can read it directly when
+   * skipping a lookup is acceptable (e.g. JWT-decoded role list).
+   */
+  async computeRoles(user: User): Promise<Role[]> {
+    const roles: Role[] = [Role.Customer];
+    if (user.isSellerApproved) roles.push(Role.Seller);
+    if (user.isAdmin) roles.push(Role.Admin);
+    const staffCount = await this.shopStaff.count({
+      where: { userId: user.id, isActive: true },
+    });
+    if (staffCount > 0) roles.push(Role.Staff);
+
+    if (
+      user.roles.length !== roles.length ||
+      roles.some((r) => !user.roles.includes(r))
+    ) {
+      user.roles = roles;
+      await this.users.save(user);
+    }
+    return roles;
+  }
 
   findById(id: string): Promise<User | null> {
     return this.users.findOne({ where: { id } });

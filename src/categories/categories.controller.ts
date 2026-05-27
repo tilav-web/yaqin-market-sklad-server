@@ -14,7 +14,9 @@ import {
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 import { Public } from '../auth/decorators/public.decorator';
-import { AdminGuard } from '../auth/guards/admin.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Role } from '../auth/role.enum';
 import { CategoriesService } from './categories.service';
 import { CreateCategoryDto, UpdateCategoryDto } from './dto/category.dto';
 
@@ -29,28 +31,32 @@ export class CategoriesController {
     return this.categories.findActiveTree();
   }
 
-  @UseGuards(AdminGuard)
+  @UseGuards(RolesGuard)
+  @Roles(Role.Admin)
   @ApiBearerAuth()
   @Get('admin/all')
   listAllAdmin() {
     return this.categories.findAllTree();
   }
 
-  @UseGuards(AdminGuard)
+  @UseGuards(RolesGuard)
+  @Roles(Role.Admin)
   @ApiBearerAuth()
   @Post()
   create(@Body() dto: CreateCategoryDto) {
     return this.categories.create(dto);
   }
 
-  @UseGuards(AdminGuard)
+  @UseGuards(RolesGuard)
+  @Roles(Role.Admin)
   @ApiBearerAuth()
   @Patch(':id')
   update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateCategoryDto) {
     return this.categories.update(id, dto);
   }
 
-  @UseGuards(AdminGuard)
+  @UseGuards(RolesGuard)
+  @Roles(Role.Admin)
   @ApiBearerAuth()
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)

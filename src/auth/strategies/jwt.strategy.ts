@@ -25,6 +25,6 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     if (!user || user.status === 'blocked') {
       throw new UnauthorizedException('Foydalanuvchi topilmadi yoki bloklangan');
     }
-    return { sub: user.id, phone: user.phone };
+    return { sub: user.id, phone: user.phone, roles: payload.roles };
   }
 }

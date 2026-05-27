@@ -36,6 +36,14 @@ export class User {
   @Column({ type: 'boolean', default: false })
   isAdmin!: boolean;
 
+  /**
+   * Cached set of roles for the user. Derived from other columns
+   * (always `customer`, plus `seller`/`admin` when applicable) and from
+   * `shop_staff` membership. Refreshed at login and on role-changing events.
+   */
+  @Column({ type: 'jsonb', default: () => "'[\"customer\"]'::jsonb" })
+  roles!: string[];
+
   @Column({ type: 'timestamptz', nullable: true })
   lastLoginAt!: Date | null;
 

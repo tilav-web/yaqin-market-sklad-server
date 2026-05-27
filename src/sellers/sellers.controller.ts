@@ -12,7 +12,9 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { JwtPayload } from '../auth/decorators/current-user.decorator';
-import { AdminGuard } from '../auth/guards/admin.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Role } from '../auth/role.enum';
 import { SellerApplicationStatus } from './entities/seller-application.entity';
 import { CreateSellerApplicationDto, RejectApplicationDto } from './dto/seller-application.dto';
 import { SellersService } from './sellers.service';
@@ -35,25 +37,29 @@ export class SellersController {
   }
 
   // Admin side
-  @UseGuards(AdminGuard)
+  @UseGuards(RolesGuard)
+  @Roles(Role.Admin)
   @Get('admin/applications')
   adminList(@Query('status') status?: SellerApplicationStatus) {
     return this.sellers.listAllApplications(status);
   }
 
-  @UseGuards(AdminGuard)
+  @UseGuards(RolesGuard)
+  @Roles(Role.Admin)
   @Get('admin/applications/:id')
   adminGet(@Param('id', ParseUUIDPipe) id: string) {
     return this.sellers.getApplication(id);
   }
 
-  @UseGuards(AdminGuard)
+  @UseGuards(RolesGuard)
+  @Roles(Role.Admin)
   @Post('admin/applications/:id/approve')
   adminApprove(@CurrentUser() admin: JwtPayload, @Param('id', ParseUUIDPipe) id: string) {
     return this.sellers.approve(id, admin.sub);
   }
 
-  @UseGuards(AdminGuard)
+  @UseGuards(RolesGuard)
+  @Roles(Role.Admin)
   @Post('admin/applications/:id/reject')
   adminReject(
     @CurrentUser() admin: JwtPayload,
