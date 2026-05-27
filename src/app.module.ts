@@ -6,37 +6,38 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
+import { CategoriesModule } from './categories/categories.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { EnvironmentVariables, validateEnv } from './config/configuration';
 import { buildTypeOrmOptions } from './database/typeorm.config';
 import { HealthModule } from './health/health.module';
+import { OrdersModule } from './orders/orders.module';
+import { ProductsModule } from './products/products.module';
 import { RedisModule } from './redis/redis.module';
+import { SellersModule } from './sellers/sellers.module';
+import { ShopsModule } from './shops/shops.module';
 import { SmsModule } from './sms/sms.module';
 import { UsersModule } from './users/users.module';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({
-      isGlobal: true,
-      cache: true,
-      validate: validateEnv,
-    }),
+    ConfigModule.forRoot({ isGlobal: true, cache: true, validate: validateEnv }),
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService<EnvironmentVariables, true>) => buildTypeOrmOptions(config),
     }),
     ThrottlerModule.forRoot({
-      throttlers: [
-        {
-          ttl: 60_000,
-          limit: 60,
-        },
-      ],
+      throttlers: [{ ttl: 60_000, limit: 60 }],
     }),
     RedisModule,
     SmsModule,
     UsersModule,
     AuthModule,
+    CategoriesModule,
+    SellersModule,
+    ShopsModule,
+    ProductsModule,
+    OrdersModule,
     HealthModule,
   ],
   providers: [

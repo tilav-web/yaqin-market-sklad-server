@@ -1,0 +1,47 @@
+import {
+  Column,
+  Entity,
+  Index,
+  JoinColumn,
+  ManyToOne,
+  PrimaryGeneratedColumn,
+} from 'typeorm';
+
+import { ProductVariant } from '../../products/entities/product-variant.entity';
+import { Order } from './order.entity';
+
+@Entity({ name: 'order_items' })
+@Index(['orderId'])
+export class OrderItem {
+  @PrimaryGeneratedColumn('uuid')
+  id!: string;
+
+  @Column({ type: 'uuid' })
+  orderId!: string;
+
+  @ManyToOne(() => Order, (order) => order.items, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'orderId' })
+  order!: Order;
+
+  @Column({ type: 'uuid' })
+  productVariantId!: string;
+
+  @ManyToOne(() => ProductVariant, { onDelete: 'RESTRICT' })
+  @JoinColumn({ name: 'productVariantId' })
+  productVariant!: ProductVariant;
+
+  @Column({ type: 'varchar', length: 256 })
+  productName!: string;
+
+  @Column({ type: 'int' })
+  quantity!: number;
+
+  @Column({ type: 'int' })
+  unitPrice!: number;
+
+  @Column({ type: 'int' })
+  lineTotal!: number;
+
+  @Column({ type: 'int', default: 0 })
+  returnedQuantity!: number;
+}
