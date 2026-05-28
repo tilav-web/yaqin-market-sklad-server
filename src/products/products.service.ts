@@ -333,6 +333,8 @@ export class ProductsService {
     limit?: number;
     q?: string;
     categoryId?: string;
+    sort?: 'relevance' | 'price_asc' | 'price_desc' | 'rating';
+    onlyDiscounted?: boolean;
   }): Promise<{ items: FeedProduct[]; nextPage: number | null }> {
     const limit = Math.min(opts.limit ?? 24, 60);
     const page = Math.max(opts.page ?? 1, 1);
@@ -367,11 +369,26 @@ export class ProductsService {
     if (opts.categoryId) {
       qb.andWhere('pf.categoryId = :categoryId', { categoryId: opts.categoryId });
     }
+    if (opts.onlyDiscounted) {
+      qb.andWhere('v.discountPrice IS NOT NULL AND v.discountPrice < v.price');
+    }
+
+    switch (opts.sort) {
+      case 'price_asc':
+        qb.orderBy('v.price', 'ASC');
+        break;
+      case 'price_desc':
+        qb.orderBy('v.price', 'DESC');
+        break;
+      case 'rating':
+        qb.orderBy('v.ratingAverage', 'DESC').addOrderBy('v.ratingCount', 'DESC');
+        break;
+      default:
+        qb.orderBy('v.ratingAverage', 'DESC').addOrderBy('v.createdAt', 'DESC');
+    }
 
     const total = await qb.getCount();
     const variants = await qb
-      .orderBy('v.ratingAverage', 'DESC')
-      .addOrderBy('v.createdAt', 'DESC')
       .skip((page - 1) * limit)
       .take(limit)
       .getMany();

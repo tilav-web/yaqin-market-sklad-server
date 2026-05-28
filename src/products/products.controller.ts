@@ -16,6 +16,7 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { JwtPayload } from '../auth/decorators/current-user.decorator';
 import { Public } from '../auth/decorators/public.decorator';
+import { FeedQueryDto } from './dto/feed-query.dto';
 import {
   AdjustStockDto,
   CreateProductFamilyDto,
@@ -114,21 +115,16 @@ export class CatalogController {
    */
   @Public()
   @Get('products')
-  feed(
-    @Query('lat') lat: string,
-    @Query('lng') lng: string,
-    @Query('page') page?: string,
-    @Query('limit') limit?: string,
-    @Query('q') q?: string,
-    @Query('categoryId') categoryId?: string,
-  ) {
+  feed(@Query() query: FeedQueryDto) {
     return this.products.feedNearby({
-      latitude: Number(lat),
-      longitude: Number(lng),
-      page: page ? Number(page) : undefined,
-      limit: limit ? Number(limit) : undefined,
-      q,
-      categoryId,
+      latitude: query.lat,
+      longitude: query.lng,
+      page: query.page,
+      limit: query.limit,
+      q: query.q,
+      categoryId: query.categoryId,
+      sort: query.sort,
+      onlyDiscounted: query.onlyDiscounted,
     });
   }
 
