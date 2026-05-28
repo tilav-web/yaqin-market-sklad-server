@@ -107,6 +107,31 @@ export class SellerProductsController {
 export class CatalogController {
   constructor(private readonly products: ProductsService) {}
 
+  /**
+   * Global product feed for the customer Home tab.
+   * Returns products from every shop whose delivery zone reaches `lat`/`lng`,
+   * decorated with shop name, distance and computed delivery fee.
+   */
+  @Public()
+  @Get('products')
+  feed(
+    @Query('lat') lat: string,
+    @Query('lng') lng: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('q') q?: string,
+    @Query('categoryId') categoryId?: string,
+  ) {
+    return this.products.feedNearby({
+      latitude: Number(lat),
+      longitude: Number(lng),
+      page: page ? Number(page) : undefined,
+      limit: limit ? Number(limit) : undefined,
+      q,
+      categoryId,
+    });
+  }
+
   @Public()
   @Get('shops/:shopId/products')
   shopCatalog(

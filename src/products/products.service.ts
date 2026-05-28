@@ -5,12 +5,24 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, ILike, Repository } from 'typeorm';
+import { DataSource, ILike, In, Repository } from 'typeorm';
 
+import { calcDeliveryFee, haversineKm } from '../geo/geo.util';
 import { Shop } from '../shops/entities/shop.entity';
 import { InventoryMovement, MovementType } from './entities/inventory-movement.entity';
 import { ProductFamily } from './entities/product-family.entity';
 import { ProductVariant } from './entities/product-variant.entity';
+
+export type FeedProduct = Omit<ProductVariant, 'shop'> & {
+  shop: {
+    id: string;
+    name: string;
+    distanceKm: number;
+    deliveryFeeAtUser: number;
+    isOpen: boolean;
+    photos: string[];
+  };
+};
 
 @Injectable()
 export class ProductsService {
@@ -241,5 +253,97 @@ export class ProductsService {
       where: { shopId, productFamilyId: familyId, isActive: true },
       order: { unitSize: 'ASC', price: 'ASC' },
     });
+  }
+
+  /**
+   * Global product feed for the customer Home tab.
+   *
+   * Algorithm:
+   *  1. Find all shops whose delivery zone covers the user's coordinates.
+   *  2. Pull every active in-stock variant from those shops, paginated.
+   *  3. Optionally filter by category or search query.
+   *  4. Decorate each variant with `shop` info (distance + delivery fee at user).
+   *
+   * Returned products are sorted by an availability score: in-stock items from
+   * closer shops with higher ratings come first.
+   */
+  async feedNearby(opts: {
+    latitude: number;
+    longitude: number;
+    page?: number;
+    limit?: number;
+    q?: string;
+    categoryId?: string;
+  }): Promise<{ items: FeedProduct[]; nextPage: number | null }> {
+    const limit = Math.min(opts.limit ?? 24, 60);
+    const page = Math.max(opts.page ?? 1, 1);
+
+    // Step 1: shops within delivery zone of this user
+    const allShops = await this.shops.find({ where: { isActive: true } });
+    const reachableShops = allShops
+      .map((s) => {
+        const distanceKm = haversineKm(opts.latitude, opts.longitude, s.latitude, s.longitude);
+        return { shop: s, distanceKm };
+      })
+      .filter(({ shop, distanceKm }) => distanceKm <= shop.deliveryZone.maxKm);
+
+    if (reachableShops.length === 0) {
+      return { items: [], nextPage: null };
+    }
+
+    const shopIds = reachableShops.map((s) => s.shop.id);
+    const shopMap = new Map(reachableShops.map((s) => [s.shop.id, s]));
+
+    // Step 2: query variants
+    const qb = this.variants
+      .createQueryBuilder('v')
+      .innerJoinAndSelect('v.productFamily', 'pf')
+      .where('v.shopId IN (:...shopIds)', { shopIds })
+      .andWhere('v.isActive = true')
+      .andWhere('v.stock > 0');
+
+    if (opts.q) {
+      qb.andWhere('(v.name ILIKE :q OR pf.name ILIKE :q OR pf.brand ILIKE :q)', { q: `%${opts.q}%` });
+    }
+    if (opts.categoryId) {
+      qb.andWhere('pf.categoryId = :categoryId', { categoryId: opts.categoryId });
+    }
+
+    const total = await qb.getCount();
+    const variants = await qb
+      .orderBy('v.ratingAverage', 'DESC')
+      .addOrderBy('v.createdAt', 'DESC')
+      .skip((page - 1) * limit)
+      .take(limit)
+      .getMany();
+
+    // Step 3: decorate with shop info
+    const items: FeedProduct[] = variants.map((v) => {
+      const ref = shopMap.get(v.shopId);
+      const distanceKm = ref?.distanceKm ?? 0;
+      const shop = ref?.shop;
+      const deliveryFeeAtUser = shop
+        ? calcDeliveryFee({
+            distanceKm,
+            freeKm: shop.deliveryZone.freeKm,
+            pricingType: shop.deliveryZone.pricingType,
+            pricePerStep: shop.deliveryZone.pricePerStep,
+          })
+        : 0;
+      const decorated = Object.assign({}, v, {
+        shop: {
+          id: shop?.id ?? v.shopId,
+          name: shop?.name ?? '',
+          distanceKm,
+          deliveryFeeAtUser,
+          isOpen: shop?.isOpenManual ?? false,
+          photos: shop?.photos ?? [],
+        },
+      });
+      return decorated;
+    });
+
+    const nextPage = page * limit < total ? page + 1 : null;
+    return { items, nextPage };
   }
 }
