@@ -8,6 +8,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, ILike, In, Repository } from 'typeorm';
 
 import { calcDeliveryFee, haversineKm } from '../geo/geo.util';
+import { Review } from '../orders/entities/review.entity';
 import { Shop } from '../shops/entities/shop.entity';
 import { InventoryMovement, MovementType } from './entities/inventory-movement.entity';
 import { ProductFamily } from './entities/product-family.entity';
@@ -35,6 +36,8 @@ export class ProductsService {
     private readonly movements: Repository<InventoryMovement>,
     @InjectRepository(Shop)
     private readonly shops: Repository<Shop>,
+    @InjectRepository(Review)
+    private readonly reviews: Repository<Review>,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -253,6 +256,62 @@ export class ProductsService {
       where: { shopId, productFamilyId: familyId, isActive: true },
       order: { unitSize: 'ASC', price: 'ASC' },
     });
+  }
+
+  /**
+   * Single-variant detail for the customer product page: the variant itself,
+   * a shop summary (for add-to-cart + open state) and its sibling variants in
+   * the same product family (e.g. 0.5L / 1L / 1.5L).
+   */
+  async getVariantDetail(variantId: string) {
+    const variant = await this.variants.findOne({
+      where: { id: variantId, isActive: true },
+      relations: { productFamily: true },
+    });
+    if (!variant) throw new NotFoundException('Mahsulot topilmadi');
+
+    const [siblings, shop] = await Promise.all([
+      this.variants.find({
+        where: {
+          shopId: variant.shopId,
+          productFamilyId: variant.productFamilyId,
+          isActive: true,
+        },
+        order: { unitSize: 'ASC', price: 'ASC' },
+      }),
+      this.shops.findOne({ where: { id: variant.shopId } }),
+    ]);
+
+    return {
+      ...variant,
+      shop: shop
+        ? {
+            id: shop.id,
+            name: shop.name,
+            isOpenManual: shop.isOpenManual,
+            minOrderPrice: shop.minOrderPrice,
+            photos: shop.photos,
+          }
+        : null,
+      siblings,
+    };
+  }
+
+  /** Public, anonymised review list for a variant (only reviewer name + stars + text). */
+  async listVariantReviews(variantId: string) {
+    const reviews = await this.reviews.find({
+      where: { productVariantId: variantId },
+      relations: { user: true },
+      order: { createdAt: 'DESC' },
+      take: 50,
+    });
+    return reviews.map((r) => ({
+      id: r.id,
+      stars: r.stars,
+      text: r.text,
+      createdAt: r.createdAt,
+      userName: r.user?.name ?? 'Foydalanuvchi',
+    }));
   }
 
   /**

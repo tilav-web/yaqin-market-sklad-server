@@ -133,6 +133,18 @@ export class CatalogController {
   }
 
   @Public()
+  @Get('products/:variantId')
+  variantDetail(@Param('variantId', ParseUUIDPipe) variantId: string) {
+    return this.products.getVariantDetail(variantId);
+  }
+
+  @Public()
+  @Get('products/:variantId/reviews')
+  variantReviews(@Param('variantId', ParseUUIDPipe) variantId: string) {
+    return this.products.listVariantReviews(variantId);
+  }
+
+  @Public()
   @Get('shops/:shopId/products')
   shopCatalog(
     @Param('shopId', ParseUUIDPipe) shopId: string,
