@@ -14,6 +14,7 @@ import { ProductVariant } from '../products/entities/product-variant.entity';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { Shop } from '../shops/entities/shop.entity';
 import { UserAddress } from '../users/entities/user-address.entity';
+import { ChatMessage } from './entities/chat-message.entity';
 import { OrderItem } from './entities/order-item.entity';
 import { Order, OrderStatus, OrderTimelineEvent, PaymentMethod } from './entities/order.entity';
 import { Review } from './entities/review.entity';
@@ -35,6 +36,8 @@ export class OrdersService {
     private readonly addresses: Repository<UserAddress>,
     @InjectRepository(Review)
     private readonly reviews: Repository<Review>,
+    @InjectRepository(ChatMessage)
+    private readonly chat: Repository<ChatMessage>,
     private readonly dataSource: DataSource,
     private readonly realtime: RealtimeGateway,
   ) {}
@@ -435,5 +438,40 @@ export class OrdersService {
       ratingAverage: Math.round(avg * 100) / 100,
       ratingCount: count,
     });
+  }
+
+  // --- In-order chat -------------------------------------------------------
+
+  /** Verify the user is a party to the order and return { order, fromShop }. */
+  private async authorizeChat(userId: string, orderId: string) {
+    const order = await this.orders.findOne({
+      where: { id: orderId },
+      relations: { shop: true },
+    });
+    if (!order) throw new NotFoundException('Buyurtma topilmadi');
+    const isCustomer = order.userId === userId;
+    const isShop = order.shop.ownerId === userId;
+    if (!isCustomer && !isShop) throw new ForbiddenException();
+    return { order, fromShop: isShop };
+  }
+
+  async listMessages(userId: string, orderId: string): Promise<ChatMessage[]> {
+    await this.authorizeChat(userId, orderId);
+    return this.chat.find({
+      where: { orderId },
+      order: { createdAt: 'ASC' },
+      take: 200,
+    });
+  }
+
+  async sendMessage(userId: string, orderId: string, text: string): Promise<ChatMessage> {
+    const { order, fromShop } = await this.authorizeChat(userId, orderId);
+    const message = await this.chat.save(
+      this.chat.create({ orderId, senderUserId: userId, fromShop, text: text.trim() }),
+    );
+    // Deliver live to both parties.
+    this.realtime.emitToUser(order.userId, 'chat:message', message);
+    this.realtime.emitToShop(order.shopId, 'chat:message', message);
+    return message;
   }
 }

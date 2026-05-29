@@ -6,6 +6,7 @@ import { RealtimeModule } from '../realtime/realtime.module';
 import { Shop } from '../shops/entities/shop.entity';
 import { UserAddress } from '../users/entities/user-address.entity';
 import { ProductVariant } from '../products/entities/product-variant.entity';
+import { ChatMessage } from './entities/chat-message.entity';
 import { OrderItem } from './entities/order-item.entity';
 import { Order } from './entities/order.entity';
 import { Review } from './entities/review.entity';
@@ -18,6 +19,7 @@ import { OrdersService } from './orders.service';
       Order,
       OrderItem,
       Review,
+      ChatMessage,
       Shop,
       ProductVariant,
       InventoryMovement,

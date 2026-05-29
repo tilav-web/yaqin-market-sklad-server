@@ -9,6 +9,7 @@ import {
   IsString,
   IsUUID,
   Max,
+  MaxLength,
   Min,
   ValidateNested,
 } from 'class-validator';
@@ -52,6 +53,13 @@ export class UpdateOrderStatusDto {
   @IsOptional()
   @IsString()
   note?: string;
+}
+
+export class SendMessageDto {
+  @ApiProperty({ example: 'Buyurtma tayyormi?' })
+  @IsString()
+  @MaxLength(1000)
+  text!: string;
 }
 
 export class ReviewItemDto {

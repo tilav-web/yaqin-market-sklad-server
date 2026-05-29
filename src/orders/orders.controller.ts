@@ -16,6 +16,7 @@ import {
   CreateOrderDto,
   CreateReviewsDto,
   PartialReturnDto,
+  SendMessageDto,
   UpdateOrderStatusDto,
 } from './dto/order.dto';
 import { OrderStatus } from './entities/order.entity';
@@ -67,6 +68,20 @@ export class OrdersController {
     @Body() dto: CreateReviewsDto,
   ) {
     return this.orders.createReviews(user.sub, id, dto.items);
+  }
+
+  @Get(':id/messages')
+  listMessages(@CurrentUser() user: JwtPayload, @Param('id', ParseUUIDPipe) id: string) {
+    return this.orders.listMessages(user.sub, id);
+  }
+
+  @Post(':id/messages')
+  sendMessage(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: SendMessageDto,
+  ) {
+    return this.orders.sendMessage(user.sub, id, dto.text);
   }
 }
 
