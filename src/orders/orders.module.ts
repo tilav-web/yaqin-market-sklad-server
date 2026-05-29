@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { InventoryMovement } from '../products/entities/inventory-movement.entity';
+import { PushModule } from '../push/push.module';
 import { RealtimeModule } from '../realtime/realtime.module';
 import { Shop } from '../shops/entities/shop.entity';
 import { UserAddress } from '../users/entities/user-address.entity';
@@ -26,6 +27,7 @@ import { OrdersService } from './orders.service';
       UserAddress,
     ]),
     RealtimeModule,
+    PushModule,
   ],
   controllers: [OrdersController, SellerOrdersController],
   providers: [OrdersService],

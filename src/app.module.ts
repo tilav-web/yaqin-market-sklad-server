@@ -13,6 +13,7 @@ import { buildTypeOrmOptions } from './database/typeorm.config';
 import { HealthModule } from './health/health.module';
 import { OrdersModule } from './orders/orders.module';
 import { ProductsModule } from './products/products.module';
+import { PushModule } from './push/push.module';
 import { RedisModule } from './redis/redis.module';
 import { SellersModule } from './sellers/sellers.module';
 import { ShopsModule } from './shops/shops.module';
@@ -38,6 +39,7 @@ import { UsersModule } from './users/users.module';
     ShopsModule,
     ProductsModule,
     OrdersModule,
+    PushModule,
     HealthModule,
   ],
   providers: [

@@ -11,6 +11,7 @@ import { DataSource, In, Repository } from 'typeorm';
 import { calcDeliveryFee, haversineKm } from '../geo/geo.util';
 import { InventoryMovement, MovementType } from '../products/entities/inventory-movement.entity';
 import { ProductVariant } from '../products/entities/product-variant.entity';
+import { PushService } from '../push/push.service';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { Shop } from '../shops/entities/shop.entity';
 import { UserAddress } from '../users/entities/user-address.entity';
@@ -40,7 +41,17 @@ export class OrdersService {
     private readonly chat: Repository<ChatMessage>,
     private readonly dataSource: DataSource,
     private readonly realtime: RealtimeGateway,
+    private readonly push: PushService,
   ) {}
+
+  private static readonly STATUS_LABEL: Record<OrderStatus, string> = {
+    [OrderStatus.New]: 'Yangi',
+    [OrderStatus.Accepted]: 'Qabul qilindi',
+    [OrderStatus.Preparing]: 'Yig\'ilmoqda',
+    [OrderStatus.Delivering]: 'Yetkazib berilmoqda',
+    [OrderStatus.Delivered]: 'Yetkazildi',
+    [OrderStatus.Cancelled]: 'Bekor qilindi',
+  };
 
   /** Notify the customer and the shop's devices that an order changed. */
   private emitOrderEvent(
@@ -153,6 +164,11 @@ export class OrdersService {
       return manager.findOne(Order, { where: { id: savedOrder.id }, relations: { items: true } }) as Promise<Order>;
     });
     this.emitOrderEvent('order:new', created);
+    void this.push.sendToUser(shop.ownerId, {
+      title: 'Yangi buyurtma',
+      body: `#${created.orderNumber} — ${created.total.toLocaleString()} so'm`,
+      data: { orderId: created.id, kind: 'order:new' },
+    });
     return created;
   }
 
@@ -253,6 +269,14 @@ export class OrdersService {
       return manager.save(order);
     });
     this.emitOrderEvent('order:updated', saved);
+    // Notify the customer when the shop advances the order; notify the shop
+    // when the customer confirms delivery or cancels.
+    const target = isOwner ? saved.userId : order.shop.ownerId;
+    void this.push.sendToUser(target, {
+      title: `Buyurtma #${saved.orderNumber}`,
+      body: OrdersService.STATUS_LABEL[saved.status],
+      data: { orderId: saved.id, kind: 'order:updated' },
+    });
     return saved;
   }
 
