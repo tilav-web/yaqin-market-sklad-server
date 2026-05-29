@@ -11,6 +11,7 @@ import { DataSource, In, Repository } from 'typeorm';
 import { calcDeliveryFee, haversineKm } from '../geo/geo.util';
 import { InventoryMovement, MovementType } from '../products/entities/inventory-movement.entity';
 import { ProductVariant } from '../products/entities/product-variant.entity';
+import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { Shop } from '../shops/entities/shop.entity';
 import { UserAddress } from '../users/entities/user-address.entity';
 import { OrderItem } from './entities/order-item.entity';
@@ -35,7 +36,23 @@ export class OrdersService {
     @InjectRepository(Review)
     private readonly reviews: Repository<Review>,
     private readonly dataSource: DataSource,
+    private readonly realtime: RealtimeGateway,
   ) {}
+
+  /** Notify the customer and the shop's devices that an order changed. */
+  private emitOrderEvent(
+    event: 'order:new' | 'order:updated',
+    order: Pick<Order, 'id' | 'userId' | 'shopId' | 'status' | 'orderNumber'>,
+  ): void {
+    const payload = {
+      orderId: order.id,
+      status: order.status,
+      orderNumber: order.orderNumber,
+      shopId: order.shopId,
+    };
+    this.realtime.emitToUser(order.userId, event, payload);
+    this.realtime.emitToShop(order.shopId, event, payload);
+  }
 
   async create(
     userId: string,
@@ -87,7 +104,7 @@ export class OrdersService {
       pricePerStep: shop.deliveryZone.pricePerStep,
     });
 
-    return this.dataSource.transaction(async (manager) => {
+    const created = await this.dataSource.transaction(async (manager) => {
       const order = manager.create(Order, {
         userId,
         shopId: shop.id,
@@ -132,6 +149,8 @@ export class OrdersService {
 
       return manager.findOne(Order, { where: { id: savedOrder.id }, relations: { items: true } }) as Promise<Order>;
     });
+    this.emitOrderEvent('order:new', created);
+    return created;
   }
 
   listForUser(userId: string): Promise<Order[]> {
@@ -215,7 +234,7 @@ export class OrdersService {
       throw new ForbiddenException();
     }
 
-    return this.dataSource.transaction(async (manager) => {
+    const saved = await this.dataSource.transaction(async (manager) => {
       order.status = nextStatus;
       const event: OrderTimelineEvent = {
         status: nextStatus,
@@ -230,6 +249,8 @@ export class OrdersService {
       }
       return manager.save(order);
     });
+    this.emitOrderEvent('order:updated', saved);
+    return saved;
   }
 
   private async restockOrder(manager: import('typeorm').EntityManager, orderId: string) {
@@ -268,7 +289,7 @@ export class OrdersService {
       throw new BadRequestException("Faqat yetkazib berilayotgan yoki yetkazilgan buyurtmada qaytarish mumkin");
     }
 
-    return this.dataSource.transaction(async (manager) => {
+    const result = await this.dataSource.transaction(async (manager) => {
       let totalReturnAmount = 0;
       for (const r of returns) {
         const item = order.items.find((i) => i.id === r.orderItemId);
@@ -312,6 +333,8 @@ export class OrdersService {
       order.timeline = [...order.timeline, event];
       return manager.save(order);
     });
+    this.emitOrderEvent('order:updated', result);
+    return result;
   }
 
   /**
