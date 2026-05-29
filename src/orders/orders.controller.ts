@@ -14,6 +14,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { JwtPayload } from '../auth/decorators/current-user.decorator';
 import {
   CreateOrderDto,
+  CreateReviewsDto,
   PartialReturnDto,
   UpdateOrderStatusDto,
 } from './dto/order.dto';
@@ -57,6 +58,15 @@ export class OrdersController {
     @Body() dto: PartialReturnDto,
   ) {
     return this.orders.partialReturn(user.sub, id, dto.items, dto.reason);
+  }
+
+  @Post(':id/reviews')
+  reviewItems(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CreateReviewsDto,
+  ) {
+    return this.orders.createReviews(user.sub, id, dto.items);
   }
 }
 

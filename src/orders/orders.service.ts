@@ -15,6 +15,7 @@ import { Shop } from '../shops/entities/shop.entity';
 import { UserAddress } from '../users/entities/user-address.entity';
 import { OrderItem } from './entities/order-item.entity';
 import { Order, OrderStatus, OrderTimelineEvent, PaymentMethod } from './entities/order.entity';
+import { Review } from './entities/review.entity';
 
 const orderNumberGen = customAlphabet('ABCDEFGHJKLMNPQRSTUVWXYZ23456789', 8);
 
@@ -31,6 +32,8 @@ export class OrdersService {
     private readonly variants: Repository<ProductVariant>,
     @InjectRepository(UserAddress)
     private readonly addresses: Repository<UserAddress>,
+    @InjectRepository(Review)
+    private readonly reviews: Repository<Review>,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -155,7 +158,10 @@ export class OrdersService {
       .getMany();
   }
 
-  async getOne(userId: string, orderId: string): Promise<Order> {
+  async getOne(
+    userId: string,
+    orderId: string,
+  ): Promise<Order & { reviewedVariantIds: string[] }> {
     const order = await this.orders.findOne({
       where: { id: orderId },
       relations: { items: true, shop: true, deliveryAddress: true },
@@ -164,7 +170,11 @@ export class OrdersService {
     if (order.userId !== userId && order.shop.ownerId !== userId) {
       throw new ForbiddenException();
     }
-    return order;
+    const myReviews = await this.reviews.find({
+      where: { orderId, userId: order.userId },
+      select: { productVariantId: true },
+    });
+    return { ...order, reviewedVariantIds: myReviews.map((r) => r.productVariantId) };
   }
 
   async updateStatus(
@@ -301,6 +311,106 @@ export class OrdersService {
       };
       order.timeline = [...order.timeline, event];
       return manager.save(order);
+    });
+  }
+
+  /**
+   * Customer rates products from a delivered order (1–5 stars + optional text).
+   * Per business rule, customers rate **products only** — the shop rating is
+   * derived automatically from the average of all its product reviews.
+   *
+   * Re-submitting for an already-reviewed variant overwrites the prior review.
+   */
+  async createReviews(
+    userId: string,
+    orderId: string,
+    items: { productVariantId: string; stars: number; text?: string }[],
+  ): Promise<{ reviewedVariantIds: string[] }> {
+    const order = await this.orders.findOne({
+      where: { id: orderId },
+      relations: { items: true, shop: true },
+    });
+    if (!order) throw new NotFoundException('Buyurtma topilmadi');
+    if (order.userId !== userId) throw new ForbiddenException();
+    if (order.status !== OrderStatus.Delivered) {
+      throw new BadRequestException('Faqat yetkazilgan buyurtmani baholash mumkin');
+    }
+
+    const orderedVariantIds = new Set(order.items.map((i) => i.productVariantId));
+    for (const r of items) {
+      if (!orderedVariantIds.has(r.productVariantId)) {
+        throw new BadRequestException('Mahsulot ushbu buyurtmada yo\'q');
+      }
+    }
+
+    await this.dataSource.transaction(async (manager) => {
+      for (const r of items) {
+        const existing = await manager.findOne(Review, {
+          where: { userId, orderId, productVariantId: r.productVariantId },
+        });
+        if (existing) {
+          existing.stars = r.stars;
+          existing.text = r.text ?? null;
+          await manager.save(existing);
+        } else {
+          await manager.save(
+            manager.create(Review, {
+              userId,
+              orderId,
+              productVariantId: r.productVariantId,
+              stars: r.stars,
+              text: r.text ?? null,
+            }),
+          );
+        }
+      }
+    });
+
+    // Roll up ratings for every affected variant + the shop.
+    const affectedVariantIds = [...new Set(items.map((i) => i.productVariantId))];
+    for (const variantId of affectedVariantIds) {
+      await this.recomputeVariantRating(variantId);
+    }
+    await this.recomputeShopRating(order.shopId);
+
+    const myReviews = await this.reviews.find({
+      where: { orderId, userId },
+      select: { productVariantId: true },
+    });
+    return { reviewedVariantIds: myReviews.map((rv) => rv.productVariantId) };
+  }
+
+  /** Recompute a variant's cached rating from its reviews. */
+  private async recomputeVariantRating(variantId: string): Promise<void> {
+    const rows = await this.reviews.find({
+      where: { productVariantId: variantId },
+      select: { stars: true },
+    });
+    const count = rows.length;
+    const avg = count ? rows.reduce((s, r) => s + r.stars, 0) / count : 0;
+    await this.variants.update(variantId, {
+      ratingAverage: Math.round(avg * 100) / 100,
+      ratingCount: count,
+    });
+  }
+
+  /** Shop rating = average of all reviews across the shop's variants. */
+  private async recomputeShopRating(shopId: string): Promise<void> {
+    const variants = await this.variants.find({
+      where: { shopId },
+      select: { id: true },
+    });
+    const variantIds = variants.map((v) => v.id);
+    if (variantIds.length === 0) return;
+    const rows = await this.reviews.find({
+      where: { productVariantId: In(variantIds) },
+      select: { stars: true },
+    });
+    const count = rows.length;
+    const avg = count ? rows.reduce((s, r) => s + r.stars, 0) / count : 0;
+    await this.shops.update(shopId, {
+      ratingAverage: Math.round(avg * 100) / 100,
+      ratingCount: count,
     });
   }
 }

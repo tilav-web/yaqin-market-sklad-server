@@ -8,6 +8,7 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  Max,
   Min,
   ValidateNested,
 } from 'class-validator';
@@ -51,6 +52,32 @@ export class UpdateOrderStatusDto {
   @IsOptional()
   @IsString()
   note?: string;
+}
+
+export class ReviewItemDto {
+  @ApiProperty()
+  @IsUUID()
+  productVariantId!: string;
+
+  @ApiProperty({ example: 5, minimum: 1, maximum: 5 })
+  @IsInt()
+  @Min(1)
+  @Max(5)
+  stars!: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  text?: string;
+}
+
+export class CreateReviewsDto {
+  @ApiProperty({ type: [ReviewItemDto] })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => ReviewItemDto)
+  items!: ReviewItemDto[];
 }
 
 export class ReturnItemDto {
