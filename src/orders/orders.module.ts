@@ -5,6 +5,7 @@ import { InventoryMovement } from '../products/entities/inventory-movement.entit
 import { PushModule } from '../push/push.module';
 import { RealtimeModule } from '../realtime/realtime.module';
 import { Shop } from '../shops/entities/shop.entity';
+import { ShopStaff } from '../shops/entities/shop-staff.entity';
 import { UserAddress } from '../users/entities/user-address.entity';
 import { ProductVariant } from '../products/entities/product-variant.entity';
 import { ChatMessage } from './entities/chat-message.entity';
@@ -22,6 +23,7 @@ import { OrdersService } from './orders.service';
       Review,
       ChatMessage,
       Shop,
+      ShopStaff,
       ProductVariant,
       InventoryMovement,
       UserAddress,

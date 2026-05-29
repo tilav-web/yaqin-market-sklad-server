@@ -16,6 +16,7 @@ import {
   CreateOrderDto,
   CreateReviewsDto,
   PartialReturnDto,
+  ReturnReasonDto,
   SendMessageDto,
   UpdateOrderStatusDto,
 } from './dto/order.dto';
@@ -59,6 +60,15 @@ export class OrdersController {
     @Body() dto: PartialReturnDto,
   ) {
     return this.orders.partialReturn(user.sub, id, dto.items, dto.reason);
+  }
+
+  @Post(':id/return-reason')
+  setReturnReason(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ReturnReasonDto,
+  ) {
+    return this.orders.setReturnReason(user.sub, id, dto.reason);
   }
 
   @Post(':id/reviews')

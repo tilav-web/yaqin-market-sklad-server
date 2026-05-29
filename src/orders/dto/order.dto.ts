@@ -55,6 +55,13 @@ export class UpdateOrderStatusDto {
   note?: string;
 }
 
+export class ReturnReasonDto {
+  @ApiProperty({ example: 'Pomidor chirigan edi' })
+  @IsString()
+  @MaxLength(500)
+  reason!: string;
+}
+
 export class SendMessageDto {
   @ApiProperty({ example: 'Buyurtma tayyormi?' })
   @IsString()

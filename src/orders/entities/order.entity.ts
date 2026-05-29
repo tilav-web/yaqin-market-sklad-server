@@ -102,6 +102,10 @@ export class Order {
   @Column({ type: 'text', nullable: true })
   cancellationReason!: string | null;
 
+  /** Optional reason the customer adds (later) for returned items. */
+  @Column({ type: 'text', nullable: true })
+  returnReason!: string | null;
+
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt!: Date;
 

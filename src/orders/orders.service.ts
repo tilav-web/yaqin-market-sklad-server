@@ -14,6 +14,7 @@ import { ProductVariant } from '../products/entities/product-variant.entity';
 import { PushService } from '../push/push.service';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { Shop } from '../shops/entities/shop.entity';
+import { ShopStaff, StaffPermission } from '../shops/entities/shop-staff.entity';
 import { UserAddress } from '../users/entities/user-address.entity';
 import { ChatMessage } from './entities/chat-message.entity';
 import { OrderItem } from './entities/order-item.entity';
@@ -39,6 +40,8 @@ export class OrdersService {
     private readonly reviews: Repository<Review>,
     @InjectRepository(ChatMessage)
     private readonly chat: Repository<ChatMessage>,
+    @InjectRepository(ShopStaff)
+    private readonly staff: Repository<ShopStaff>,
     private readonly dataSource: DataSource,
     private readonly realtime: RealtimeGateway,
     private readonly push: PushService,
@@ -66,6 +69,23 @@ export class OrdersService {
     };
     this.realtime.emitToUser(order.userId, event, payload);
     this.realtime.emitToShop(order.shopId, event, payload);
+  }
+
+  /**
+   * Authorize a shop-side action on an order: the shop owner always passes;
+   * otherwise the actor must be active staff of that shop holding `permission`.
+   */
+  private async assertShopCanManage(
+    userId: string,
+    order: Pick<Order, 'shopId'> & { shop: Pick<Shop, 'ownerId'> },
+    permission: StaffPermission,
+  ): Promise<void> {
+    if (order.shop.ownerId === userId) return;
+    const staff = await this.staff.findOne({
+      where: { shopId: order.shopId, userId, isActive: true },
+    });
+    if (staff?.permissions.includes(permission)) return;
+    throw new ForbiddenException('Bu amal uchun ruxsat yo\'q');
   }
 
   async create(
@@ -311,9 +331,11 @@ export class OrdersService {
   ): Promise<Order> {
     const order = await this.orders.findOne({ where: { id: orderId }, relations: { items: true, shop: true } });
     if (!order) throw new NotFoundException('Buyurtma topilmadi');
-    if (order.userId !== userId) throw new ForbiddenException();
-    if (![OrderStatus.Delivering, OrderStatus.Delivered].includes(order.status)) {
-      throw new BadRequestException("Faqat yetkazib berilayotgan yoki yetkazilgan buyurtmada qaytarish mumkin");
+    // Returns are marked by the shop side (seller/courier) at hand-off, before
+    // the customer pays cash — not by the customer.
+    await this.assertShopCanManage(userId, order, 'orders.update_status');
+    if (order.status !== OrderStatus.Delivering) {
+      throw new BadRequestException('Faqat yetkazib berilayotganda qaytarish mumkin');
     }
 
     const result = await this.dataSource.transaction(async (manager) => {
@@ -361,7 +383,25 @@ export class OrdersService {
       return manager.save(order);
     });
     this.emitOrderEvent('order:updated', result);
+    // Remind the customer to (optionally) add a return reason.
+    void this.push.sendToUser(result.userId, {
+      title: `Buyurtma #${result.orderNumber}`,
+      body: 'Ba\'zi mahsulotlar qaytarildi. Xohlasangiz sabab qoldiring.',
+      data: { orderId: result.id, kind: 'order:returned' },
+    });
     return result;
+  }
+
+  /**
+   * Customer adds (or edits) an optional free-text reason for the returned
+   * items in their order. Not required — just captured if offered.
+   */
+  async setReturnReason(userId: string, orderId: string, reason: string): Promise<Order> {
+    const order = await this.orders.findOne({ where: { id: orderId } });
+    if (!order) throw new NotFoundException('Buyurtma topilmadi');
+    if (order.userId !== userId) throw new ForbiddenException();
+    order.returnReason = reason.trim() || null;
+    return this.orders.save(order);
   }
 
   /**
