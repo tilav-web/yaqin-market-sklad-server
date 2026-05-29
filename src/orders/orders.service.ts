@@ -225,8 +225,13 @@ export class OrdersService {
       relations: { items: true, shop: true, deliveryAddress: true },
     });
     if (!order) throw new NotFoundException('Buyurtma topilmadi');
-    if (order.userId !== userId && order.shop.ownerId !== userId) {
-      throw new ForbiddenException();
+    const isParty = order.userId === userId || order.shop.ownerId === userId;
+    if (!isParty) {
+      // Active staff of the shop may also view the order (e.g. courier).
+      const staff = await this.staff.findOne({
+        where: { shopId: order.shopId, userId, isActive: true },
+      });
+      if (!staff) throw new ForbiddenException();
     }
     const myReviews = await this.reviews.find({
       where: { orderId, userId: order.userId },
