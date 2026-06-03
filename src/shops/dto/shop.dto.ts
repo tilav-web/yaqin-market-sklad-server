@@ -38,6 +38,35 @@ export class AcceptInvitationDto {
   token!: string;
 }
 
+export class AdminListShopsQuery {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  search?: string;
+
+  @ApiPropertyOptional({ default: 50 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number;
+
+  @ApiPropertyOptional({ default: 0 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  offset?: number;
+}
+
+export class AdminSetActiveDto {
+  @ApiProperty()
+  @IsBoolean()
+  isActive!: boolean;
+}
+
 import type { DeliveryPricingType, Holiday, WorkingHourSlot } from '../entities/shop.entity';
 
 export class WorkingHourSlotDto implements WorkingHourSlot {

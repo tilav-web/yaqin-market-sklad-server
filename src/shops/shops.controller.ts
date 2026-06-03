@@ -11,15 +11,21 @@ import {
   Patch,
   Post,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { JwtPayload } from '../auth/decorators/current-user.decorator';
 import { Public } from '../auth/decorators/public.decorator';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Role } from '../auth/role.enum';
 import type { StaffPermission, StaffPreset } from './entities/shop-staff.entity';
 import {
   AcceptInvitationDto,
+  AdminListShopsQuery,
+  AdminSetActiveDto,
   BlockUserDto,
   CreateShopDto,
   ToggleOpenDto,
@@ -178,5 +184,24 @@ export class StaffController {
   @Post('accept')
   accept(@CurrentUser() user: JwtPayload, @Body() dto: AcceptInvitationDto) {
     return this.shops.acceptStaffInvitation(user.sub, dto.token);
+  }
+}
+
+@ApiBearerAuth()
+@ApiTags('admin-shops')
+@UseGuards(RolesGuard)
+@Roles(Role.Admin)
+@Controller('admin/shops')
+export class AdminShopsController {
+  constructor(private readonly shops: ShopsService) {}
+
+  @Get()
+  list(@Query() query: AdminListShopsQuery) {
+    return this.shops.adminListShops(query);
+  }
+
+  @Patch(':id/active')
+  setActive(@Param('id', ParseUUIDPipe) id: string, @Body() dto: AdminSetActiveDto) {
+    return this.shops.adminSetActive(id, dto.isActive);
   }
 }

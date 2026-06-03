@@ -5,7 +5,7 @@ import { Repository } from 'typeorm';
 import { Role } from '../auth/role.enum';
 import { ShopStaff } from '../shops/entities/shop-staff.entity';
 import { UserAddress } from './entities/user-address.entity';
-import { User } from './entities/user.entity';
+import { User, UserStatus } from './entities/user.entity';
 
 @Injectable()
 export class UsersService {
@@ -124,5 +124,43 @@ export class UsersService {
   async deleteAddress(userId: string, addressId: string): Promise<void> {
     const result = await this.addresses.delete({ id: addressId, userId });
     if (!result.affected) throw new NotFoundException('Manzil topilmadi');
+  }
+
+  // ---- Admin ---------------------------------------------------------------
+
+  async adminListUsers(opts: { search?: string; limit?: number; offset?: number }) {
+    const qb = this.users
+      .createQueryBuilder('u')
+      .select([
+        'u.id',
+        'u.phone',
+        'u.name',
+        'u.status',
+        'u.isSellerApproved',
+        'u.isAdmin',
+        'u.roles',
+        'u.createdAt',
+      ])
+      .orderBy('u.createdAt', 'DESC')
+      .take(Math.min(opts.limit ?? 50, 100))
+      .skip(Math.max(opts.offset ?? 0, 0));
+    const s = opts.search?.trim();
+    if (s) qb.where('u.phone ILIKE :q OR u.name ILIKE :q', { q: `%${s}%` });
+    return qb.getMany();
+  }
+
+  async adminSetStatus(userId: string, blocked: boolean): Promise<User> {
+    const user = await this.users.findOne({ where: { id: userId } });
+    if (!user) throw new NotFoundException('Foydalanuvchi topilmadi');
+    user.status = blocked ? UserStatus.Blocked : UserStatus.Active;
+    return this.users.save(user);
+  }
+
+  async adminSetAdmin(userId: string, isAdmin: boolean): Promise<User> {
+    const user = await this.users.findOne({ where: { id: userId } });
+    if (!user) throw new NotFoundException('Foydalanuvchi topilmadi');
+    user.isAdmin = isAdmin;
+    await this.computeRoles(user); // re-derive + persist roles
+    return this.users.save(user);
   }
 }

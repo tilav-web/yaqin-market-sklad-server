@@ -386,4 +386,40 @@ export class ShopsService {
     }
     return Object.assign({}, shop, { isOpenManual: isShopOpenNow(shop) });
   }
+
+  // ---- Admin ---------------------------------------------------------------
+
+  async adminListShops(opts: { search?: string; limit?: number; offset?: number }) {
+    const qb = this.shops
+      .createQueryBuilder('s')
+      .leftJoin('s.owner', 'owner')
+      .select([
+        's.id',
+        's.name',
+        's.address',
+        's.isActive',
+        's.isOpenManual',
+        's.ratingAverage',
+        's.ratingCount',
+        's.latitude',
+        's.longitude',
+        's.createdAt',
+        'owner.id',
+        'owner.name',
+        'owner.phone',
+      ])
+      .orderBy('s.createdAt', 'DESC')
+      .take(Math.min(opts.limit ?? 50, 100))
+      .skip(Math.max(opts.offset ?? 0, 0));
+    const s = opts.search?.trim();
+    if (s) qb.where('s.name ILIKE :q OR s.address ILIKE :q', { q: `%${s}%` });
+    return qb.getMany();
+  }
+
+  async adminSetActive(shopId: string, isActive: boolean): Promise<Shop> {
+    const shop = await this.shops.findOne({ where: { id: shopId } });
+    if (!shop) throw new NotFoundException('Do\'kon topilmadi');
+    shop.isActive = isActive;
+    return this.shops.save(shop);
+  }
 }

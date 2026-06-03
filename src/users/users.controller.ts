@@ -9,11 +9,21 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { JwtPayload } from '../auth/decorators/current-user.decorator';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Role } from '../auth/role.enum';
+import {
+  AdminListUsersQuery,
+  AdminSetAdminDto,
+  AdminSetStatusDto,
+} from './dto/admin-user.dto';
 import { CreateAddressDto, UpdateAddressDto } from './dto/address.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UsersService } from './users.service';
@@ -67,5 +77,29 @@ export class UsersController {
   @HttpCode(HttpStatus.NO_CONTENT)
   deleteAddress(@CurrentUser() user: JwtPayload, @Param('id', ParseUUIDPipe) id: string) {
     return this.users.deleteAddress(user.sub, id);
+  }
+}
+
+@ApiBearerAuth()
+@ApiTags('admin-users')
+@UseGuards(RolesGuard)
+@Roles(Role.Admin)
+@Controller('admin/users')
+export class AdminUsersController {
+  constructor(private readonly users: UsersService) {}
+
+  @Get()
+  list(@Query() query: AdminListUsersQuery) {
+    return this.users.adminListUsers(query);
+  }
+
+  @Patch(':id/status')
+  setStatus(@Param('id', ParseUUIDPipe) id: string, @Body() dto: AdminSetStatusDto) {
+    return this.users.adminSetStatus(id, dto.blocked);
+  }
+
+  @Patch(':id/admin')
+  setAdmin(@Param('id', ParseUUIDPipe) id: string, @Body() dto: AdminSetAdminDto) {
+    return this.users.adminSetAdmin(id, dto.isAdmin);
   }
 }
