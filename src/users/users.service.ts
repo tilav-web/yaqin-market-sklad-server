@@ -146,7 +146,8 @@ export class UsersService {
       .skip(Math.max(opts.offset ?? 0, 0));
     const s = opts.search?.trim();
     if (s) qb.where('u.phone ILIKE :q OR u.name ILIKE :q', { q: `%${s}%` });
-    return qb.getMany();
+    const [items, total] = await qb.getManyAndCount();
+    return { items, total };
   }
 
   async adminSetStatus(userId: string, blocked: boolean): Promise<User> {

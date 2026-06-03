@@ -413,7 +413,8 @@ export class ShopsService {
       .skip(Math.max(opts.offset ?? 0, 0));
     const s = opts.search?.trim();
     if (s) qb.where('s.name ILIKE :q OR s.address ILIKE :q', { q: `%${s}%` });
-    return qb.getMany();
+    const [items, total] = await qb.getManyAndCount();
+    return { items, total };
   }
 
   async adminSetActive(shopId: string, isActive: boolean): Promise<Shop> {
