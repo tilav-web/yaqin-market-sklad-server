@@ -485,7 +485,9 @@ export class OrdersService {
     this.emitOrderEvent('order:updated', saved);
     // Notify the customer when the shop advances the order; notify the shop
     // when the customer confirms delivery or cancels.
-    const target = isOwner ? saved.userId : order.shop.ownerId;
+    // Shop-side actor (owner OR staff) → notify the customer; customer confirming
+    // → notify the shop owner.
+    const target = !isCustomer ? saved.userId : order.shop.ownerId;
     if (target) void this.push.sendToUser(target, {
       title: `Buyurtma #${saved.orderNumber}`,
       body: OrdersService.STATUS_LABEL[saved.status],
@@ -507,13 +509,14 @@ export class OrdersService {
       take: 50,
     });
     for (const order of stale) {
-      await this.dataSource.transaction(async (manager) => {
-        // Re-check under the row to avoid racing with a just-accepted order.
+      // Only emit/notify if the cancel actually happened (it may be skipped if
+      // the order was accepted between the scan and the lock).
+      const cancelled = await this.dataSource.transaction(async (manager) => {
         const fresh = await manager.findOne(Order, {
           where: { id: order.id },
           lock: { mode: 'pessimistic_write' },
         });
-        if (!fresh || fresh.status !== OrderStatus.New) return;
+        if (!fresh || fresh.status !== OrderStatus.New) return false;
         await this.restockOrder(manager, fresh.id);
         fresh.status = OrderStatus.Cancelled;
         fresh.cancellationReason = 'Do\'kon 5 daqiqada qabul qilmadi — avtomatik bekor qilindi';
@@ -522,7 +525,9 @@ export class OrdersService {
           { status: OrderStatus.Cancelled, at: new Date().toISOString(), byUserId: null, note: 'auto-cancel' },
         ];
         await manager.save(fresh);
+        return true;
       });
+      if (!cancelled) continue;
       order.status = OrderStatus.Cancelled;
       this.emitOrderEvent('order:updated', order);
       if (order.userId) {
@@ -538,8 +543,14 @@ export class OrdersService {
 
   private async restockOrder(manager: import('typeorm').EntityManager, orderId: string) {
     const items = await manager.find(OrderItem, { where: { orderId } });
+    if (items.length === 0) return;
+    // Load every variant in one query instead of one findOne per item (N+1).
+    const variants = await manager.find(ProductVariant, {
+      where: { id: In(items.map((i) => i.productVariantId)) },
+    });
+    const variantMap = new Map(variants.map((v) => [v.id, v]));
     for (const item of items) {
-      const variant = await manager.findOne(ProductVariant, { where: { id: item.productVariantId } });
+      const variant = variantMap.get(item.productVariantId);
       if (!variant) continue;
       const restockQty = item.quantity - item.returnedQuantity;
       if (restockQty <= 0) continue;

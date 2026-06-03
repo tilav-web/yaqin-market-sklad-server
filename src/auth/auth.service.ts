@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
+import { randomUUID } from 'crypto';
 import { customAlphabet } from 'nanoid';
 
 import type { EnvironmentVariables } from '../config/configuration';
@@ -26,6 +27,8 @@ const OTP_TTL_SEC = 5 * 60;
 const RESEND_COOLDOWN_SEC = 60;
 const MAX_VERIFY_ATTEMPTS = 5;
 const REQUEST_RATE_LIMIT_PER_HOUR = 5;
+const REVOKED_REFRESH_PREFIX = 'revoked_refresh:';
+const REVOKE_TTL_SEC = 31 * 24 * 60 * 60; // ≥ refresh token lifetime
 
 @Injectable()
 export class AuthService {
@@ -106,16 +109,39 @@ export class AuthService {
   }
 
   async refresh(refreshToken: string) {
+    let payload: JwtPayload & { jti?: string };
     try {
-      const payload = await this.jwt.verifyAsync<JwtPayload>(refreshToken, {
+      payload = await this.jwt.verifyAsync(refreshToken, {
         secret: this.config.get('JWT_REFRESH_SECRET', { infer: true }),
       });
-      const user = await this.users.findById(payload.sub);
-      if (!user) throw new UnauthorizedException();
-      const roles = await this.users.computeRoles(user);
-      return this.issueTokens({ sub: user.id, phone: user.phone, roles });
     } catch {
       throw new UnauthorizedException('Refresh token noto\'g\'ri yoki muddati o\'tgan');
+    }
+    // Reject tokens that were rotated out or logged out.
+    if (payload.jti && (await this.redis.client.exists(`${REVOKED_REFRESH_PREFIX}${payload.jti}`))) {
+      throw new UnauthorizedException('Sessiya tugatilgan — qaytadan kiring');
+    }
+    const user = await this.users.findById(payload.sub);
+    if (!user || user.status === 'blocked') throw new UnauthorizedException();
+    // Rotation: a refresh token is single-use — revoke it as we mint the next pair.
+    if (payload.jti) {
+      await this.redis.client.setex(`${REVOKED_REFRESH_PREFIX}${payload.jti}`, REVOKE_TTL_SEC, '1');
+    }
+    const roles = await this.users.computeRoles(user);
+    return this.issueTokens({ sub: user.id, phone: user.phone, roles });
+  }
+
+  /** Revoke a refresh token (logout). Idempotent; ignores invalid tokens. */
+  async logout(refreshToken: string): Promise<void> {
+    try {
+      const payload = await this.jwt.verifyAsync<JwtPayload & { jti?: string }>(refreshToken, {
+        secret: this.config.get('JWT_REFRESH_SECRET', { infer: true }),
+      });
+      if (payload.jti) {
+        await this.redis.client.setex(`${REVOKED_REFRESH_PREFIX}${payload.jti}`, REVOKE_TTL_SEC, '1');
+      }
+    } catch {
+      /* already invalid — nothing to revoke */
     }
   }
 
@@ -126,7 +152,8 @@ export class AuthService {
       secret: this.config.get('JWT_SECRET', { infer: true }),
       expiresIn: accessTtl as never,
     });
-    const refreshToken = await this.jwt.signAsync({ ...payload }, {
+    // Each refresh token carries a unique id so it can be individually revoked.
+    const refreshToken = await this.jwt.signAsync({ ...payload, jti: randomUUID() }, {
       secret: this.config.get('JWT_REFRESH_SECRET', { infer: true }),
       expiresIn: refreshTtl as never,
     });

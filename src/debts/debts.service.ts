@@ -116,23 +116,32 @@ export class DebtsService {
 
   async addPayment(userId: string, shopId: string, dto: AddPaymentDto): Promise<DebtPayment> {
     await this.assertCanManage(userId, shopId);
-    // Don't accept more than the customer actually owes.
-    const account = await this.getAccount(userId, shopId, dto.customerPhone.trim());
-    if (account.balance <= 0) {
-      throw new BadRequestException('Bu mijozda qarz yo\'q');
-    }
-    if (dto.amount > account.balance) {
-      throw new BadRequestException(`To'lov qarzdan oshib ketdi (qolgan: ${account.balance} so'm)`);
-    }
-    return this.payments.save(
-      this.payments.create({
-        shopId,
-        customerPhone: dto.customerPhone.trim(),
-        amount: dto.amount,
-        note: dto.note?.trim() || null,
-        createdByUserId: userId,
-      }),
-    );
+    const phone = dto.customerPhone.trim();
+    // Serialize concurrent payments for the same customer with a transaction
+    // advisory lock, then check the balance and insert atomically — so two
+    // simultaneous payments can't both slip past the overpay guard.
+    return this.dataSource.transaction(async (manager) => {
+      await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`debt:${shopId}:${phone}`]);
+      const [debts, payments] = await Promise.all([
+        manager.find(Debt, { where: { shopId, customerPhone: phone }, select: { total: true } }),
+        manager.find(DebtPayment, { where: { shopId, customerPhone: phone }, select: { amount: true } }),
+      ]);
+      const balance =
+        debts.reduce((s, d) => s + d.total, 0) - payments.reduce((s, p) => s + p.amount, 0);
+      if (balance <= 0) throw new BadRequestException('Bu mijozda qarz yo\'q');
+      if (dto.amount > balance) {
+        throw new BadRequestException(`To'lov qarzdan oshib ketdi (qolgan: ${balance} so'm)`);
+      }
+      return manager.save(
+        manager.create(DebtPayment, {
+          shopId,
+          customerPhone: phone,
+          amount: dto.amount,
+          note: dto.note?.trim() || null,
+          createdByUserId: userId,
+        }),
+      );
+    });
   }
 
   /** All customers with a debt history, grouped by phone, balance first. */

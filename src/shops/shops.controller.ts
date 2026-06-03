@@ -18,7 +18,13 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { JwtPayload } from '../auth/decorators/current-user.decorator';
 import { Public } from '../auth/decorators/public.decorator';
 import type { StaffPermission, StaffPreset } from './entities/shop-staff.entity';
-import { CreateShopDto, UpdateShopDto } from './dto/shop.dto';
+import {
+  AcceptInvitationDto,
+  BlockUserDto,
+  CreateShopDto,
+  ToggleOpenDto,
+  UpdateShopDto,
+} from './dto/shop.dto';
 import { ShopsService } from './shops.service';
 
 @ApiTags('shops')
@@ -90,9 +96,9 @@ export class SellerShopsController {
   toggleOpen(
     @CurrentUser() user: JwtPayload,
     @Param('id', ParseUUIDPipe) id: string,
-    @Body() body: { isOpen: boolean },
+    @Body() dto: ToggleOpenDto,
   ) {
-    return this.shops.toggleOpen(user.sub, id, body.isOpen);
+    return this.shops.toggleOpen(user.sub, id, dto.isOpen);
   }
 
   // Owner opened this shop's orders → clear the profile "new orders" badge.
@@ -106,18 +112,18 @@ export class SellerShopsController {
   blockUser(
     @CurrentUser() user: JwtPayload,
     @Param('id', ParseUUIDPipe) id: string,
-    @Body() body: { userId: string },
+    @Body() dto: BlockUserDto,
   ) {
-    return this.shops.blockUser(user.sub, id, body.userId);
+    return this.shops.blockUser(user.sub, id, dto.userId);
   }
 
   @Post(':id/unblock-user')
   unblockUser(
     @CurrentUser() user: JwtPayload,
     @Param('id', ParseUUIDPipe) id: string,
-    @Body() body: { userId: string },
+    @Body() dto: BlockUserDto,
   ) {
-    return this.shops.unblockUser(user.sub, id, body.userId);
+    return this.shops.unblockUser(user.sub, id, dto.userId);
   }
 
   @Get(':id/blocked-users')
@@ -170,7 +176,7 @@ export class StaffController {
   constructor(private readonly shops: ShopsService) {}
 
   @Post('accept')
-  accept(@CurrentUser() user: JwtPayload, @Body() body: { token: string }) {
-    return this.shops.acceptStaffInvitation(user.sub, body.token);
+  accept(@CurrentUser() user: JwtPayload, @Body() dto: AcceptInvitationDto) {
+    return this.shops.acceptStaffInvitation(user.sub, dto.token);
   }
 }

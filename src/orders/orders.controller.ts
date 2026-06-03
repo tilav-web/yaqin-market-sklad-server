@@ -13,6 +13,7 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { JwtPayload } from '../auth/decorators/current-user.decorator';
 import {
+  AssignOrderDto,
   CreateOrderDto,
   CreateReviewsDto,
   InStoreSaleDto,
@@ -127,8 +128,8 @@ export class SellerOrdersController {
     @CurrentUser() user: JwtPayload,
     @Param('shopId', ParseUUIDPipe) shopId: string,
     @Param('orderId', ParseUUIDPipe) orderId: string,
-    @Body() body: { staffId: string | null },
+    @Body() dto: AssignOrderDto,
   ) {
-    return this.orders.assignOrder(user.sub, shopId, orderId, body.staffId ?? null);
+    return this.orders.assignOrder(user.sub, shopId, orderId, dto.staffId ?? null);
   }
 }

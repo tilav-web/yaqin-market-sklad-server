@@ -25,6 +25,8 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     if (!user || user.status === 'blocked') {
       throw new UnauthorizedException('Foydalanuvchi topilmadi yoki bloklangan');
     }
-    return { sub: user.id, phone: user.phone, roles: payload.roles };
+    // Use the CURRENT roles from the DB (not the token) so a revoked admin /
+    // staff loses access immediately rather than until the token expires.
+    return { sub: user.id, phone: user.phone, roles: (user.roles ?? []) as JwtPayload['roles'] };
   }
 }

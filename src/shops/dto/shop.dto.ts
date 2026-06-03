@@ -11,12 +11,32 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  IsUUID,
   Matches,
   Max,
   MaxLength,
   Min,
   ValidateNested,
 } from 'class-validator';
+
+export class ToggleOpenDto {
+  @ApiProperty()
+  @IsBoolean()
+  isOpen!: boolean;
+}
+
+export class BlockUserDto {
+  @ApiProperty()
+  @IsUUID()
+  userId!: string;
+}
+
+export class AcceptInvitationDto {
+  @ApiProperty()
+  @IsString()
+  @MaxLength(256)
+  token!: string;
+}
 
 import type { DeliveryPricingType, Holiday, WorkingHourSlot } from '../entities/shop.entity';
 

@@ -7,7 +7,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Between, In, Repository } from 'typeorm';
+import { Between, DataSource, In, Repository } from 'typeorm';
 
 import { Order } from '../orders/entities/order.entity';
 import { User } from '../users/entities/user.entity';
@@ -53,6 +53,7 @@ export class ShopsService {
     private readonly users: Repository<User>,
     @InjectRepository(Order)
     private readonly orders: Repository<Order>,
+    private readonly dataSource: DataSource,
   ) {}
 
   findOne(id: string): Promise<Shop | null> {
@@ -162,54 +163,59 @@ export class ShopsService {
     userId: string,
     token: string,
   ): Promise<{ shopId: string; shopName: string }> {
-    const invite = await this.invitations.findOne({ where: { qrToken: token } });
-    if (!invite) throw new NotFoundException('Taklif topilmadi');
-    if (invite.status !== StaffInvitationStatus.Pending || invite.expiresAt.getTime() < Date.now()) {
-      throw new BadRequestException('Taklif muddati tugagan yoki ishlatilgan');
-    }
-    const shop = await this.findOne(invite.shopId);
-    if (!shop) throw new NotFoundException('Do\'kon topilmadi');
-    if (shop.ownerId === userId) {
-      throw new BadRequestException('Siz do\'kon egasisiz — o\'zingizni xodim qila olmaysiz');
-    }
+    // Whole accept flow runs in one transaction with the invite row locked, so
+    // a single QR can't be redeemed twice concurrently.
+    return this.dataSource.transaction(async (manager) => {
+      const invite = await manager.findOne(StaffInvitation, {
+        where: { qrToken: token },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!invite) throw new NotFoundException('Taklif topilmadi');
+      if (invite.status !== StaffInvitationStatus.Pending || invite.expiresAt.getTime() < Date.now()) {
+        throw new BadRequestException('Taklif muddati tugagan yoki ishlatilgan');
+      }
+      const shop = await manager.findOne(Shop, { where: { id: invite.shopId } });
+      if (!shop) throw new NotFoundException('Do\'kon topilmadi');
+      if (shop.ownerId === userId) {
+        throw new BadRequestException('Siz do\'kon egasisiz — o\'zingizni xodim qila olmaysiz');
+      }
 
-    // Business rule: a staff member works for a single owner only. Allow joining
-    // another shop of the SAME owner, but reject a different owner.
-    const existingMemberships = await this.staff.find({
-      where: { userId, isActive: true },
-      relations: { shop: true },
-    });
-    const conflicting = existingMemberships.find(
-      (s) => s.shopId !== invite.shopId && s.shop && s.shop.ownerId !== shop.ownerId,
-    );
-    if (conflicting) {
-      throw new BadRequestException('Siz allaqachon boshqa egaga tegishli do\'konda ishlaysiz');
-    }
-
-    let staff = await this.staff.findOne({ where: { shopId: invite.shopId, userId } });
-    if (staff) {
-      // already linked — just re-activate
-      staff.isActive = true;
-      await this.staff.save(staff);
-    } else {
-      staff = await this.staff.save(
-        this.staff.create({
-          shopId: invite.shopId,
-          userId,
-          customRoleName: invite.customRoleName,
-          preset: invite.preset,
-          permissions: invite.permissions,
-          isActive: true,
-        }),
+      // Business rule: a staff member works for a single owner only.
+      const existingMemberships = await manager.find(ShopStaff, {
+        where: { userId, isActive: true },
+        relations: { shop: true },
+      });
+      const conflicting = existingMemberships.find(
+        (s) => s.shopId !== invite.shopId && s.shop && s.shop.ownerId !== shop.ownerId,
       );
-    }
+      if (conflicting) {
+        throw new BadRequestException('Siz allaqachon boshqa egaga tegishli do\'konda ishlaysiz');
+      }
 
-    invite.status = StaffInvitationStatus.Accepted;
-    invite.acceptedByUserId = userId;
-    invite.acceptedAt = new Date();
-    await this.invitations.save(invite);
+      let staff = await manager.findOne(ShopStaff, { where: { shopId: invite.shopId, userId } });
+      if (staff) {
+        staff.isActive = true;
+        await manager.save(staff);
+      } else {
+        staff = await manager.save(
+          manager.create(ShopStaff, {
+            shopId: invite.shopId,
+            userId,
+            customRoleName: invite.customRoleName,
+            preset: invite.preset,
+            permissions: invite.permissions,
+            isActive: true,
+          }),
+        );
+      }
 
-    return { shopId: shop.id, shopName: shop.name };
+      invite.status = StaffInvitationStatus.Accepted;
+      invite.acceptedByUserId = userId;
+      invite.acceptedAt = new Date();
+      await manager.save(invite);
+
+      return { shopId: shop.id, shopName: shop.name };
+    });
   }
 
   async listStaff(userId: string, shopId: string): Promise<StaffView[]> {

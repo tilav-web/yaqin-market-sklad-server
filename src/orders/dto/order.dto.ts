@@ -44,6 +44,13 @@ export class CreateOrderDto {
   items!: OrderItemDto[];
 }
 
+export class AssignOrderDto {
+  @ApiPropertyOptional({ description: 'ShopStaff.id; null = biriktirishni bekor qilish' })
+  @IsOptional()
+  @IsUUID()
+  staffId?: string | null;
+}
+
 export class InStoreSaleDto {
   @ApiProperty({ type: [OrderItemDto] })
   @IsArray()

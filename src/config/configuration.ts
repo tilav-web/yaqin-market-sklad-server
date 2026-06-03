@@ -61,6 +61,11 @@ export class EnvironmentVariables {
   @IsOptional()
   JWT_REFRESH_TTL = '30d';
 
+  // Comma-separated allowed CORS origins (production only).
+  @IsString()
+  @IsOptional()
+  CORS_ORIGINS = '';
+
   // MinIO / S3
   @IsString()
   MINIO_ENDPOINT = 'localhost';
