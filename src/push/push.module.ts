@@ -1,8 +1,9 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
+import { Notification } from '../notifications/entities/notification.entity';
 import { DeviceToken } from './entities/device-token.entity';
-import { PushController } from './push.controller';
+import { PublicDevicesController, PushController } from './push.controller';
 import { PushService } from './push.service';
 
 /**
@@ -10,8 +11,8 @@ import { PushService } from './push.service';
  * send notifications (Orders). Owns the device-token registration endpoint.
  */
 @Module({
-  imports: [TypeOrmModule.forFeature([DeviceToken])],
-  controllers: [PushController],
+  imports: [TypeOrmModule.forFeature([DeviceToken, Notification])],
+  controllers: [PushController, PublicDevicesController],
   providers: [PushService],
   exports: [PushService],
 })

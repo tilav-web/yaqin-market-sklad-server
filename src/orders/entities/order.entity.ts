@@ -105,6 +105,10 @@ export class Order {
   @Column({ type: 'uuid', nullable: true })
   acceptedByStaffId!: string | null;
 
+  /** ShopStaff.id this order is assigned to (e.g. the delivering courier). */
+  @Column({ type: 'uuid', nullable: true })
+  assignedStaffId!: string | null;
+
   @Column({ type: 'uuid', nullable: true })
   deliveredByStaffId!: string | null;
 

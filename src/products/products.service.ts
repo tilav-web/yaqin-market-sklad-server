@@ -576,6 +576,28 @@ export class ProductsService {
     };
   }
 
+  /** Seller-facing: all reviews across the shop's products, newest first. */
+  async listShopReviews(userId: string, shopId: string) {
+    await this.ensureShopAccess(userId, shopId, 'reviews.view');
+    const variants = await this.variants.find({ where: { shopId }, select: { id: true, name: true } });
+    if (variants.length === 0) return [];
+    const nameMap = new Map(variants.map((v) => [v.id, v.name]));
+    const reviews = await this.reviews.find({
+      where: { productVariantId: In([...nameMap.keys()]) },
+      relations: { user: true },
+      order: { createdAt: 'DESC' },
+      take: 200,
+    });
+    return reviews.map((r) => ({
+      id: r.id,
+      stars: r.stars,
+      text: r.text,
+      createdAt: r.createdAt,
+      userName: r.user?.name ?? 'Foydalanuvchi',
+      productName: nameMap.get(r.productVariantId) ?? '',
+    }));
+  }
+
   /** Public, anonymised review list for a variant (only reviewer name + stars + text). */
   async listVariantReviews(variantId: string) {
     const reviews = await this.reviews.find({

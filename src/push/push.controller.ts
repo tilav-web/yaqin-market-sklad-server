@@ -4,6 +4,7 @@ import { IsOptional, IsString, MaxLength } from 'class-validator';
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { JwtPayload } from '../auth/decorators/current-user.decorator';
+import { Public } from '../auth/decorators/public.decorator';
 import { PushService } from './push.service';
 
 class RegisterDeviceDto {
@@ -31,6 +32,8 @@ class UnregisterDeviceDto {
 export class PushController {
   constructor(private readonly push: PushService) {}
 
+  // Authenticated: registers + LINKS this device's token to the logged-in user
+  // (attaches a token that may have been registered anonymously before login).
   @Post()
   @HttpCode(HttpStatus.NO_CONTENT)
   async register(@CurrentUser() user: JwtPayload, @Body() dto: RegisterDeviceDto) {
@@ -41,5 +44,19 @@ export class PushController {
   @HttpCode(HttpStatus.NO_CONTENT)
   async unregister(@Body() dto: UnregisterDeviceDto) {
     await this.push.removeToken(dto.token);
+  }
+}
+
+/** Public device registration — the app registers its token before login. */
+@ApiTags('devices')
+@Controller('devices')
+export class PublicDevicesController {
+  constructor(private readonly push: PushService) {}
+
+  @Public()
+  @Post('anonymous')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async registerAnonymous(@Body() dto: RegisterDeviceDto) {
+    await this.push.registerToken(null, dto.token, dto.platform ?? 'android');
   }
 }

@@ -351,6 +351,7 @@ export class OrdersService {
     const shop = await this.shops.findOne({ where: { id: shopId } });
     if (!shop) throw new NotFoundException('Do\'kon topilmadi');
     let effectiveStatus = status;
+    let assignedToStaffId: string | null = null;
     if (shop.ownerId !== actorUserId) {
       const member = await this.staff.findOne({ where: { shopId, userId: actorUserId, isActive: true } });
       const canViewAll = member?.permissions?.includes('orders.view_all');
@@ -358,21 +359,48 @@ export class OrdersService {
       if (!canViewAll && !canViewAssigned) {
         throw new ForbiddenException('Buyurtmalarni ko\'rishga ruxsat yo\'q');
       }
-      // Couriers (assigned-only) see just the delivery stage — not new/unaccepted
-      // orders or full customer contact for everything.
-      if (!canViewAll) effectiveStatus = OrderStatus.Delivering;
+      // Couriers (assigned-only) see only the orders assigned to them that are at
+      // the delivery stage — not new/unaccepted orders.
+      if (!canViewAll) {
+        effectiveStatus = OrderStatus.Delivering;
+        assignedToStaffId = member?.id ?? '∅';
+      }
     }
-    return this.dataSource
+    const qb = this.dataSource
       .createQueryBuilder(Order, 'o')
       .leftJoinAndSelect('o.items', 'items')
       .leftJoinAndSelect('items.productVariant', 'pv')
       .leftJoinAndSelect('o.deliveryAddress', 'addr')
       .leftJoinAndSelect('o.user', 'usr')
-      .where('o.shopId = :shopId', { shopId })
-      .andWhere(effectiveStatus ? 'o.status = :status' : '1=1', effectiveStatus ? { status: effectiveStatus } : {})
-      .orderBy('o.createdAt', 'DESC')
-      .take(200)
-      .getMany();
+      .where('o.shopId = :shopId', { shopId });
+    if (effectiveStatus) qb.andWhere('o.status = :status', { status: effectiveStatus });
+    if (assignedToStaffId) qb.andWhere('o.assignedStaffId = :asid', { asid: assignedToStaffId });
+    return qb.orderBy('o.createdAt', 'DESC').take(200).getMany();
+  }
+
+  /** Assign (or unassign) an order to a staff member — e.g. a delivery courier. */
+  async assignOrder(
+    actorUserId: string,
+    shopId: string,
+    orderId: string,
+    staffId: string | null,
+  ): Promise<Order> {
+    const order = await this.orders.findOne({ where: { id: orderId, shopId }, relations: { shop: true } });
+    if (!order) throw new NotFoundException('Buyurtma topilmadi');
+    await this.assertShopCanManage(actorUserId, order, 'orders.update_status');
+    if (staffId) {
+      const member = await this.staff.findOne({ where: { id: staffId, shopId, isActive: true } });
+      if (!member) throw new BadRequestException('Xodim topilmadi');
+      order.assignedStaffId = staffId;
+      void this.push.sendToUser(member.userId, {
+        title: 'Sizga buyurtma biriktirildi',
+        body: `#${order.orderNumber} — yetkazib berish uchun`,
+        data: { kind: 'order:assigned', orderId: order.id, shopId },
+      });
+    } else {
+      order.assignedStaffId = null;
+    }
+    return this.orders.save(order);
   }
 
   async getOne(
@@ -743,6 +771,34 @@ export class OrdersService {
     // Deliver live to both parties.
     if (order.userId) this.realtime.emitToUser(order.userId, 'chat:message', message);
     this.realtime.emitToShop(order.shopId, 'chat:message', message);
+    // Push the other party (excluding the sender).
+    void this.notifyChat(order, fromShop, userId, text.trim());
     return message;
+  }
+
+  /** Push a new chat message to the receiving side (customer ↔ shop staff). */
+  private async notifyChat(
+    order: Pick<Order, 'id' | 'orderNumber' | 'userId' | 'shopId'> & { shop: Pick<Shop, 'ownerId'> },
+    fromShop: boolean,
+    senderUserId: string,
+    text: string,
+  ): Promise<void> {
+    const payload = {
+      title: `#${order.orderNumber} — yangi xabar`,
+      body: text.length > 80 ? `${text.slice(0, 80)}…` : text,
+      data: { kind: 'chat', orderId: order.id, shopId: order.shopId },
+    };
+    if (fromShop) {
+      // Shop → customer.
+      if (order.userId) void this.push.sendToUser(order.userId, payload);
+    } else {
+      // Customer → shop owner + staff who can chat (minus the sender).
+      const staff = await this.staff.find({ where: { shopId: order.shopId, isActive: true } });
+      const recipients = [
+        order.shop.ownerId,
+        ...staff.filter((s) => s.permissions?.includes('orders.chat')).map((s) => s.userId),
+      ].filter((id) => id && id !== senderUserId);
+      void this.push.sendToUsers([...new Set(recipients)], payload);
+    }
   }
 }

@@ -144,6 +144,14 @@ export class SellerProductsController {
   ) {
     return this.products.listLowStock(user.sub, shopId);
   }
+
+  @Get('reviews')
+  listReviews(
+    @CurrentUser() user: JwtPayload,
+    @Param('shopId', ParseUUIDPipe) shopId: string,
+  ) {
+    return this.products.listShopReviews(user.sub, shopId);
+  }
 }
 
 @ApiBearerAuth()

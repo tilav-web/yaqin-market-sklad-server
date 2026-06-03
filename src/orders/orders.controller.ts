@@ -120,4 +120,15 @@ export class SellerOrdersController {
   ) {
     return this.orders.createInStoreSale(user.sub, shopId, dto.items);
   }
+
+  // Assign an order to a staff member (e.g. courier). staffId null = unassign.
+  @Post(':orderId/assign')
+  assign(
+    @CurrentUser() user: JwtPayload,
+    @Param('shopId', ParseUUIDPipe) shopId: string,
+    @Param('orderId', ParseUUIDPipe) orderId: string,
+    @Body() body: { staffId: string | null },
+  ) {
+    return this.orders.assignOrder(user.sub, shopId, orderId, body.staffId ?? null);
+  }
 }

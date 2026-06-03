@@ -11,6 +11,7 @@ import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { CategoriesModule } from './categories/categories.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { DebtsModule } from './debts/debts.module';
+import { NotificationsModule } from './notifications/notifications.module';
 import { EnvironmentVariables, validateEnv } from './config/configuration';
 import { buildTypeOrmOptions } from './database/typeorm.config';
 import { HealthModule } from './health/health.module';
@@ -48,6 +49,7 @@ import { UsersModule } from './users/users.module';
     UploadsModule,
     AnalyticsModule,
     DebtsModule,
+    NotificationsModule,
     HealthModule,
   ],
   providers: [
