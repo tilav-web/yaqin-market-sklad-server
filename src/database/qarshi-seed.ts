@@ -281,11 +281,10 @@ const OWNER_NAMES = [
 const STAFF_FIRST = ['Bahodir', 'Anvar', 'Dilshod', 'Sanjar', 'Otabek', 'Jamshid', 'Nodir', 'Sherali', 'Ravshan', 'Kamol', 'Ulug\'bek', 'Doston', 'Sardor', 'Bekzod', 'Aybek'];
 const SHOP_IMG_KW = ['grocery,store', 'supermarket', 'shop,storefront', 'market,fruit', 'convenience,store', 'bakery,shop', 'fruit,market', 'food,store', 'minimarket', 'vegetable,stand', 'store,front', 'grocery,shelf'];
 
-const STD_HOURS: WorkingHourSlot[] = ([0, 1, 2, 3, 4, 5, 6] as const).map((d) => ({
-  dayOfWeek: d, openTime: '08:00', closeTime: '22:00', isOpen: true,
-}));
-const LONG_HOURS: WorkingHourSlot[] = ([0, 1, 2, 3, 4, 5, 6] as const).map((d) => ({
-  dayOfWeek: d, openTime: '07:00', closeTime: '23:00', isOpen: true,
+// Demo shops are 24/7 so the feed/map are populated whenever an investor opens
+// the app (real neighbourhood shops in UZ are often round-the-clock anyway).
+const ALWAYS_OPEN: WorkingHourSlot[] = ([0, 1, 2, 3, 4, 5, 6] as const).map((d) => ({
+  dayOfWeek: d, openTime: '00:00', closeTime: '23:59', isOpen: true,
 }));
 
 // ---------------------------------------------------------------------------
@@ -404,9 +403,9 @@ async function seed() {
       address: `Qarshi, ${pick(STREETS)} ko'chasi ${randInt(1, 140)}`,
       latitude: loc.lat,
       longitude: loc.lng,
-      workingHours: pick([STD_HOURS, LONG_HOURS]),
+      workingHours: ALWAYS_OPEN,
       holidays: [],
-      isOpenManual: rnd() > 0.12, // ~88% open now
+      isOpenManual: true,
       minOrderPrice: pick([0, 0, 10000, 15000, 20000, 25000]),
       deliveryZone: { maxKm: 1, freeKm, pricingType, pricePerStep },
       blockedUserIds: [],
