@@ -1,13 +1,16 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
+import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
+import { AnalyticsModule } from './analytics/analytics.module';
 import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { CategoriesModule } from './categories/categories.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
+import { DebtsModule } from './debts/debts.module';
 import { EnvironmentVariables, validateEnv } from './config/configuration';
 import { buildTypeOrmOptions } from './database/typeorm.config';
 import { HealthModule } from './health/health.module';
@@ -18,6 +21,7 @@ import { RedisModule } from './redis/redis.module';
 import { SellersModule } from './sellers/sellers.module';
 import { ShopsModule } from './shops/shops.module';
 import { SmsModule } from './sms/sms.module';
+import { UploadsModule } from './uploads/uploads.module';
 import { UsersModule } from './users/users.module';
 
 @Module({
@@ -30,6 +34,7 @@ import { UsersModule } from './users/users.module';
     ThrottlerModule.forRoot({
       throttlers: [{ ttl: 60_000, limit: 60 }],
     }),
+    ScheduleModule.forRoot(),
     RedisModule,
     SmsModule,
     UsersModule,
@@ -40,6 +45,9 @@ import { UsersModule } from './users/users.module';
     ProductsModule,
     OrdersModule,
     PushModule,
+    UploadsModule,
+    AnalyticsModule,
+    DebtsModule,
     HealthModule,
   ],
   providers: [

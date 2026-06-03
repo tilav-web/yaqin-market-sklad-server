@@ -22,9 +22,13 @@ export const ALL_STAFF_PERMISSIONS = [
   'inventory.product.edit_info',
   'inventory.product.edit_price',
   'inventory.product.edit_stock',
+  'inventory.receive',
+  'inventory.count',
   'inventory.movement.view',
   'inventory.low_stock_alerts',
   'inventory.barcode.scan',
+  // sales (in-store POS)
+  'sales.instore',
   // orders
   'orders.view_all',
   'orders.view_assigned',
@@ -36,6 +40,8 @@ export const ALL_STAFF_PERMISSIONS = [
   // shop (limited)
   'shop.toggle_open',
   'shop.settings.view',
+  // debt ledger (qarz daftar)
+  'debt.manage',
   // reviews
   'reviews.view',
 ] as const;
@@ -46,11 +52,14 @@ export const PRESET_PERMISSIONS: Record<Exclude<StaffPreset, 'custom'>, StaffPer
   kassir: [
     'inventory.view',
     'inventory.product.edit_stock',
+    'inventory.barcode.scan',
+    'sales.instore',
     'orders.view_all',
     'orders.accept',
     'orders.update_status',
     'orders.chat',
     'orders.view_customer_contact',
+    'debt.manage',
   ],
   menejer: [
     'inventory.view',
@@ -58,9 +67,12 @@ export const PRESET_PERMISSIONS: Record<Exclude<StaffPreset, 'custom'>, StaffPer
     'inventory.product.edit_info',
     'inventory.product.edit_price',
     'inventory.product.edit_stock',
+    'inventory.receive',
+    'inventory.count',
     'inventory.movement.view',
     'inventory.low_stock_alerts',
     'inventory.barcode.scan',
+    'sales.instore',
     'orders.view_all',
     'orders.accept',
     'orders.update_status',
@@ -70,12 +82,15 @@ export const PRESET_PERMISSIONS: Record<Exclude<StaffPreset, 'custom'>, StaffPer
     'reviews.view',
     'shop.toggle_open',
     'shop.settings.view',
+    'debt.manage',
   ],
   sklad: [
     'inventory.view',
     'inventory.product.create',
     'inventory.product.edit_info',
     'inventory.product.edit_stock',
+    'inventory.receive',
+    'inventory.count',
     'inventory.movement.view',
     'inventory.low_stock_alerts',
     'inventory.barcode.scan',

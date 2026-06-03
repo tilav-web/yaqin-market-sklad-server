@@ -1,15 +1,19 @@
 import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
+import { InjectRepository } from '@nestjs/typeorm';
 import {
   OnGatewayConnection,
   WebSocketGateway,
   WebSocketServer,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
+import { Repository } from 'typeorm';
 
 import type { JwtPayload } from '../auth/decorators/current-user.decorator';
 import type { EnvironmentVariables } from '../config/configuration';
+import { Shop } from '../shops/entities/shop.entity';
+import { ShopStaff } from '../shops/entities/shop-staff.entity';
 
 /**
  * Single Socket.IO gateway for customer + seller real-time updates.
@@ -32,7 +36,20 @@ export class RealtimeGateway implements OnGatewayConnection {
   constructor(
     private readonly jwt: JwtService,
     private readonly config: ConfigService<EnvironmentVariables, true>,
+    @InjectRepository(Shop)
+    private readonly shops: Repository<Shop>,
+    @InjectRepository(ShopStaff)
+    private readonly staff: Repository<ShopStaff>,
   ) {}
+
+  /** Only the shop owner or an active staff member may watch a shop's stream. */
+  private async canWatchShop(userId: string, shopId: string): Promise<boolean> {
+    const shop = await this.shops.findOne({ where: { id: shopId }, select: { id: true, ownerId: true } });
+    if (!shop) return false;
+    if (shop.ownerId === userId) return true;
+    const member = await this.staff.findOne({ where: { shopId, userId, isActive: true } });
+    return !!member;
+  }
 
   async handleConnection(client: Socket): Promise<void> {
     try {
@@ -49,11 +66,13 @@ export class RealtimeGateway implements OnGatewayConnection {
       client.data.userId = payload.sub;
       await client.join(`user:${payload.sub}`);
 
-      // Sellers/staff ask to subscribe to a shop's order stream.
+      // Sellers/staff ask to subscribe to a shop's order stream — only the
+      // owner or an active staff member is allowed into the room.
       client.on('join:shop', (shopId: unknown) => {
-        if (typeof shopId === 'string' && shopId.length > 0) {
-          void client.join(`shop:${shopId}`);
-        }
+        if (typeof shopId !== 'string' || shopId.length === 0) return;
+        void this.canWatchShop(payload.sub, shopId).then((ok) => {
+          if (ok) void client.join(`shop:${shopId}`);
+        });
       });
       client.on('leave:shop', (shopId: unknown) => {
         if (typeof shopId === 'string') void client.leave(`shop:${shopId}`);

@@ -19,10 +19,32 @@ export function haversineKm(
   return EARTH_RADIUS_KM * c;
 }
 
+export interface BoundingBox {
+  latMin: number;
+  latMax: number;
+  lngMin: number;
+  lngMax: number;
+}
+
+/**
+ * A lat/lng square roughly `radiusKm` around a point, for cheap SQL pre-filtering
+ * before the exact haversine pass. Avoids loading every shop in the database.
+ */
+export function boundingBox(lat: number, lng: number, radiusKm: number): BoundingBox {
+  const latDelta = radiusKm / 111; // ~111 km per degree of latitude
+  const lngDelta = radiusKm / (111 * Math.max(Math.cos(toRad(lat)), 0.01));
+  return {
+    latMin: lat - latDelta,
+    latMax: lat + latDelta,
+    lngMin: lng - lngDelta,
+    lngMax: lng + lngDelta,
+  };
+}
+
 export interface DeliveryFeeOptions {
   distanceKm: number;
   freeKm: number;
-  pricingType: 'flat' | 'per_km' | 'per_500m';
+  pricingType: 'flat' | 'per_km' | 'per_500m' | 'per_100m';
   pricePerStep: number;
 }
 
@@ -36,6 +58,8 @@ export function calcDeliveryFee(opts: DeliveryFeeOptions): number {
       return Math.ceil(overKm) * opts.pricePerStep;
     case 'per_500m':
       return Math.ceil(overKm * 2) * opts.pricePerStep;
+    case 'per_100m':
+      return Math.ceil(overKm * 10) * opts.pricePerStep;
     default:
       return opts.pricePerStep;
   }

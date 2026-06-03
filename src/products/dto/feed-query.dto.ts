@@ -1,7 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsBoolean,
-  IsIn,
   IsInt,
   IsNumber,
   IsOptional,
@@ -42,13 +41,37 @@ export class FeedQueryDto {
   @IsUUID()
   categoryId?: string;
 
-  @ApiPropertyOptional({ enum: ['relevance', 'price_asc', 'price_desc', 'rating'] })
+  /** Comma-separated category ids (multi-select). Takes priority over categoryId. */
+  @ApiPropertyOptional({ description: 'Comma-separated category ids' })
   @IsOptional()
-  @IsIn(['relevance', 'price_asc', 'price_desc', 'rating'])
-  sort?: FeedSort;
+  @IsString()
+  categoryIds?: string;
+
+  /**
+   * Sort spec. Single token (`price_asc`) or a comma-separated ordered combo
+   * (`price_asc,rating`) — the first token is primary, the rest tiebreakers.
+   */
+  @ApiPropertyOptional({ description: 'e.g. "price_asc", "rating", "price_asc,rating"' })
+  @IsOptional()
+  @IsString()
+  sort?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsBoolean()
   onlyDiscounted?: boolean;
+
+  /** Minimum effective price (so'm). */
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  minPrice?: number;
+
+  /** Maximum effective price (so'm). */
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  maxPrice?: number;
 }

@@ -15,6 +15,7 @@ import type { JwtPayload } from '../auth/decorators/current-user.decorator';
 import {
   CreateOrderDto,
   CreateReviewsDto,
+  InStoreSaleDto,
   PartialReturnDto,
   ReturnReasonDto,
   SendMessageDto,
@@ -108,5 +109,15 @@ export class SellerOrdersController {
     @Query('status') status?: OrderStatus,
   ) {
     return this.orders.listForShop(user.sub, shopId, status);
+  }
+
+  // In-store counter sale (scan/pick → ring up → done).
+  @Post('instore')
+  inStoreSale(
+    @CurrentUser() user: JwtPayload,
+    @Param('shopId', ParseUUIDPipe) shopId: string,
+    @Body() dto: InStoreSaleDto,
+  ) {
+    return this.orders.createInStoreSale(user.sub, shopId, dto.items);
   }
 }

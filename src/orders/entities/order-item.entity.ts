@@ -44,4 +44,12 @@ export class OrderItem {
 
   @Column({ type: 'int', default: 0 })
   returnedQuantity!: number;
+
+  /**
+   * FIFO cost of goods for the units actually sold on this line (net of
+   * returns). profit = lineTotal − costOfGoods. Filled at sale time by
+   * consuming stock batches oldest-first; reduced when items are returned.
+   */
+  @Column({ type: 'int', default: 0 })
+  costOfGoods!: number;
 }

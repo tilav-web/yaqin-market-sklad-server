@@ -85,7 +85,11 @@ export class AuthService {
     }
 
     if (record.code !== code) {
-      await this.redis.client.setex(key, OTP_TTL_SEC, JSON.stringify(record));
+      // Persist the incremented attempt count WITHOUT extending the code's
+      // lifetime — keep the original expiry instead of restarting it.
+      const ttlMs = await this.redis.client.pttl(key);
+      if (ttlMs > 0) await this.redis.client.set(key, JSON.stringify(record), 'PX', ttlMs);
+      else await this.redis.client.del(key);
       throw new BadRequestException("Tasdiq kodi noto'g'ri");
     }
 

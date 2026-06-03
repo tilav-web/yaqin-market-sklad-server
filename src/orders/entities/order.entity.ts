@@ -29,6 +29,13 @@ export enum PaymentMethod {
   ClickOnline = 'click_online',
 }
 
+export enum OrderChannel {
+  /** Customer placed it in the app for delivery. */
+  Delivery = 'delivery',
+  /** Seller rang it up at the counter (walk-in, paid on the spot). */
+  InStore = 'in_store',
+}
+
 export interface OrderTimelineEvent {
   status: OrderStatus;
   at: string;
@@ -45,12 +52,13 @@ export class Order {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
 
-  @Column({ type: 'uuid' })
-  userId!: string;
+  // Null for in-store walk-in sales (no app customer).
+  @Column({ type: 'uuid', nullable: true })
+  userId!: string | null;
 
-  @ManyToOne(() => User, { onDelete: 'RESTRICT' })
+  @ManyToOne(() => User, { onDelete: 'RESTRICT', nullable: true })
   @JoinColumn({ name: 'userId' })
-  user!: User;
+  user!: User | null;
 
   @Column({ type: 'uuid' })
   shopId!: string;
@@ -59,12 +67,16 @@ export class Order {
   @JoinColumn({ name: 'shopId' })
   shop!: Shop;
 
-  @Column({ type: 'uuid' })
-  deliveryAddressId!: string;
+  // Null for in-store sales (no delivery).
+  @Column({ type: 'uuid', nullable: true })
+  deliveryAddressId!: string | null;
 
-  @ManyToOne(() => UserAddress, { onDelete: 'RESTRICT' })
+  @ManyToOne(() => UserAddress, { onDelete: 'RESTRICT', nullable: true })
   @JoinColumn({ name: 'deliveryAddressId' })
-  deliveryAddress!: UserAddress;
+  deliveryAddress!: UserAddress | null;
+
+  @Column({ type: 'enum', enum: OrderChannel, default: OrderChannel.Delivery })
+  channel!: OrderChannel;
 
   @Column({ type: 'varchar', length: 32 })
   orderNumber!: string;

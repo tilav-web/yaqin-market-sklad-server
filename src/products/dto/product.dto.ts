@@ -10,7 +10,6 @@ import {
   IsPositive,
   IsString,
   IsUUID,
-  IsUrl,
   MaxLength,
   Min,
 } from 'class-validator';
@@ -53,7 +52,7 @@ export class CreateProductVariantDto {
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(5)
-  @IsUrl({}, { each: true })
+  @IsString({ each: true })
   photos?: string[];
 
   @ApiPropertyOptional()
@@ -86,6 +85,12 @@ export class CreateProductVariantDto {
   @Min(0)
   stock!: number;
 
+  @ApiPropertyOptional({ example: 3500, description: 'Boshlang\'ich qoldiq tannarxi (dona uchun)' })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  costPrice?: number;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsInt()
@@ -113,7 +118,7 @@ export class UpdateProductVariantDto {
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(5)
-  @IsUrl({}, { each: true })
+  @IsString({ each: true })
   photos?: string[];
 
   @ApiPropertyOptional()
@@ -154,4 +159,40 @@ export class AdjustStockDto {
   @IsOptional()
   @IsString()
   reason?: string;
+}
+
+export class CountStockDto {
+  @ApiProperty({ example: 12, description: 'Real sanab chiqilgan haqiqiy qoldiq' })
+  @IsInt()
+  @Min(0)
+  actualQty!: number;
+}
+
+export class ReceiveStockDto {
+  @ApiProperty({ example: 50, description: 'Kelgan miqdor' })
+  @IsInt()
+  @IsPositive()
+  quantity!: number;
+
+  @ApiProperty({ example: 3500, description: 'Dona uchun tannarx (kirim narxi)' })
+  @IsInt()
+  @Min(0)
+  costPrice!: number;
+
+  @ApiPropertyOptional({ example: '2027-01-01' })
+  @IsOptional()
+  @IsString()
+  expiryDate?: string;
+
+  @ApiPropertyOptional({ example: 'Optom baza' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(256)
+  supplierName?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(256)
+  note?: string;
 }

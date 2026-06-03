@@ -66,6 +66,10 @@ export class ProductVariant {
   @Column({ type: 'varchar', length: 64, nullable: true })
   barcode!: string | null;
 
+  /** Links this shop offering to the shared catalogue entry (by barcode). */
+  @Column({ type: 'uuid', nullable: true })
+  globalProductId!: string | null;
+
   @Column({ type: 'date', nullable: true })
   expiryDate!: Date | null;
 

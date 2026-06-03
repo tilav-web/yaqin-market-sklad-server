@@ -44,6 +44,15 @@ export class CreateOrderDto {
   items!: OrderItemDto[];
 }
 
+export class InStoreSaleDto {
+  @ApiProperty({ type: [OrderItemDto] })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => OrderItemDto)
+  items!: OrderItemDto[];
+}
+
 export class UpdateOrderStatusDto {
   @ApiProperty({ enum: OrderStatus })
   @IsEnum(OrderStatus)

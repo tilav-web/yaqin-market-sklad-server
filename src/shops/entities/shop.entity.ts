@@ -23,7 +23,7 @@ export interface Holiday {
   reason?: string;
 }
 
-export type DeliveryPricingType = 'flat' | 'per_km' | 'per_500m';
+export type DeliveryPricingType = 'flat' | 'per_km' | 'per_500m' | 'per_100m';
 
 export interface DeliveryZone {
   maxKm: number;
@@ -90,6 +90,14 @@ export class Shop {
 
   @Column({ type: 'boolean', default: true })
   isActive!: boolean;
+
+  /**
+   * When the owner last opened this shop's orders. New orders created after
+   * this moment are "unseen" and drive the profile notification badge; opening
+   * the orders tab refreshes it so the badge clears.
+   */
+  @Column({ type: 'timestamptz', nullable: true })
+  ownerOrdersSeenAt!: Date | null;
 
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt!: Date;

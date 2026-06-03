@@ -2,29 +2,38 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { customAlphabet } from 'nanoid';
-import { DataSource, In, Repository } from 'typeorm';
+import { DataSource, In, LessThan, Repository } from 'typeorm';
 
 import { calcDeliveryFee, haversineKm } from '../geo/geo.util';
-import { InventoryMovement, MovementType } from '../products/entities/inventory-movement.entity';
+import { MovementType } from '../products/entities/inventory-movement.entity';
 import { ProductVariant } from '../products/entities/product-variant.entity';
+import { consumeFifo, restockReturn, unitCostOf } from '../products/inventory.util';
 import { PushService } from '../push/push.service';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { Shop } from '../shops/entities/shop.entity';
 import { ShopStaff, StaffPermission } from '../shops/entities/shop-staff.entity';
+import { isShopOpenNow } from '../shops/shop-hours.util';
 import { UserAddress } from '../users/entities/user-address.entity';
 import { ChatMessage } from './entities/chat-message.entity';
 import { OrderItem } from './entities/order-item.entity';
-import { Order, OrderStatus, OrderTimelineEvent, PaymentMethod } from './entities/order.entity';
+import { Order, OrderChannel, OrderStatus, OrderTimelineEvent, PaymentMethod } from './entities/order.entity';
 import { Review } from './entities/review.entity';
 
 const orderNumberGen = customAlphabet('ABCDEFGHJKLMNPQRSTUVWXYZ23456789', 8);
 
+// A new order the shop doesn't accept within this window is auto-cancelled.
+const AUTO_CANCEL_MS = 5 * 60 * 1000;
+
 @Injectable()
 export class OrdersService {
+  private readonly logger = new Logger(OrdersService.name);
+
   constructor(
     @InjectRepository(Order)
     private readonly orders: Repository<Order>,
@@ -67,7 +76,7 @@ export class OrdersService {
       orderNumber: order.orderNumber,
       shopId: order.shopId,
     };
-    this.realtime.emitToUser(order.userId, event, payload);
+    if (order.userId) this.realtime.emitToUser(order.userId, event, payload);
     this.realtime.emitToShop(order.shopId, event, payload);
   }
 
@@ -94,6 +103,9 @@ export class OrdersService {
   ): Promise<Order> {
     const shop = await this.shops.findOne({ where: { id: dto.shopId, isActive: true } });
     if (!shop) throw new NotFoundException('Do\'kon topilmadi');
+    if (!isShopOpenNow(shop)) {
+      throw new BadRequestException('Do\'kon hozir yopiq — buyurtma qabul qilmaydi');
+    }
     if (shop.blockedUserIds.includes(userId)) {
       throw new ForbiddenException('Bu do\'kon sizdan buyurtma qabul qila olmaydi');
     }
@@ -138,6 +150,7 @@ export class OrdersService {
       pricePerStep: shop.deliveryZone.pricePerStep,
     });
 
+    const lowAlerts: { name: string; stock: number }[] = [];
     const created = await this.dataSource.transaction(async (manager) => {
       const order = manager.create(Order, {
         userId,
@@ -155,41 +168,173 @@ export class OrdersService {
       const savedOrder = await manager.save(order);
 
       for (const li of lineItems) {
+        // Re-read the row WITH a write lock inside the transaction and re-check
+        // stock — this serialises concurrent orders and prevents overselling
+        // (the earlier check was outside the transaction).
+        const locked = await manager.findOne(ProductVariant, {
+          where: { id: li.variant.id },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (!locked) throw new BadRequestException('Mahsulot topilmadi');
+        if (locked.stock < li.quantity) {
+          throw new BadRequestException(`"${locked.name}" mahsulotidan ${locked.stock} ta qoldi`);
+        }
+        const beforeStock = locked.stock;
+        // Drain oldest FIFO batches first; the returned cost of goods lets us
+        // compute this order's profit later.
+        const { costOfGoods } = await consumeFifo(manager, {
+          variant: locked,
+          quantity: li.quantity,
+          type: MovementType.Sold,
+          orderId: savedOrder.id,
+          reason: 'Sotildi',
+        });
+        // Alert the shop only when this sale pushes the item to/below its
+        // low-stock threshold for the first time.
+        if (beforeStock > locked.lowStockThreshold && locked.stock <= locked.lowStockThreshold) {
+          lowAlerts.push({ name: locked.name, stock: locked.stock });
+        }
         const item = manager.create(OrderItem, {
           orderId: savedOrder.id,
-          productVariantId: li.variant.id,
-          productName: li.variant.name,
+          productVariantId: locked.id,
+          productName: locked.name,
           quantity: li.quantity,
           unitPrice: li.unitPrice,
           lineTotal: li.lineTotal,
+          costOfGoods,
         });
         await manager.save(item);
-
-        const before = li.variant.stock;
-        li.variant.stock -= li.quantity;
-        await manager.save(li.variant);
-
-        await manager.save(
-          manager.create(InventoryMovement, {
-            productVariantId: li.variant.id,
-            type: MovementType.Sold,
-            quantity: li.quantity,
-            beforeStock: before,
-            afterStock: li.variant.stock,
-            orderId: savedOrder.id,
-          }),
-        );
       }
 
       return manager.findOne(Order, { where: { id: savedOrder.id }, relations: { items: true } }) as Promise<Order>;
     });
     this.emitOrderEvent('order:new', created);
-    void this.push.sendToUser(shop.ownerId, {
-      title: 'Yangi buyurtma',
-      body: `#${created.orderNumber} — ${created.total.toLocaleString()} so'm`,
-      data: { orderId: created.id, kind: 'order:new' },
-    });
+    void this.notifyNewOrder(shop, created);
+    if (lowAlerts.length > 0) void this.notifyLowStock(shop, lowAlerts);
     return created;
+  }
+
+  /** Tell the shop owner + staff which items just hit their low-stock line. */
+  private async notifyLowStock(
+    shop: Pick<Shop, 'id' | 'ownerId'>,
+    lowAlerts: { name: string; stock: number }[],
+  ): Promise<void> {
+    const staff = await this.staff.find({ where: { shopId: shop.id, isActive: true } });
+    const recipients = [...new Set([shop.ownerId, ...staff.map((s) => s.userId)])];
+    const body =
+      lowAlerts.length === 1
+        ? `${lowAlerts[0].name} — ${lowAlerts[0].stock} ta qoldi`
+        : `${lowAlerts.length} ta mahsulot kam qoldi: ${lowAlerts.map((a) => a.name).join(', ')}`;
+    await this.push.sendToUsers(recipients, {
+      title: 'Mahsulot kam qoldi',
+      body,
+      data: { kind: 'stock:low', shopId: shop.id },
+    });
+  }
+
+  /**
+   * In-store ("counter") sale: the seller or a permitted cashier scans/picks
+   * products and rings them up on the spot. Recorded as an anonymous, already
+   * "delivered" cash order with no delivery — stock is drawn down via FIFO so
+   * inventory and the profit report stay accurate.
+   */
+  async createInStoreSale(
+    userId: string,
+    shopId: string,
+    items: { productVariantId: string; quantity: number }[],
+  ): Promise<Order> {
+    const shop = await this.shops.findOne({ where: { id: shopId } });
+    if (!shop) throw new NotFoundException('Do\'kon topilmadi');
+    if (shop.ownerId !== userId) {
+      const staff = await this.staff.findOne({ where: { shopId, userId, isActive: true } });
+      if (!staff?.permissions.includes('sales.instore')) {
+        throw new ForbiddenException('Do\'konda sotish uchun ruxsat yo\'q');
+      }
+    }
+    if (!items.length) throw new BadRequestException('Hech qanday mahsulot tanlanmadi');
+
+    const variants = await this.variants.find({
+      where: { id: In(items.map((i) => i.productVariantId)), shopId, isActive: true },
+    });
+    const variantMap = new Map(variants.map((v) => [v.id, v]));
+    let subTotal = 0;
+    const lineItems: { variant: ProductVariant; quantity: number; unitPrice: number; lineTotal: number }[] = [];
+    for (const it of items) {
+      const v = variantMap.get(it.productVariantId);
+      if (!v) throw new BadRequestException('Mahsulot topilmadi');
+      if (v.stock < it.quantity) {
+        throw new BadRequestException(`"${v.name}" qoldig'i yetarli emas (${v.stock} ta)`);
+      }
+      const unitPrice = v.discountPrice ?? v.price;
+      const lineTotal = unitPrice * it.quantity;
+      subTotal += lineTotal;
+      lineItems.push({ variant: v, quantity: it.quantity, unitPrice, lineTotal });
+    }
+
+    const now = new Date().toISOString();
+    return this.dataSource.transaction(async (manager) => {
+      const order = manager.create(Order, {
+        userId: null,
+        shopId,
+        deliveryAddressId: null,
+        channel: OrderChannel.InStore,
+        orderNumber: orderNumberGen(),
+        subTotal,
+        deliveryFee: 0,
+        total: subTotal,
+        distanceKm: 0,
+        status: OrderStatus.Delivered,
+        paymentMethod: PaymentMethod.Cash,
+        timeline: [
+          { status: OrderStatus.New, at: now, byUserId: userId },
+          { status: OrderStatus.Delivered, at: now, byUserId: userId, note: 'Do\'konda sotildi' },
+        ],
+      });
+      const savedOrder = await manager.save(order);
+      for (const li of lineItems) {
+        const locked = await manager.findOne(ProductVariant, {
+          where: { id: li.variant.id },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (!locked || locked.stock < li.quantity) {
+          throw new BadRequestException(`"${li.variant.name}" qoldig'i yetarli emas`);
+        }
+        const { costOfGoods } = await consumeFifo(manager, {
+          variant: locked,
+          quantity: li.quantity,
+          type: MovementType.Sold,
+          orderId: savedOrder.id,
+          userId,
+          reason: 'Do\'konda sotildi',
+        });
+        await manager.save(
+          manager.create(OrderItem, {
+            orderId: savedOrder.id,
+            productVariantId: li.variant.id,
+            productName: li.variant.name,
+            quantity: li.quantity,
+            unitPrice: li.unitPrice,
+            lineTotal: li.lineTotal,
+            costOfGoods,
+          }),
+        );
+      }
+      return manager.findOneOrFail(Order, { where: { id: savedOrder.id }, relations: { items: true } });
+    });
+  }
+
+  /** Push a new-order alert to the shop owner and every active staff member. */
+  private async notifyNewOrder(
+    shop: Pick<Shop, 'id' | 'ownerId'>,
+    order: Pick<Order, 'id' | 'orderNumber' | 'total'>,
+  ): Promise<void> {
+    const staff = await this.staff.find({ where: { shopId: shop.id, isActive: true } });
+    const recipients = [...new Set([shop.ownerId, ...staff.map((s) => s.userId)])];
+    await this.push.sendToUsers(recipients, {
+      title: 'Yangi buyurtma',
+      body: `#${order.orderNumber} — ${order.total.toLocaleString()} so'm`,
+      data: { orderId: order.id, kind: 'order:new', shopId: shop.id },
+    });
   }
 
   listForUser(userId: string): Promise<Order[]> {
@@ -201,16 +346,30 @@ export class OrdersService {
     });
   }
 
-  listForShop(shopOwnerId: string, shopId: string, status?: OrderStatus): Promise<Order[]> {
+  async listForShop(actorUserId: string, shopId: string, status?: OrderStatus): Promise<Order[]> {
+    // Owner or any staff who can view orders (full or assigned).
+    const shop = await this.shops.findOne({ where: { id: shopId } });
+    if (!shop) throw new NotFoundException('Do\'kon topilmadi');
+    let effectiveStatus = status;
+    if (shop.ownerId !== actorUserId) {
+      const member = await this.staff.findOne({ where: { shopId, userId: actorUserId, isActive: true } });
+      const canViewAll = member?.permissions?.includes('orders.view_all');
+      const canViewAssigned = member?.permissions?.includes('orders.view_assigned');
+      if (!canViewAll && !canViewAssigned) {
+        throw new ForbiddenException('Buyurtmalarni ko\'rishga ruxsat yo\'q');
+      }
+      // Couriers (assigned-only) see just the delivery stage — not new/unaccepted
+      // orders or full customer contact for everything.
+      if (!canViewAll) effectiveStatus = OrderStatus.Delivering;
+    }
     return this.dataSource
       .createQueryBuilder(Order, 'o')
-      .innerJoin('o.shop', 'shop')
       .leftJoinAndSelect('o.items', 'items')
+      .leftJoinAndSelect('items.productVariant', 'pv')
       .leftJoinAndSelect('o.deliveryAddress', 'addr')
       .leftJoinAndSelect('o.user', 'usr')
-      .where('shop.id = :shopId', { shopId })
-      .andWhere('shop.ownerId = :ownerId', { ownerId: shopOwnerId })
-      .andWhere(status ? 'o.status = :status' : '1=1', status ? { status } : {})
+      .where('o.shopId = :shopId', { shopId })
+      .andWhere(effectiveStatus ? 'o.status = :status' : '1=1', effectiveStatus ? { status: effectiveStatus } : {})
       .orderBy('o.createdAt', 'DESC')
       .take(200)
       .getMany();
@@ -222,7 +381,7 @@ export class OrdersService {
   ): Promise<Order & { reviewedVariantIds: string[] }> {
     const order = await this.orders.findOne({
       where: { id: orderId },
-      relations: { items: true, shop: true, deliveryAddress: true },
+      relations: { items: { productVariant: true }, shop: true, deliveryAddress: true, user: true },
     });
     if (!order) throw new NotFoundException('Buyurtma topilmadi');
     const isParty = order.userId === userId || order.shop.ownerId === userId;
@@ -233,10 +392,12 @@ export class OrdersService {
       });
       if (!staff) throw new ForbiddenException();
     }
-    const myReviews = await this.reviews.find({
-      where: { orderId, userId: order.userId },
-      select: { productVariantId: true },
-    });
+    const myReviews = order.userId
+      ? await this.reviews.find({
+          where: { orderId, userId: order.userId },
+          select: { productVariantId: true },
+        })
+      : [];
     return { ...order, reviewedVariantIds: myReviews.map((r) => r.productVariantId) };
   }
 
@@ -265,17 +426,17 @@ export class OrdersService {
       throw new BadRequestException(`Status ${order.status} -> ${nextStatus} mumkin emas`);
     }
 
-    if (
-      [OrderStatus.Accepted, OrderStatus.Preparing, OrderStatus.Delivering].includes(nextStatus) &&
-      !isOwner
-    ) {
-      throw new ForbiddenException('Faqat sotuvchi statusni o\'zgartirishi mumkin');
-    }
-    if (nextStatus === OrderStatus.Delivered && !isCustomer && !isOwner) {
-      throw new ForbiddenException('Faqat customer yetkazilganini tasdiqlashi mumkin');
-    }
-    if (nextStatus === OrderStatus.Cancelled && !isCustomer && !isOwner) {
-      throw new ForbiddenException();
+    // Shop-side transitions are allowed for the owner OR active staff holding
+    // the matching permission (kassir accepts, courier delivers, etc.).
+    if (nextStatus === OrderStatus.Accepted) {
+      await this.assertShopCanManage(actorUserId, order, 'orders.accept');
+    } else if ([OrderStatus.Preparing, OrderStatus.Delivering].includes(nextStatus)) {
+      await this.assertShopCanManage(actorUserId, order, 'orders.update_status');
+    } else if (nextStatus === OrderStatus.Delivered) {
+      // The customer confirms receipt; the shop side (owner/courier) may also.
+      if (!isCustomer) await this.assertShopCanManage(actorUserId, order, 'orders.update_status');
+    } else if (nextStatus === OrderStatus.Cancelled) {
+      if (!isCustomer) await this.assertShopCanManage(actorUserId, order, 'orders.cancel');
     }
 
     const saved = await this.dataSource.transaction(async (manager) => {
@@ -297,7 +458,7 @@ export class OrdersService {
     // Notify the customer when the shop advances the order; notify the shop
     // when the customer confirms delivery or cancels.
     const target = isOwner ? saved.userId : order.shop.ownerId;
-    void this.push.sendToUser(target, {
+    if (target) void this.push.sendToUser(target, {
       title: `Buyurtma #${saved.orderNumber}`,
       body: OrdersService.STATUS_LABEL[saved.status],
       data: { orderId: saved.id, kind: 'order:updated' },
@@ -305,26 +466,68 @@ export class OrdersService {
     return saved;
   }
 
+  /**
+   * Business rule #5: a `new` order the shop hasn't accepted within 5 minutes is
+   * auto-cancelled — stock is returned and the customer is notified. Runs every
+   * minute.
+   */
+  @Cron(CronExpression.EVERY_MINUTE)
+  async autoCancelStaleNewOrders(): Promise<void> {
+    const cutoff = new Date(Date.now() - AUTO_CANCEL_MS);
+    const stale = await this.orders.find({
+      where: { status: OrderStatus.New, createdAt: LessThan(cutoff) },
+      take: 50,
+    });
+    for (const order of stale) {
+      await this.dataSource.transaction(async (manager) => {
+        // Re-check under the row to avoid racing with a just-accepted order.
+        const fresh = await manager.findOne(Order, {
+          where: { id: order.id },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (!fresh || fresh.status !== OrderStatus.New) return;
+        await this.restockOrder(manager, fresh.id);
+        fresh.status = OrderStatus.Cancelled;
+        fresh.cancellationReason = 'Do\'kon 5 daqiqada qabul qilmadi — avtomatik bekor qilindi';
+        fresh.timeline = [
+          ...fresh.timeline,
+          { status: OrderStatus.Cancelled, at: new Date().toISOString(), byUserId: null, note: 'auto-cancel' },
+        ];
+        await manager.save(fresh);
+      });
+      order.status = OrderStatus.Cancelled;
+      this.emitOrderEvent('order:updated', order);
+      if (order.userId) {
+        void this.push.sendToUser(order.userId, {
+          title: `Buyurtma #${order.orderNumber}`,
+          body: 'Do\'kon 5 daqiqada qabul qilmadi — buyurtma bekor qilindi',
+          data: { orderId: order.id, kind: 'order:auto_cancelled' },
+        });
+      }
+    }
+    if (stale.length > 0) this.logger.log(`Auto-cancelled ${stale.length} stale order(s)`);
+  }
+
   private async restockOrder(manager: import('typeorm').EntityManager, orderId: string) {
     const items = await manager.find(OrderItem, { where: { orderId } });
     for (const item of items) {
       const variant = await manager.findOne(ProductVariant, { where: { id: item.productVariantId } });
       if (!variant) continue;
-      const before = variant.stock;
       const restockQty = item.quantity - item.returnedQuantity;
-      variant.stock += restockQty;
-      await manager.save(variant);
-      await manager.save(
-        manager.create(InventoryMovement, {
-          productVariantId: variant.id,
-          type: MovementType.Returned,
-          quantity: restockQty,
-          beforeStock: before,
-          afterStock: variant.stock,
-          orderId,
-          reason: 'Bekor qilindi',
-        }),
-      );
+      if (restockQty <= 0) continue;
+      // Unit cost = remaining cost of goods spread over the still-sold units.
+      const unitCost = unitCostOf(item.costOfGoods, restockQty);
+      await restockReturn(manager, {
+        variant,
+        quantity: restockQty,
+        unitCost,
+        orderId,
+        reason: 'Bekor qilindi',
+      });
+      // All remaining units go back → the line's cost of goods becomes 0.
+      item.costOfGoods = 0;
+      item.returnedQuantity = item.quantity;
+      await manager.save(item);
     }
   }
 
@@ -352,26 +555,23 @@ export class OrdersService {
         if (r.quantity > remaining) {
           throw new BadRequestException(`"${item.productName}" da faqat ${remaining} ta qaytarish mumkin`);
         }
+        // Cost per still-sold unit (cost of goods over the units not yet returned).
+        const unitCost = unitCostOf(item.costOfGoods, remaining);
         item.returnedQuantity += r.quantity;
+        // Returned units are no longer sold — drop their cost from the line.
+        item.costOfGoods = Math.max(0, item.costOfGoods - unitCost * r.quantity);
         await manager.save(item);
 
         const variant = await manager.findOne(ProductVariant, { where: { id: item.productVariantId } });
         if (variant) {
-          const before = variant.stock;
-          variant.stock += r.quantity;
-          await manager.save(variant);
-          await manager.save(
-            manager.create(InventoryMovement, {
-              productVariantId: variant.id,
-              type: MovementType.Returned,
-              quantity: r.quantity,
-              beforeStock: before,
-              afterStock: variant.stock,
-              orderId,
-              reason: reason ?? 'Customer qaytardi',
-              performedByUserId: userId,
-            }),
-          );
+          await restockReturn(manager, {
+            variant,
+            quantity: r.quantity,
+            unitCost,
+            orderId,
+            userId,
+            reason: reason ?? 'Customer qaytardi',
+          });
         }
         totalReturnAmount += item.unitPrice * r.quantity;
       }
@@ -389,7 +589,7 @@ export class OrdersService {
     });
     this.emitOrderEvent('order:updated', result);
     // Remind the customer to (optionally) add a return reason.
-    void this.push.sendToUser(result.userId, {
+    if (result.userId) void this.push.sendToUser(result.userId, {
       title: `Buyurtma #${result.orderNumber}`,
       body: 'Ba\'zi mahsulotlar qaytarildi. Xohlasangiz sabab qoldiring.',
       data: { orderId: result.id, kind: 'order:returned' },
@@ -475,37 +675,32 @@ export class OrdersService {
     return { reviewedVariantIds: myReviews.map((rv) => rv.productVariantId) };
   }
 
-  /** Recompute a variant's cached rating from its reviews. */
+  /** Recompute a variant's cached rating from its reviews (SQL aggregation). */
   private async recomputeVariantRating(variantId: string): Promise<void> {
-    const rows = await this.reviews.find({
-      where: { productVariantId: variantId },
-      select: { stars: true },
-    });
-    const count = rows.length;
-    const avg = count ? rows.reduce((s, r) => s + r.stars, 0) / count : 0;
+    const agg = await this.reviews
+      .createQueryBuilder('r')
+      .select('COALESCE(AVG(r.stars), 0)', 'avg')
+      .addSelect('COUNT(*)', 'cnt')
+      .where('r.productVariantId = :variantId', { variantId })
+      .getRawOne<{ avg: string; cnt: string }>();
     await this.variants.update(variantId, {
-      ratingAverage: Math.round(avg * 100) / 100,
-      ratingCount: count,
+      ratingAverage: Math.round(Number(agg?.avg ?? 0) * 100) / 100,
+      ratingCount: Number(agg?.cnt ?? 0),
     });
   }
 
-  /** Shop rating = average of all reviews across the shop's variants. */
+  /** Shop rating = average of all reviews across the shop's variants (SQL). */
   private async recomputeShopRating(shopId: string): Promise<void> {
-    const variants = await this.variants.find({
-      where: { shopId },
-      select: { id: true },
-    });
-    const variantIds = variants.map((v) => v.id);
-    if (variantIds.length === 0) return;
-    const rows = await this.reviews.find({
-      where: { productVariantId: In(variantIds) },
-      select: { stars: true },
-    });
-    const count = rows.length;
-    const avg = count ? rows.reduce((s, r) => s + r.stars, 0) / count : 0;
+    const agg = await this.reviews
+      .createQueryBuilder('r')
+      .innerJoin('product_variants', 'v', 'v.id = r.productVariantId')
+      .select('COALESCE(AVG(r.stars), 0)', 'avg')
+      .addSelect('COUNT(*)', 'cnt')
+      .where('v.shopId = :shopId', { shopId })
+      .getRawOne<{ avg: string; cnt: string }>();
     await this.shops.update(shopId, {
-      ratingAverage: Math.round(avg * 100) / 100,
-      ratingCount: count,
+      ratingAverage: Math.round(Number(agg?.avg ?? 0) * 100) / 100,
+      ratingCount: Number(agg?.cnt ?? 0),
     });
   }
 
@@ -519,8 +714,15 @@ export class OrdersService {
     });
     if (!order) throw new NotFoundException('Buyurtma topilmadi');
     const isCustomer = order.userId === userId;
-    const isShop = order.shop.ownerId === userId;
-    if (!isCustomer && !isShop) throw new ForbiddenException();
+    let isShop = order.shop.ownerId === userId;
+    // Staff with the chat permission represent the shop side too.
+    if (!isCustomer && !isShop) {
+      const member = await this.staff.findOne({
+        where: { shopId: order.shopId, userId, isActive: true },
+      });
+      if (!member?.permissions?.includes('orders.chat')) throw new ForbiddenException();
+      isShop = true;
+    }
     return { order, fromShop: isShop };
   }
 
@@ -539,7 +741,7 @@ export class OrdersService {
       this.chat.create({ orderId, senderUserId: userId, fromShop, text: text.trim() }),
     );
     // Deliver live to both parties.
-    this.realtime.emitToUser(order.userId, 'chat:message', message);
+    if (order.userId) this.realtime.emitToUser(order.userId, 'chat:message', message);
     this.realtime.emitToShop(order.shopId, 'chat:message', message);
     return message;
   }

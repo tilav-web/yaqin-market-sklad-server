@@ -5,6 +5,7 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  NotFoundException,
   Param,
   ParseUUIDPipe,
   Patch,
@@ -19,8 +20,10 @@ import { Public } from '../auth/decorators/public.decorator';
 import { FeedQueryDto } from './dto/feed-query.dto';
 import {
   AdjustStockDto,
+  CountStockDto,
   CreateProductFamilyDto,
   CreateProductVariantDto,
+  ReceiveStockDto,
   UpdateProductVariantDto,
 } from './dto/product.dto';
 import { ProductsService } from './products.service';
@@ -46,8 +49,20 @@ export class SellerProductsController {
   }
 
   @Get('variants')
-  listVariants(@Param('shopId', ParseUUIDPipe) shopId: string) {
-    return this.products.listVariants(shopId);
+  listVariants(
+    @CurrentUser() user: JwtPayload,
+    @Param('shopId', ParseUUIDPipe) shopId: string,
+    @Query('search') search?: string,
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+    @Query('lowOnly') lowOnly?: string,
+  ) {
+    return this.products.listVariantsWithCost(user.sub, shopId, {
+      search,
+      limit: limit !== undefined ? Number(limit) : undefined,
+      offset: offset !== undefined ? Number(offset) : undefined,
+      lowOnly: lowOnly === 'true' || lowOnly === '1',
+    });
   }
 
   @Post('variants')
@@ -86,6 +101,34 @@ export class SellerProductsController {
     return this.products.adjustStock(user.sub, variantId, dto.delta, dto.reason);
   }
 
+  // Formal stock receipt with cost ("Kirim") — creates a FIFO batch.
+  @Post('variants/:variantId/receive')
+  receiveStock(
+    @CurrentUser() user: JwtPayload,
+    @Param('variantId', ParseUUIDPipe) variantId: string,
+    @Body() dto: ReceiveStockDto,
+  ) {
+    return this.products.receiveStock(user.sub, variantId, dto);
+  }
+
+  // Inventarizatsiya — set stock to a counted number, reconciled via FIFO.
+  @Post('variants/:variantId/count')
+  countStock(
+    @CurrentUser() user: JwtPayload,
+    @Param('variantId', ParseUUIDPipe) variantId: string,
+    @Body() dto: CountStockDto,
+  ) {
+    return this.products.countStock(user.sub, variantId, dto.actualQty);
+  }
+
+  @Get('variants/:variantId/batches')
+  listBatches(
+    @CurrentUser() user: JwtPayload,
+    @Param('variantId', ParseUUIDPipe) variantId: string,
+  ) {
+    return this.products.listBatches(user.sub, variantId);
+  }
+
   @Get('variants/:variantId/movements')
   listMovements(
     @CurrentUser() user: JwtPayload,
@@ -103,6 +146,21 @@ export class SellerProductsController {
   }
 }
 
+@ApiBearerAuth()
+@ApiTags('global-catalog')
+@Controller('catalog-global')
+export class GlobalCatalogController {
+  constructor(private readonly products: ProductsService) {}
+
+  /** Scan a barcode → shared catalogue entry (name/brand/photo/unit) or 404. */
+  @Get('by-barcode/:barcode')
+  async byBarcode(@Param('barcode') barcode: string) {
+    const found = await this.products.lookupGlobalByBarcode(barcode);
+    if (!found) throw new NotFoundException('Bu barkod katalogda topilmadi');
+    return found;
+  }
+}
+
 @ApiTags('catalog')
 @Controller('catalog')
 export class CatalogController {
@@ -116,15 +174,23 @@ export class CatalogController {
   @Public()
   @Get('products')
   feed(@Query() query: FeedQueryDto) {
+    let categoryIds: string[] = [];
+    if (query.categoryIds) {
+      categoryIds = query.categoryIds.split(',').map((s) => s.trim()).filter(Boolean);
+    } else if (query.categoryId) {
+      categoryIds = [query.categoryId];
+    }
     return this.products.feedNearby({
       latitude: query.lat,
       longitude: query.lng,
       page: query.page,
       limit: query.limit,
       q: query.q,
-      categoryId: query.categoryId,
+      categoryIds,
       sort: query.sort,
       onlyDiscounted: query.onlyDiscounted,
+      minPrice: query.minPrice,
+      maxPrice: query.maxPrice,
     });
   }
 

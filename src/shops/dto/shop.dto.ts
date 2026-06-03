@@ -11,7 +11,6 @@ import {
   IsNumber,
   IsOptional,
   IsString,
-  IsUrl,
   Matches,
   Max,
   MaxLength,
@@ -66,14 +65,46 @@ export class DeliveryZoneDto {
   @Min(0)
   freeKm!: number;
 
-  @ApiProperty({ enum: ['flat', 'per_km', 'per_500m'] })
-  @IsEnum(['flat', 'per_km', 'per_500m'])
+  @ApiProperty({ enum: ['flat', 'per_km', 'per_500m', 'per_100m'] })
+  @IsEnum(['flat', 'per_km', 'per_500m', 'per_100m'])
   pricingType!: DeliveryPricingType;
 
   @ApiProperty({ example: 5000 })
   @IsInt()
   @Min(0)
   pricePerStep!: number;
+}
+
+export class CreateShopDto {
+  @ApiProperty()
+  @IsString()
+  @MaxLength(128)
+  name!: string;
+
+  @ApiProperty()
+  @IsString()
+  @MaxLength(512)
+  address!: string;
+
+  @ApiProperty()
+  @IsLatitude()
+  latitude!: number;
+
+  @ApiProperty()
+  @IsLongitude()
+  longitude!: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(5)
+  @IsString({ each: true })
+  photos?: string[];
 }
 
 export class UpdateShopDto {
@@ -92,7 +123,7 @@ export class UpdateShopDto {
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(5)
-  @IsUrl({}, { each: true })
+  @IsString({ each: true })
   photos?: string[];
 
   @ApiPropertyOptional()
