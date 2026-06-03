@@ -44,6 +44,22 @@ export class UploadsService implements OnModuleInit {
     return key;
   }
 
+  /** Store an arbitrary file under a caller-chosen key (e.g. APK releases). */
+  async uploadBuffer(buffer: Buffer, key: string, contentType: string): Promise<void> {
+    await this.client.putObject(this.bucket, key, buffer, buffer.length, {
+      'Content-Type': contentType,
+    });
+  }
+
+  /** Best-effort delete; ignores a missing object. */
+  async remove(key: string): Promise<void> {
+    try {
+      await this.client.removeObject(this.bucket, key);
+    } catch (e) {
+      this.logger.warn(`MinIO remove failed for ${key}: ${(e as Error).message}`);
+    }
+  }
+
   async getObject(key: string): Promise<{ stream: Readable; contentType: string; size: number }> {
     const stat = await this.client.statObject(this.bucket, key);
     const stream = await this.client.getObject(this.bucket, key);

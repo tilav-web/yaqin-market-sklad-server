@@ -6,10 +6,12 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { AnalyticsModule } from './analytics/analytics.module';
+import { AppReleasesModule } from './app-releases/app-releases.module';
 import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { CategoriesModule } from './categories/categories.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
+import { ContactModule } from './contact/contact.module';
 import { DebtsModule } from './debts/debts.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { EnvironmentVariables, validateEnv } from './config/configuration';
@@ -50,6 +52,8 @@ import { UsersModule } from './users/users.module';
     AnalyticsModule,
     DebtsModule,
     NotificationsModule,
+    AppReleasesModule,
+    ContactModule,
     HealthModule,
   ],
   providers: [

@@ -59,15 +59,19 @@ export class AuthService {
       throw new BadRequestException(`${ttl} soniyadan keyin qayta urinib ko'ring`);
     }
 
+    // When FIXED_OTP_CODE is set, bypass SMS entirely — the code is known
+    // (e.g. while Eskiz isn't wired up yet). Leave it empty to fall back to
+    // random codes delivered over SMS.
     const fixed = this.config.get('FIXED_OTP_CODE', { infer: true });
-    const env = this.config.get('NODE_ENV', { infer: true });
-    const code = fixed && env !== 'production' ? fixed : nano6();
+    const code = fixed ? fixed : nano6();
 
     const record: OtpRecord = { code, attempts: 0, createdAt: Date.now() };
     await this.redis.client.setex(`otp:${phone}`, OTP_TTL_SEC, JSON.stringify(record));
     await this.redis.client.setex(cooldownKey, RESEND_COOLDOWN_SEC, '1');
 
-    await this.sms.sendOtp(phone, code);
+    if (!fixed) {
+      await this.sms.sendOtp(phone, code);
+    }
 
     return { resendAfterSec: RESEND_COOLDOWN_SEC, ttlSec: OTP_TTL_SEC };
   }
