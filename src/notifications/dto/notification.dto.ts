@@ -5,6 +5,7 @@ import {
   IsEnum,
   IsOptional,
   IsString,
+  IsUrl,
   IsUUID,
   MaxLength,
   ValidateIf,
@@ -38,6 +39,18 @@ export class BroadcastDto {
   @ArrayMaxSize(5000)
   @IsString({ each: true })
   phones?: string[];
+
+  @ApiPropertyOptional({ description: 'Rasm URL (notification ichida ko\'rsatiladi)' })
+  @IsOptional()
+  @IsUrl()
+  @MaxLength(512)
+  imageUrl?: string;
+
+  @ApiPropertyOptional({ description: 'Bosish uchun sahifa (masalan: /orders, /notifications)' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(256)
+  deepLink?: string;
 }
 
 export class TemplateDto {

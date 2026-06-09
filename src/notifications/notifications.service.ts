@@ -16,6 +16,8 @@ export interface BroadcastInput {
   audience: Audience;
   userIds?: string[];
   phones?: string[];
+  imageUrl?: string;
+  deepLink?: string;
 }
 
 @Injectable()
@@ -62,7 +64,12 @@ export class NotificationsService {
    * they have no account yet — once they register, future pushes are saved).
    */
   async broadcast(input: BroadcastInput): Promise<{ registered: number; pushedTokens: number }> {
-    const payload = { title: input.title, body: input.body, data: { kind: 'admin', ...input.data } };
+    const payload = {
+      title: input.title,
+      body: input.body,
+      data: { kind: 'admin', ...(input.deepLink ? { deepLink: input.deepLink } : {}), ...input.data },
+      imageUrl: input.imageUrl,
+    };
 
     let userIds: string[];
     if (input.audience === 'specific') {

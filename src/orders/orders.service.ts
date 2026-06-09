@@ -325,7 +325,7 @@ export class OrdersService {
 
   /** Push a new-order alert to the shop owner and every active staff member. */
   private async notifyNewOrder(
-    shop: Pick<Shop, 'id' | 'ownerId'>,
+    shop: Pick<Shop, 'id' | 'ownerId' | 'photos'>,
     order: Pick<Order, 'id' | 'orderNumber' | 'total'>,
   ): Promise<void> {
     const staff = await this.staff.find({ where: { shopId: shop.id, isActive: true } });
@@ -333,7 +333,8 @@ export class OrdersService {
     await this.push.sendToUsers(recipients, {
       title: 'Yangi buyurtma',
       body: `#${order.orderNumber} — ${order.total.toLocaleString()} so'm`,
-      data: { orderId: order.id, kind: 'order:new', shopId: shop.id },
+      data: { orderId: order.id, kind: 'order:new', shopId: shop.id, forSeller: true },
+      imageUrl: shop.photos?.[0],
     });
   }
 
@@ -488,10 +489,16 @@ export class OrdersService {
     // Shop-side actor (owner OR staff) → notify the customer; customer confirming
     // → notify the shop owner.
     const target = !isCustomer ? saved.userId : order.shop.ownerId;
+    const shopPhoto = order.shop.photos?.[0];
     if (target) void this.push.sendToUser(target, {
       title: `Buyurtma #${saved.orderNumber}`,
       body: OrdersService.STATUS_LABEL[saved.status],
-      data: { orderId: saved.id, kind: 'order:updated' },
+      data: {
+        orderId: saved.id,
+        kind: 'order:updated',
+        ...(!isCustomer ? { shopId: order.shopId, forSeller: false } : {}),
+      },
+      imageUrl: shopPhoto,
     });
     return saved;
   }

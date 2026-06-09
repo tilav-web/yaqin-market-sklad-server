@@ -72,8 +72,13 @@ services:
     environment:
       NODE_ENV: ${NODE_ENV:-development}
       PORT: ${PORT:-3000}
-      DATABASE_URL: postgres://${POSTGRES_USER:-yaqin}:${POSTGRES_PASSWORD:-yaqin_dev_password}@postgres:5432/${POSTGRES_DB:-yaqin_market}
-      REDIS_URL: redis://redis:6379
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:-yaqin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-yaqin_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-yaqin_market}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
       MINIO_ENDPOINT: minio
       MINIO_PORT: 9000
       MINIO_USE_SSL: "false"
@@ -82,6 +87,7 @@ services:
       MINIO_BUCKET: ${MINIO_BUCKET:-yaqin-uploads}
       JWT_SECRET: ${JWT_SECRET:-change_me_in_production}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-change_me_in_production_refresh}
+      FIXED_OTP_CODE: ${FIXED_OTP_CODE:-111111}
       ESKIZ_EMAIL: ${ESKIZ_EMAIL:-}
       ESKIZ_PASSWORD: ${ESKIZ_PASSWORD:-}
       ESKIZ_FROM: ${ESKIZ_FROM:-4546}

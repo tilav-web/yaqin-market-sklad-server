@@ -9,6 +9,8 @@ export interface PushPayload {
   title: string;
   body: string;
   data?: Record<string, unknown>;
+  /** Optional image URL shown in the notification (Android large icon / expanded). */
+  imageUrl?: string;
 }
 
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
@@ -84,15 +86,12 @@ export class PushService {
     if (userIds.length === 0) return;
     const rawKind = payload.data?.kind;
     const kind = typeof rawKind === 'string' ? rawKind : 'general';
+    const data = payload.imageUrl
+      ? { ...payload.data ?? {}, imageUrl: payload.imageUrl }
+      : payload.data ?? {};
     await this.notifications.save(
       userIds.map((userId) =>
-        this.notifications.create({
-          userId,
-          title: payload.title,
-          body: payload.body,
-          data: payload.data ?? {},
-          kind,
-        }),
+        this.notifications.create({ userId, title: payload.title, body: payload.body, data, kind }),
       ),
     );
   }
@@ -118,6 +117,7 @@ export class PushService {
       title: payload.title,
       body: payload.body,
       data: payload.data ?? {},
+      ...(payload.imageUrl ? { image: payload.imageUrl } : {}),
     }));
     for (let i = 0; i < messages.length; i += 100) {
       const chunk = messages.slice(i, i + 100);

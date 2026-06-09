@@ -91,7 +91,13 @@ export class ShopsService {
    * seller). Sellers may own multiple shops.
    */
   async createShop(userId: string, dto: CreateShopDto): Promise<Shop> {
-    const shop = await this.shops.save(
+    const user = await this.users.findOne({ where: { id: userId } });
+    if (!user?.isSellerApproved) {
+      throw new ForbiddenException(
+        'Do\'kon yaratish uchun avval ariza yuborib, admin tasdiqlashini kuting',
+      );
+    }
+    return this.shops.save(
       this.shops.create({
         ownerId: userId,
         name: dto.name,
@@ -102,13 +108,6 @@ export class ShopsService {
         photos: dto.photos ?? [],
       }),
     );
-    const user = await this.users.findOne({ where: { id: userId } });
-    if (user && !user.isSellerApproved) {
-      user.isSellerApproved = true;
-      if (!user.roles.includes('seller')) user.roles = [...user.roles, 'seller'];
-      await this.users.save(user);
-    }
-    return shop;
   }
 
   async listShopsWhereStaff(userId: string): Promise<{ shop: Shop; role: string }[]> {
