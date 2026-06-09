@@ -404,6 +404,37 @@ export class PaymentsService {
     }
   }
 
+  /** Cron: send debt reminder 3 days before due date (at 10 AM daily). */
+  @Cron('0 10 * * *')
+  async sendDebtReminders() {
+    const now = new Date();
+    const in3d = new Date(now);
+    in3d.setDate(in3d.getDate() + 3);
+    const dueSoon = in3d.toISOString().split('T')[0];
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    const debtors = await this.balances
+      .createQueryBuilder('b')
+      .where('b.debtBalance > 0')
+      .andWhere('b.debtDueDate IS NOT NULL')
+      .andWhere('b.debtDueDate = :due', { due: dueSoon })
+      .andWhere('(b.lastDebtReminderAt IS NULL OR b.lastDebtReminderAt < :yesterday)', { yesterday })
+      .getMany();
+
+    for (const bal of debtors) {
+      const debtAmt = parseFloat(bal.debtBalance).toLocaleString('ru');
+      void this.push.sendToUser(bal.sellerId, {
+        title: `Qarz eslatmasi — 3 kun qoldi`,
+        body: `${debtAmt} so'm qarzingizni vaqtida to'lang, aks holda do'koningiz to'xtatiladi.`,
+        data: { kind: 'debt_reminder', dueDate: bal.debtDueDate },
+      });
+      bal.lastDebtReminderAt = new Date();
+      await this.balances.save(bal);
+    }
+    if (debtors.length > 0) this.log.log(`Sent debt reminders to ${debtors.length} seller(s)`);
+  }
+
   /** Admin: immediately settle a pending online-order transaction (skip 24h wait). */
   async adminForceSettle(txId: string, adminId: string): Promise<SellerTransaction> {
     const tx = await this.txs.findOne({ where: { id: txId } });
