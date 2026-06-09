@@ -8,16 +8,17 @@ import { OrderItem } from '../orders/entities/order-item.entity';
 import { Order } from '../orders/entities/order.entity';
 import { PushModule } from '../push/push.module';
 import { Shop } from '../shops/entities/shop.entity';
-import { AnalyticsController } from './analytics.controller';
+import { User } from '../users/entities/user.entity';
+import { AdminAnalyticsController, AnalyticsController } from './analytics.controller';
 import { AnalyticsService } from './analytics.service';
 import { ExpiryAlertService } from './expiry-alert.service';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Order, OrderItem, ProductVariant, StockBatch, InventoryMovement, Shop]),
+    TypeOrmModule.forFeature([Order, OrderItem, ProductVariant, StockBatch, InventoryMovement, Shop, User]),
     PushModule,
   ],
-  controllers: [AnalyticsController],
+  controllers: [AnalyticsController, AdminAnalyticsController],
   providers: [AnalyticsService, ExpiryAlertService],
 })
 export class AnalyticsModule {}

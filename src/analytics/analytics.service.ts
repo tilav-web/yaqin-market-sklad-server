@@ -8,6 +8,7 @@ import { StockBatch } from '../products/entities/stock-batch.entity';
 import { OrderItem } from '../orders/entities/order-item.entity';
 import { Order, OrderStatus } from '../orders/entities/order.entity';
 import { Shop } from '../shops/entities/shop.entity';
+import { User } from '../users/entities/user.entity';
 
 export type StatsPeriod = 'today' | '7d' | '30d';
 
@@ -43,6 +44,18 @@ export interface ExpiringItem {
   daysToExpiry: number;
 }
 
+export interface AdminDashboardStats {
+  totalUsers: number;
+  totalSellers: number;
+  totalShops: number;
+  totalOrders: number;
+  ordersToday: number;
+  orders7d: number;
+  gmvTotal: number;
+  gmv7d: number;
+  pendingApplications: number;
+}
+
 @Injectable()
 export class AnalyticsService {
   constructor(
@@ -58,6 +71,8 @@ export class AnalyticsService {
     private readonly movements: Repository<InventoryMovement>,
     @InjectRepository(Shop)
     private readonly shops: Repository<Shop>,
+    @InjectRepository(User)
+    private readonly users: Repository<User>,
   ) {}
 
   private async ensureOwned(userId: string, shopId: string): Promise<void> {
@@ -239,5 +254,57 @@ export class AnalyticsService {
         daysToExpiry,
       };
     });
+  }
+
+  /** Platform-wide dashboard stats for admin. */
+  async adminDashboard(): Promise<AdminDashboardStats> {
+    const now = new Date();
+    const startOfDay = new Date(now); startOfDay.setHours(0, 0, 0, 0);
+    const start7d = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+    const [totalUsers, totalSellers, totalShops, totalOrders] = await Promise.all([
+      this.users.count(),
+      this.users.count({ where: { isSellerApproved: true } }),
+      this.shops.count(),
+      this.orders.count({ where: { status: OrderStatus.Delivered } }),
+    ]);
+
+    const [ordersToday, orders7d] = await Promise.all([
+      this.orders.count({ where: { status: OrderStatus.Delivered, createdAt: require('typeorm').MoreThanOrEqual(startOfDay) } }),
+      this.orders.count({ where: { status: OrderStatus.Delivered, createdAt: require('typeorm').MoreThanOrEqual(start7d) } }),
+    ]);
+
+    const gmvRows = await this.orders
+      .createQueryBuilder('o')
+      .select('COALESCE(SUM(o.total), 0)', 'gmv')
+      .where('o.status = :st', { st: OrderStatus.Delivered })
+      .getRawOne<{ gmv: string }>();
+
+    const gmv7dRows = await this.orders
+      .createQueryBuilder('o')
+      .select('COALESCE(SUM(o.total), 0)', 'gmv')
+      .where('o.status = :st', { st: OrderStatus.Delivered })
+      .andWhere('o.createdAt >= :start', { start: start7d })
+      .getRawOne<{ gmv: string }>();
+
+    // Count pending applications via raw query to avoid circular imports
+    const pendingRow = await this.orders.manager
+      .createQueryBuilder()
+      .select('COUNT(*)', 'cnt')
+      .from('seller_applications', 'sa')
+      .where("sa.status = 'pending'")
+      .getRawOne<{ cnt: string }>();
+
+    return {
+      totalUsers,
+      totalSellers,
+      totalShops,
+      totalOrders,
+      ordersToday,
+      orders7d,
+      gmvTotal: Number(gmvRows?.gmv ?? 0),
+      gmv7d: Number(gmv7dRows?.gmv ?? 0),
+      pendingApplications: Number(pendingRow?.cnt ?? 0),
+    };
   }
 }

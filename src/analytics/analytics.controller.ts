@@ -1,9 +1,24 @@
 import { Controller, Get, Param, ParseUUIDPipe, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
+import { Role } from '../auth/role.enum';
+import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { JwtPayload } from '../auth/decorators/current-user.decorator';
 import { AnalyticsService, StatsPeriod } from './analytics.service';
+
+@ApiBearerAuth()
+@ApiTags('admin-analytics')
+@Controller('admin/analytics')
+@Roles(Role.Admin)
+export class AdminAnalyticsController {
+  constructor(private readonly analytics: AnalyticsService) {}
+
+  @Get('dashboard')
+  dashboard() {
+    return this.analytics.adminDashboard();
+  }
+}
 
 @ApiBearerAuth()
 @ApiTags('seller-analytics')
