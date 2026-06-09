@@ -6,6 +6,7 @@ import { PaymentsService } from '../payments/payments.service';
 import { Shop } from '../shops/entities/shop.entity';
 import { User } from '../users/entities/user.entity';
 import { SellerApplication, SellerApplicationStatus } from './entities/seller-application.entity';
+import { SellerProfile } from './entities/seller-profile.entity';
 
 @Injectable()
 export class SellersService {
@@ -16,6 +17,8 @@ export class SellersService {
     private readonly users: Repository<User>,
     @InjectRepository(Shop)
     private readonly shops: Repository<Shop>,
+    @InjectRepository(SellerProfile)
+    private readonly profiles: Repository<SellerProfile>,
     private readonly payments: PaymentsService,
   ) {}
 
@@ -103,5 +106,29 @@ export class SellersService {
     app.reviewedByUserId = adminUserId;
     app.reviewedAt = new Date();
     return this.apps.save(app);
+  }
+
+  /* ─── Seller Profile (admin fills) ─── */
+
+  async getProfile(userId: string): Promise<SellerProfile | null> {
+    return this.profiles.findOne({ where: { userId } });
+  }
+
+  async upsertProfile(
+    userId: string,
+    adminId: string,
+    dto: Partial<Pick<SellerProfile, 'fullName' | 'passportOrPinfl' | 'stir' | 'bankCardNumber' | 'bankCardHolderName' | 'adminNotes'>>,
+    verify = false,
+  ): Promise<SellerProfile> {
+    let profile = await this.profiles.findOne({ where: { userId } });
+    if (!profile) {
+      profile = this.profiles.create({ userId });
+    }
+    Object.assign(profile, dto);
+    if (verify) {
+      profile.verifiedAt = new Date();
+      profile.verifiedByAdminId = adminId;
+    }
+    return this.profiles.save(profile);
   }
 }

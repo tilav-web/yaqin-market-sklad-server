@@ -3,6 +3,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, LessThan, Repository } from 'typeorm';
 
+import { PushService } from '../push/push.service';
 import { Shop } from '../shops/entities/shop.entity';
 import { SettingsService } from '../settings/settings.service';
 import { SETTING_KEYS } from '../settings/entities/global-setting.entity';
@@ -21,6 +22,7 @@ export class PaymentsService {
     @InjectRepository(Shop)            private readonly shops: Repository<Shop>,
     private readonly settings: SettingsService,
     private readonly dataSource: DataSource,
+    private readonly push: PushService,
   ) {}
 
   /** Ensure a SellerBalance record exists for this seller (idempotent). */
@@ -275,6 +277,11 @@ export class PaymentsService {
           description: `Yechib olish rad etildi, balansga qaytarildi. Sabab: ${note ?? ''}`,
         }));
       });
+      void this.push.sendToUser(req.sellerId, {
+        title: 'Yechib olish rad etildi',
+        body: note ? `Sabab: ${note}` : `${parseFloat(req.amount).toLocaleString()} so'm balansga qaytarildi`,
+        data: { kind: 'withdrawal:rejected' },
+      });
       return req;
     }
 
@@ -288,6 +295,11 @@ export class PaymentsService {
         status: 'settled',
         description: `Yechib olish bajarildi: ${parseFloat(req.amount).toLocaleString()} so'm`,
       }));
+    });
+    void this.push.sendToUser(req.sellerId, {
+      title: 'Mablag\' yechildi',
+      body: `${parseFloat(req.amount).toLocaleString()} so'm kartangizga o'tkazildi`,
+      data: { kind: 'withdrawal:completed' },
     });
     return req;
   }

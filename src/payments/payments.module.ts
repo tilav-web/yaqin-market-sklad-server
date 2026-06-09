@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
+import { PushModule } from '../push/push.module';
 import { Shop } from '../shops/entities/shop.entity';
 import { SettingsModule } from '../settings/settings.module';
 import { SellerBalance } from './entities/seller-balance.entity';
@@ -13,6 +14,7 @@ import { PaymentsService } from './payments.service';
   imports: [
     TypeOrmModule.forFeature([SellerBalance, SellerTransaction, WithdrawalRequest, Shop]),
     SettingsModule,
+    PushModule,
   ],
   controllers: [AdminBalanceController, SellerBalanceController],
   providers: [PaymentsService],

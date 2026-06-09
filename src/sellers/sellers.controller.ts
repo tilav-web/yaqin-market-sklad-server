@@ -5,6 +5,7 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
+  Put,
   Query,
   UseGuards,
 } from '@nestjs/common';
@@ -67,5 +68,34 @@ export class SellersController {
     @Body() dto: RejectApplicationDto,
   ) {
     return this.sellers.reject(id, admin.sub, dto.reason);
+  }
+
+  /* ─── Seller Profile (admin) ─── */
+
+  @UseGuards(RolesGuard)
+  @Roles(Role.Admin)
+  @Get('admin/profiles/:userId')
+  getProfile(@Param('userId', ParseUUIDPipe) userId: string) {
+    return this.sellers.getProfile(userId);
+  }
+
+  @UseGuards(RolesGuard)
+  @Roles(Role.Admin)
+  @Put('admin/profiles/:userId')
+  upsertProfile(
+    @CurrentUser() admin: JwtPayload,
+    @Param('userId', ParseUUIDPipe) userId: string,
+    @Body() body: {
+      fullName?: string;
+      passportOrPinfl?: string;
+      stir?: string;
+      bankCardNumber?: string;
+      bankCardHolderName?: string;
+      adminNotes?: string;
+      verify?: boolean;
+    },
+  ) {
+    const { verify, ...dto } = body;
+    return this.sellers.upsertProfile(userId, admin.sub, dto, verify);
   }
 }
