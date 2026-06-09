@@ -500,4 +500,56 @@ export class PaymentsService {
 
     return this.txs.findOneOrFail({ where: { id: txId } });
   }
+
+  /** Admin: list sellers with overdue debt (debtDueDate passed and debtBalance > 0). */
+  async adminListOverdueDebts(): Promise<SellerBalance[]> {
+    const today = new Date().toISOString().split('T')[0];
+    return this.balances
+      .createQueryBuilder('b')
+      .where('b.debtBalance > 0')
+      .andWhere('b.debtDueDate IS NOT NULL')
+      .andWhere('b.debtDueDate < :today', { today })
+      .orderBy('b.debtDueDate', 'ASC')
+      .getMany();
+  }
+
+  /** Admin: forgive a seller's entire debt (write it off). */
+  async adminForgiveDebt(sellerId: string, adminId: string, reason: string): Promise<SellerBalance> {
+    return this.dataSource.transaction(async (em) => {
+      const b = await em.findOne(SellerBalance, { where: { sellerId } });
+      if (!b) throw new NotFoundException('Balans topilmadi');
+      const forgiven = b.debtBalance;
+      b.debtBalance = '0';
+      b.debtDueDate = null;
+      await em.save(SellerBalance, b);
+      await em.save(SellerTransaction, em.create(SellerTransaction, {
+        sellerId,
+        type: SellerTxType.AdminAdjustment,
+        amount: `-${forgiven}`,
+        status: 'settled',
+        description: `Admin qarz kechirdi: ${reason} (admin: ${adminId})`,
+      }));
+      // Re-activate shops if they were deactivated by debt
+      await em.getRepository(require('../shops/entities/shop.entity').Shop).update(
+        { ownerId: sellerId, deactivatedByDebt: true },
+        { isActive: true, deactivatedByDebt: false },
+      );
+      return b;
+    });
+  }
+
+  /** Admin: extend the debt due date by N days. */
+  async adminExtendDebtDue(sellerId: string, days: number): Promise<SellerBalance> {
+    const b = await this.balances.findOne({ where: { sellerId } });
+    if (!b) throw new NotFoundException('Balans topilmadi');
+    const current = b.debtDueDate ? new Date(b.debtDueDate) : new Date();
+    current.setDate(current.getDate() + days);
+    b.debtDueDate = current.toISOString().split('T')[0];
+    // Re-activate shops if they were deactivated by expired debt
+    await this.shops.update(
+      { ownerId: sellerId, deactivatedByDebt: true },
+      { isActive: true, deactivatedByDebt: false },
+    );
+    return this.balances.save(b);
+  }
 }

@@ -84,4 +84,26 @@ export class AdminBalanceController {
   forceRefund(@Param('txId') txId: string, @Request() req: any) {
     return this.svc.adminForceRefund(txId, req.user.sub);
   }
+
+  @Get('overdue-debts')
+  listOverdueDebts() {
+    return this.svc.adminListOverdueDebts();
+  }
+
+  @Post('sellers/:sellerId/forgive-debt')
+  forgiveDebt(
+    @Param('sellerId') sellerId: string,
+    @Request() req: any,
+    @Body() body: { reason: string },
+  ) {
+    return this.svc.adminForgiveDebt(sellerId, req.user.sub, body.reason ?? '');
+  }
+
+  @Post('sellers/:sellerId/extend-debt')
+  extendDebt(
+    @Param('sellerId') sellerId: string,
+    @Body() body: { days: number },
+  ) {
+    return this.svc.adminExtendDebtDue(sellerId, body.days ?? 7);
+  }
 }
