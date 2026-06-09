@@ -1,10 +1,11 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
-import { LessThan, Repository } from 'typeorm';
+import { Between, LessThan, Repository } from 'typeorm';
 
 import { SellerBalance } from '../payments/entities/seller-balance.entity';
 import { SellerTransaction, SellerTxType } from '../payments/entities/seller-transaction.entity';
+import { PushService } from '../push/push.service';
 import { PrimePlan } from './entities/prime-plan.entity';
 import { SellerSubscription } from './entities/seller-subscription.entity';
 
@@ -15,6 +16,7 @@ export class PrimeService {
     @InjectRepository(SellerSubscription) private readonly subs: Repository<SellerSubscription>,
     @InjectRepository(SellerBalance)      private readonly balances: Repository<SellerBalance>,
     @InjectRepository(SellerTransaction)  private readonly txs: Repository<SellerTransaction>,
+    private readonly push: PushService,
   ) {}
 
   /* ─── Plans (admin) ─── */
@@ -146,5 +148,28 @@ export class PrimeService {
       { isActive: true, endDate: LessThan(today) as any },
       { isActive: false },
     );
+  }
+
+  /** Send a reminder push 3 days before subscription expires. Runs daily at 9 AM. */
+  @Cron('0 9 * * *')
+  async sendExpiryReminders() {
+    const now = new Date();
+    const in3d = new Date(now);
+    in3d.setDate(in3d.getDate() + 3);
+    const from = in3d.toISOString().split('T')[0];
+    const to = in3d.toISOString().split('T')[0];
+
+    const expiring = await this.subs.find({
+      where: { isActive: true, endDate: Between(from, to) as any },
+    });
+    if (!expiring.length) return;
+
+    for (const sub of expiring) {
+      void this.push.sendToUser(sub.sellerId, {
+        title: 'Prime obunangiz tugayapti',
+        body: `Sizning Prime obunangiz 3 kun ichida tugaydi. Yangilashni unutmang!`,
+        data: { kind: 'prime_expiry_reminder', subscriptionId: sub.id },
+      });
+    }
   }
 }
