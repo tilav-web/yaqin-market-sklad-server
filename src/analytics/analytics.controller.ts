@@ -18,6 +18,22 @@ export class AdminAnalyticsController {
   dashboard() {
     return this.analytics.adminDashboard();
   }
+
+  @Get('top-shops')
+  topShops(@Query('limit') limit?: string) {
+    return this.analytics.topShops(Math.min(Number(limit) || 10, 50));
+  }
+
+  @Get('top-products')
+  topProducts(@Query('limit') limit?: string) {
+    return this.analytics.topProducts(Math.min(Number(limit) || 10, 50));
+  }
+
+  @Get('timeline')
+  timeline(@Query('days') days?: string) {
+    const d = Math.min(Math.max(Number(days) || 30, 7), 90);
+    return this.analytics.ordersTimeline(d);
+  }
 }
 
 @ApiBearerAuth()

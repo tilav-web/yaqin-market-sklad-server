@@ -307,4 +307,84 @@ export class AnalyticsService {
       pendingApplications: Number(pendingRow?.cnt ?? 0),
     };
   }
+
+  /** Top shops by delivered order count and GMV, last 30 days. */
+  async topShops(limit = 10): Promise<Array<{ shopId: string; shopName: string; orderCount: number; gmv: number }>> {
+    const start30d = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const rows = await this.orders
+      .createQueryBuilder('o')
+      .innerJoin('o.shop', 's')
+      .select([
+        'o.shopId AS "shopId"',
+        's.name AS "shopName"',
+        'COUNT(o.id) AS "orderCount"',
+        'COALESCE(SUM(o.total), 0) AS "gmv"',
+      ])
+      .where('o.status = :st', { st: OrderStatus.Delivered })
+      .andWhere('o.createdAt >= :start', { start: start30d })
+      .groupBy('o.shopId, s.name')
+      .orderBy('"orderCount"', 'DESC')
+      .limit(limit)
+      .getRawMany<{ shopId: string; shopName: string; orderCount: string; gmv: string }>();
+
+    return rows.map((r) => ({
+      shopId: r.shopId,
+      shopName: r.shopName,
+      orderCount: Number(r.orderCount),
+      gmv: Number(r.gmv),
+    }));
+  }
+
+  /** Top products by quantity sold, last 30 days. */
+  async topProducts(limit = 10): Promise<Array<{ productName: string; shopName: string; qtySold: number; revenue: number }>> {
+    const start30d = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const rows = await this.orders.manager
+      .createQueryBuilder()
+      .select([
+        'oi."productName"',
+        's.name AS "shopName"',
+        'SUM(oi.quantity) AS "qtySold"',
+        'SUM(oi."lineTotal") AS "revenue"',
+      ])
+      .from('order_items', 'oi')
+      .innerJoin('orders', 'o', 'o.id = oi."orderId"')
+      .innerJoin('shops', 's', 's.id = o."shopId"')
+      .where("o.status = 'delivered'")
+      .andWhere('o."createdAt" >= :start', { start: start30d })
+      .groupBy('oi."productName", s.name')
+      .orderBy('"qtySold"', 'DESC')
+      .limit(limit)
+      .getRawMany<{ productName: string; shopName: string; qtySold: string; revenue: string }>();
+
+    return rows.map((r) => ({
+      productName: r.productName,
+      shopName: r.shopName,
+      qtySold: Number(r.qtySold),
+      revenue: Number(r.revenue),
+    }));
+  }
+
+  /** Daily order count and GMV for the last N days. */
+  async ordersTimeline(days = 30): Promise<Array<{ date: string; count: number; gmv: number }>> {
+    const start = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    const rows = await this.orders.manager
+      .createQueryBuilder()
+      .select([
+        "DATE_TRUNC('day', o.\"createdAt\")::date::text AS date",
+        'COUNT(o.id) AS count',
+        'COALESCE(SUM(o.total), 0) AS gmv',
+      ])
+      .from('orders', 'o')
+      .where("o.status = 'delivered'")
+      .andWhere('o."createdAt" >= :start', { start })
+      .groupBy("DATE_TRUNC('day', o.\"createdAt\")")
+      .orderBy('date', 'ASC')
+      .getRawMany<{ date: string; count: string; gmv: string }>();
+
+    return rows.map((r) => ({
+      date: r.date,
+      count: Number(r.count),
+      gmv: Number(r.gmv),
+    }));
+  }
 }
