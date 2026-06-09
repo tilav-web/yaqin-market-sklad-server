@@ -91,6 +91,10 @@ export class Shop {
   @Column({ type: 'boolean', default: true })
   isActive!: boolean;
 
+  /** Set true when shop was deactivated due to overdue debt; cleared when debt is paid */
+  @Column({ type: 'boolean', default: false })
+  deactivatedByDebt!: boolean;
+
   /**
    * When the owner last opened this shop's orders. New orders created after
    * this moment are "unseen" and drive the profile notification badge; opening

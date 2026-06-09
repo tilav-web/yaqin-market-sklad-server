@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
+import { PaymentsService } from '../payments/payments.service';
 import { Shop } from '../shops/entities/shop.entity';
 import { User } from '../users/entities/user.entity';
 import { SellerApplication, SellerApplicationStatus } from './entities/seller-application.entity';
@@ -15,6 +16,7 @@ export class SellersService {
     private readonly users: Repository<User>,
     @InjectRepository(Shop)
     private readonly shops: Repository<Shop>,
+    private readonly payments: PaymentsService,
   ) {}
 
   async submitApplication(
@@ -86,6 +88,7 @@ export class SellersService {
       photos: app.shopPhotos,
     });
     const savedShop = await this.shops.save(shop);
+    await this.payments.ensureBalance(app.userId);
 
     return { application: app, shop: savedShop };
   }

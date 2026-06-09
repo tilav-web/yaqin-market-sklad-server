@@ -18,10 +18,13 @@ import { EnvironmentVariables, validateEnv } from './config/configuration';
 import { buildTypeOrmOptions } from './database/typeorm.config';
 import { HealthModule } from './health/health.module';
 import { OrdersModule } from './orders/orders.module';
+import { PaymentsModule } from './payments/payments.module';
+import { PrimeModule } from './prime/prime.module';
 import { ProductsModule } from './products/products.module';
 import { PushModule } from './push/push.module';
 import { RedisModule } from './redis/redis.module';
 import { SellersModule } from './sellers/sellers.module';
+import { SettingsModule } from './settings/settings.module';
 import { ShopsModule } from './shops/shops.module';
 import { SmsModule } from './sms/sms.module';
 import { UploadsModule } from './uploads/uploads.module';
@@ -55,6 +58,9 @@ import { UsersModule } from './users/users.module';
     AppReleasesModule,
     ContactModule,
     HealthModule,
+    SettingsModule,
+    PaymentsModule,
+    PrimeModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsFilter },

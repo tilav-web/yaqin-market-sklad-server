@@ -2,7 +2,10 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { InventoryMovement } from '../products/entities/inventory-movement.entity';
+import { PaymentsModule } from '../payments/payments.module';
+import { PrimeModule } from '../prime/prime.module';
 import { PushModule } from '../push/push.module';
+import { SettingsModule } from '../settings/settings.module';
 import { RealtimeModule } from '../realtime/realtime.module';
 import { Shop } from '../shops/entities/shop.entity';
 import { ShopStaff } from '../shops/entities/shop-staff.entity';
@@ -30,6 +33,9 @@ import { OrdersService } from './orders.service';
     ]),
     RealtimeModule,
     PushModule,
+    PaymentsModule,
+    PrimeModule,
+    SettingsModule,
   ],
   controllers: [OrdersController, SellerOrdersController],
   providers: [OrdersService],

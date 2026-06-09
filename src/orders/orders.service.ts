@@ -11,11 +11,15 @@ import { customAlphabet } from 'nanoid';
 import { DataSource, In, LessThan, Repository } from 'typeorm';
 
 import { calcDeliveryFee, haversineKm } from '../geo/geo.util';
+import { PaymentsService } from '../payments/payments.service';
 import { MovementType } from '../products/entities/inventory-movement.entity';
 import { ProductVariant } from '../products/entities/product-variant.entity';
 import { consumeFifo, restockReturn, unitCostOf } from '../products/inventory.util';
+import { PrimeService } from '../prime/prime.service';
 import { PushService } from '../push/push.service';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
+import { SETTING_KEYS } from '../settings/entities/global-setting.entity';
+import { SettingsService } from '../settings/settings.service';
 import { Shop } from '../shops/entities/shop.entity';
 import { ShopStaff, StaffPermission } from '../shops/entities/shop-staff.entity';
 import { isShopOpenNow } from '../shops/shop-hours.util';
@@ -54,6 +58,9 @@ export class OrdersService {
     private readonly dataSource: DataSource,
     private readonly realtime: RealtimeGateway,
     private readonly push: PushService,
+    private readonly payments: PaymentsService,
+    private readonly prime: PrimeService,
+    private readonly settings: SettingsService,
   ) {}
 
   private static readonly STATUS_LABEL: Record<OrderStatus, string> = {
@@ -483,6 +490,14 @@ export class OrdersService {
       }
       return manager.save(order);
     });
+
+    // Hook financial settlement when order is delivered
+    if (nextStatus === OrderStatus.Delivered) {
+      void this.settleDeliveredOrder(order).catch((err) =>
+        this.logger.error(`Payment settlement failed for order ${order.id}: ${err.message}`),
+      );
+    }
+
     this.emitOrderEvent('order:updated', saved);
     // Notify the customer when the shop advances the order; notify the shop
     // when the customer confirms delivery or cancels.
@@ -501,6 +516,18 @@ export class OrdersService {
       imageUrl: shopPhoto,
     });
     return saved;
+  }
+
+  private async settleDeliveredOrder(order: Pick<Order, 'id' | 'shop' | 'total' | 'paymentMethod'>): Promise<void> {
+    const sellerId = order.shop.ownerId;
+    const defaultRate = this.settings.getNumber(SETTING_KEYS.COMMISSION_RATE_DEFAULT);
+    const commissionRate = await this.prime.getCommissionRate(sellerId, defaultRate);
+
+    if (order.paymentMethod === PaymentMethod.Cash) {
+      await this.payments.recordCashOrderDelivery({ sellerId, orderId: order.id, orderTotal: order.total, commissionRate });
+    } else {
+      await this.payments.recordOnlineOrderDelivery({ sellerId, orderId: order.id, orderTotal: order.total, commissionRate });
+    }
   }
 
   /**
