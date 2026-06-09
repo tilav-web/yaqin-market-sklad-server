@@ -530,7 +530,7 @@ export class PaymentsService {
         description: `Admin qarz kechirdi: ${reason} (admin: ${adminId})`,
       }));
       // Re-activate shops if they were deactivated by debt
-      await em.getRepository(require('../shops/entities/shop.entity').Shop).update(
+      await this.shops.update(
         { ownerId: sellerId, deactivatedByDebt: true },
         { isActive: true, deactivatedByDebt: false },
       );
