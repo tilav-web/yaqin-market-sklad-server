@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import { IsBoolean, IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 
 export class AdminListUsersQuery {
@@ -23,6 +23,24 @@ export class AdminListUsersQuery {
   @IsInt()
   @Min(0)
   offset?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === 'true' || value === '1')
+  @IsBoolean()
+  sellerOnly?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === 'true' || value === '1')
+  @IsBoolean()
+  customerOnly?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === 'true' || value === '1')
+  @IsBoolean()
+  adminOnly?: boolean;
 }
 
 export class AdminSetStatusDto {

@@ -128,7 +128,7 @@ export class UsersService {
 
   // ---- Admin ---------------------------------------------------------------
 
-  async adminListUsers(opts: { search?: string; limit?: number; offset?: number }) {
+  async adminListUsers(opts: { search?: string; limit?: number; offset?: number; sellerOnly?: boolean; customerOnly?: boolean; adminOnly?: boolean }) {
     const qb = this.users
       .createQueryBuilder('u')
       .select([
@@ -145,7 +145,10 @@ export class UsersService {
       .take(Math.min(opts.limit ?? 50, 100))
       .skip(Math.max(opts.offset ?? 0, 0));
     const s = opts.search?.trim();
-    if (s) qb.where('u.phone ILIKE :q OR u.name ILIKE :q', { q: `%${s}%` });
+    if (s) qb.where('(u.phone ILIKE :q OR u.name ILIKE :q)', { q: `%${s}%` });
+    if (opts.sellerOnly) qb.andWhere('u.isSellerApproved = true');
+    if (opts.customerOnly) qb.andWhere('u.isSellerApproved = false AND u.isAdmin = false');
+    if (opts.adminOnly) qb.andWhere('u.isAdmin = true');
     const [items, total] = await qb.getManyAndCount();
     return { items, total };
   }
