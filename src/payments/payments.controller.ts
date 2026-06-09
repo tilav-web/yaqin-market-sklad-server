@@ -74,4 +74,14 @@ export class AdminBalanceController {
   ) {
     return this.svc.adminAdjust(sellerId, body.amount, body.description);
   }
+
+  @Post('transactions/:txId/force-settle')
+  forceSettle(@Param('txId') txId: string, @Request() req: any) {
+    return this.svc.adminForceSettle(txId, req.user.sub);
+  }
+
+  @Post('transactions/:txId/force-refund')
+  forceRefund(@Param('txId') txId: string, @Request() req: any) {
+    return this.svc.adminForceRefund(txId, req.user.sub);
+  }
 }

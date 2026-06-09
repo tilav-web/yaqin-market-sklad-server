@@ -403,4 +403,70 @@ export class PaymentsService {
       );
     }
   }
+
+  /** Admin: immediately settle a pending online-order transaction (skip 24h wait). */
+  async adminForceSettle(txId: string, adminId: string): Promise<SellerTransaction> {
+    const tx = await this.txs.findOne({ where: { id: txId } });
+    if (!tx) throw new NotFoundException('Tranzaksiya topilmadi');
+    if (tx.type !== SellerTxType.OnlineOrderPending || tx.status !== 'pending') {
+      throw new BadRequestException('Faqat pending online tranzaksiyani force settle qilish mumkin');
+    }
+
+    await this.dataSource.transaction(async (em) => {
+      const b = await em.findOne(SellerBalance, { where: { sellerId: tx.sellerId } });
+      if (!b) throw new NotFoundException('Balans topilmadi');
+
+      const amount = parseFloat(tx.amount);
+      b.pendingBalance = String(Math.max(0, parseFloat(b.pendingBalance) - amount));
+      b.availableBalance = String(parseFloat(b.availableBalance) + amount);
+      await em.save(SellerBalance, b);
+
+      tx.status = 'settled';
+      await em.save(SellerTransaction, tx);
+
+      await em.save(SellerTransaction, em.create(SellerTransaction, {
+        sellerId: tx.sellerId,
+        orderId: tx.orderId,
+        type: SellerTxType.PendingSettled,
+        amount: tx.amount,
+        status: 'settled',
+        description: `Admin force settle (admin: ${adminId})`,
+      }));
+    });
+
+    await this.autoRepayDebt(tx.sellerId);
+    return this.txs.findOneOrFail({ where: { id: txId } });
+  }
+
+  /** Admin: refund a pending online-order transaction (returns money to platform). */
+  async adminForceRefund(txId: string, adminId: string): Promise<SellerTransaction> {
+    const tx = await this.txs.findOne({ where: { id: txId } });
+    if (!tx) throw new NotFoundException('Tranzaksiya topilmadi');
+    if (tx.type !== SellerTxType.OnlineOrderPending || tx.status !== 'pending') {
+      throw new BadRequestException('Faqat pending online tranzaksiyani force refund qilish mumkin');
+    }
+
+    await this.dataSource.transaction(async (em) => {
+      const b = await em.findOne(SellerBalance, { where: { sellerId: tx.sellerId } });
+      if (!b) throw new NotFoundException('Balans topilmadi');
+
+      const amount = parseFloat(tx.amount);
+      b.pendingBalance = String(Math.max(0, parseFloat(b.pendingBalance) - amount));
+      await em.save(SellerBalance, b);
+
+      tx.status = 'cancelled';
+      await em.save(SellerTransaction, tx);
+
+      await em.save(SellerTransaction, em.create(SellerTransaction, {
+        sellerId: tx.sellerId,
+        orderId: tx.orderId,
+        type: SellerTxType.RefundDebit,
+        amount: tx.amount,
+        status: 'settled',
+        description: `Admin force refund (admin: ${adminId})`,
+      }));
+    });
+
+    return this.txs.findOneOrFail({ where: { id: txId } });
+  }
 }
