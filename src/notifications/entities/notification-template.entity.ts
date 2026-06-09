@@ -24,6 +24,9 @@ export class NotificationTemplate {
   @Column({ type: 'text', nullable: true })
   richBody?: string;
 
+  @Column({ type: 'varchar', length: 512, nullable: true })
+  imageUrl?: string;
+
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt!: Date;
 

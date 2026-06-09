@@ -78,6 +78,12 @@ export class TemplateDto {
   @IsOptional()
   @IsString()
   richBody?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(512)
+  imageUrl?: string;
 }
 
 export class UpdateTemplateDto {
@@ -103,4 +109,10 @@ export class UpdateTemplateDto {
   @IsOptional()
   @IsString()
   richBody?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(512)
+  imageUrl?: string;
 }

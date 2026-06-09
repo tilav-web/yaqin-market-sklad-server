@@ -109,11 +109,11 @@ export class NotificationsService {
     return this.templates.find({ order: { createdAt: 'DESC' } });
   }
 
-  createTemplate(dto: { name: string; title: string; body: string; richBody?: string }): Promise<NotificationTemplate> {
+  createTemplate(dto: { name: string; title: string; body: string; richBody?: string; imageUrl?: string }): Promise<NotificationTemplate> {
     return this.templates.save(this.templates.create(dto));
   }
 
-  async updateTemplate(id: string, dto: { name?: string; title?: string; body?: string; richBody?: string }): Promise<NotificationTemplate> {
+  async updateTemplate(id: string, dto: { name?: string; title?: string; body?: string; richBody?: string; imageUrl?: string }): Promise<NotificationTemplate> {
     const t = await this.templates.findOne({ where: { id } });
     if (!t) throw new NotFoundException('Shablon topilmadi');
     Object.assign(t, dto);
