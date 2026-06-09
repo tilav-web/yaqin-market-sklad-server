@@ -8,7 +8,7 @@ import {
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { customAlphabet } from 'nanoid';
-import { DataSource, In, LessThan, Repository } from 'typeorm';
+import { Between, DataSource, In, LessThan, Repository } from 'typeorm';
 
 import { calcDeliveryFee, haversineKm } from '../geo/geo.util';
 import { PaymentsService } from '../payments/payments.service';
@@ -845,5 +845,46 @@ export class OrdersService {
       ].filter((id) => id && id !== senderUserId);
       void this.push.sendToUsers([...new Set(recipients)], payload);
     }
+  }
+
+  /**
+   * Reminds customers to rate delivered orders. Runs every 4 hours.
+   * Targets orders delivered 4–48 hours ago that still have unreviewed items.
+   */
+  @Cron('0 */4 * * *')
+  async sendReviewReminders(): Promise<void> {
+    const now = Date.now();
+    const from = new Date(now - 48 * 60 * 60 * 1000);
+    const to = new Date(now - 4 * 60 * 60 * 1000);
+
+    const delivered = await this.orders.find({
+      where: { status: OrderStatus.Delivered, updatedAt: Between(from, to) },
+      relations: { items: true },
+      take: 200,
+    });
+    if (delivered.length === 0) return;
+
+    // For each order check if all items have been reviewed.
+    const orderIds = delivered.map((o) => o.id);
+    const existingReviews = await this.reviews.find({ where: { orderId: In(orderIds) } });
+    const reviewedPairs = new Set(existingReviews.map((r) => `${r.orderId}:${r.productVariantId}`));
+
+    const reminded = new Set<string>();
+    for (const order of delivered) {
+      if (!order.userId) continue;
+      const hasUnreviewed = order.items.some(
+        (it) => !reviewedPairs.has(`${order.id}:${it.productVariantId}`),
+      );
+      if (!hasUnreviewed) continue;
+      if (reminded.has(order.userId)) continue;
+      reminded.add(order.userId);
+
+      void this.push.sendToUser(order.userId, {
+        title: 'Buyurtmangizni baholang',
+        body: `#${order.orderNumber} buyurtmangiz haqida fikr qoldiring — bu do'konni rivojlantiradi!`,
+        data: { kind: 'review_reminder', orderId: order.id },
+      });
+    }
+    if (reminded.size > 0) this.logger.log(`Sent review reminders to ${reminded.size} user(s)`);
   }
 }

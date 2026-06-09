@@ -4,10 +4,12 @@ import { Between, DataSource, ILike, In, Repository } from 'typeorm';
 
 import { boundingBox, calcDeliveryFee, haversineKm } from '../geo/geo.util';
 import { Review } from '../orders/entities/review.entity';
+import { PushService } from '../push/push.service';
 import { Shop } from '../shops/entities/shop.entity';
 import { ShopStaff, StaffPermission } from '../shops/entities/shop-staff.entity';
 import { assertShopPermission } from '../shops/shop-access.util';
 import { isShopOpenNow } from '../shops/shop-hours.util';
+import { User } from '../users/entities/user.entity';
 import { GlobalProduct } from './entities/global-product.entity';
 import { InventoryMovement, MovementType } from './entities/inventory-movement.entity';
 import { ProductFamily } from './entities/product-family.entity';
@@ -57,7 +59,10 @@ export class ProductsService {
     private readonly staff: Repository<ShopStaff>,
     @InjectRepository(Review)
     private readonly reviews: Repository<Review>,
+    @InjectRepository(User)
+    private readonly users: Repository<User>,
     private readonly dataSource: DataSource,
+    private readonly push: PushService,
   ) {}
 
   /** Owner, or active staff holding `permission`. */
@@ -262,8 +267,41 @@ export class ProductsService {
     if (dto.isActive !== undefined && dto.isActive !== variant.isActive) {
       await this.ensureShopOwner(userId, variant.shopId);
     }
+    const hadDiscount = variant.discountPrice !== null && variant.discountPrice !== undefined;
+    const prevDiscount = variant.discountPrice;
     Object.assign(variant, dto);
-    return this.variants.save(variant);
+    const saved = await this.variants.save(variant);
+
+    // Notify users who favorited this shop when a new discount is applied.
+    const isNewDiscount =
+      saved.discountPrice !== null &&
+      saved.discountPrice !== undefined &&
+      (!hadDiscount || saved.discountPrice !== prevDiscount);
+    if (isNewDiscount) {
+      void this.notifyFavoriteShopDiscount(saved.shopId, saved.name, saved.price, saved.discountPrice!);
+    }
+    return saved;
+  }
+
+  private async notifyFavoriteShopDiscount(
+    shopId: string,
+    productName: string,
+    price: number,
+    discountPrice: number,
+  ): Promise<void> {
+    const shop = await this.shops.findOne({ where: { id: shopId }, select: { name: true } });
+    const favUsers = await this.users
+      .createQueryBuilder('u')
+      .where(':shopId = ANY(u.favoriteShopIds)', { shopId })
+      .select(['u.id'])
+      .getMany();
+    if (favUsers.length === 0) return;
+    const pct = Math.round(((price - discountPrice) / price) * 100);
+    void this.push.sendToUsers(favUsers.map((u) => u.id), {
+      title: `${shop?.name ?? 'Do\'koningiz'} — yangi aksiya!`,
+      body: `${productName}: ${discountPrice.toLocaleString('ru')} so'm (${pct}% chegirma)`,
+      data: { kind: 'shop_discount', shopId },
+    });
   }
 
   async deleteVariant(userId: string, variantId: string): Promise<void> {
