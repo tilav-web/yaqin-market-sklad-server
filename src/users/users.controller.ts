@@ -78,6 +78,35 @@ export class UsersController {
   deleteAddress(@CurrentUser() user: JwtPayload, @Param('id', ParseUUIDPipe) id: string) {
     return this.users.deleteAddress(user.sub, id);
   }
+
+  /* ─── Favorites ─── */
+
+  @Get('favorites')
+  getFavorites(@CurrentUser() user: JwtPayload) {
+    return this.users.getFavorites(user.sub);
+  }
+
+  @Post('favorites/shops/:shopId')
+  addFavoriteShop(@CurrentUser() user: JwtPayload, @Param('shopId', ParseUUIDPipe) shopId: string) {
+    return this.users.toggleFavoriteShop(user.sub, shopId, true);
+  }
+
+  @Delete('favorites/shops/:shopId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  removeFavoriteShop(@CurrentUser() user: JwtPayload, @Param('shopId', ParseUUIDPipe) shopId: string) {
+    return this.users.toggleFavoriteShop(user.sub, shopId, false);
+  }
+
+  @Post('favorites/products/:productId')
+  addFavoriteProduct(@CurrentUser() user: JwtPayload, @Param('productId', ParseUUIDPipe) productId: string) {
+    return this.users.toggleFavoriteProduct(user.sub, productId, true);
+  }
+
+  @Delete('favorites/products/:productId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  removeFavoriteProduct(@CurrentUser() user: JwtPayload, @Param('productId', ParseUUIDPipe) productId: string) {
+    return this.users.toggleFavoriteProduct(user.sub, productId, false);
+  }
 }
 
 @ApiBearerAuth()

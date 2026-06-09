@@ -44,6 +44,12 @@ export class User {
   @Column({ type: 'jsonb', default: () => "'[\"customer\"]'::jsonb" })
   roles!: string[];
 
+  @Column({ type: 'jsonb', default: () => "'[]'::jsonb" })
+  favoriteShopIds!: string[];
+
+  @Column({ type: 'jsonb', default: () => "'[]'::jsonb" })
+  favoriteProductIds!: string[];
+
   @Column({ type: 'timestamptz', nullable: true })
   lastLoginAt!: Date | null;
 

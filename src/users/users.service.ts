@@ -167,4 +167,34 @@ export class UsersService {
     await this.computeRoles(user); // re-derive + persist roles
     return this.users.save(user);
   }
+
+  /* ─── Favorites ─── */
+
+  async getFavorites(userId: string): Promise<{ shopIds: string[]; productIds: string[] }> {
+    const user = await this.users.findOne({ where: { id: userId } });
+    return {
+      shopIds: user?.favoriteShopIds ?? [],
+      productIds: user?.favoriteProductIds ?? [],
+    };
+  }
+
+  async toggleFavoriteShop(userId: string, shopId: string, add: boolean): Promise<{ shopIds: string[] }> {
+    const user = await this.users.findOne({ where: { id: userId } });
+    if (!user) throw new NotFoundException();
+    const ids = new Set(user.favoriteShopIds ?? []);
+    add ? ids.add(shopId) : ids.delete(shopId);
+    user.favoriteShopIds = [...ids];
+    await this.users.save(user);
+    return { shopIds: user.favoriteShopIds };
+  }
+
+  async toggleFavoriteProduct(userId: string, productId: string, add: boolean): Promise<{ productIds: string[] }> {
+    const user = await this.users.findOne({ where: { id: userId } });
+    if (!user) throw new NotFoundException();
+    const ids = new Set(user.favoriteProductIds ?? []);
+    add ? ids.add(productId) : ids.delete(productId);
+    user.favoriteProductIds = [...ids];
+    await this.users.save(user);
+    return { productIds: user.favoriteProductIds };
+  }
 }
