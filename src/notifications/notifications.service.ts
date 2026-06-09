@@ -12,6 +12,7 @@ export type Audience = 'all' | 'sellers' | 'customers' | 'specific';
 export interface BroadcastInput {
   title: string;
   body: string;
+  richBody?: string;
   data?: Record<string, unknown>;
   audience: Audience;
   userIds?: string[];
@@ -67,7 +68,7 @@ export class NotificationsService {
     const payload = {
       title: input.title,
       body: input.body,
-      data: { kind: 'admin', ...(input.deepLink ? { deepLink: input.deepLink } : {}), ...input.data },
+      data: { kind: 'admin', ...(input.deepLink ? { deepLink: input.deepLink } : {}), ...(input.richBody ? { richBody: input.richBody } : {}), ...input.data },
       imageUrl: input.imageUrl,
     };
 
@@ -108,11 +109,11 @@ export class NotificationsService {
     return this.templates.find({ order: { createdAt: 'DESC' } });
   }
 
-  createTemplate(dto: { name: string; title: string; body: string }): Promise<NotificationTemplate> {
+  createTemplate(dto: { name: string; title: string; body: string; richBody?: string }): Promise<NotificationTemplate> {
     return this.templates.save(this.templates.create(dto));
   }
 
-  async updateTemplate(id: string, dto: { name?: string; title?: string; body?: string }): Promise<NotificationTemplate> {
+  async updateTemplate(id: string, dto: { name?: string; title?: string; body?: string; richBody?: string }): Promise<NotificationTemplate> {
     const t = await this.templates.findOne({ where: { id } });
     if (!t) throw new NotFoundException('Shablon topilmadi');
     Object.assign(t, dto);

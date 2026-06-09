@@ -51,6 +51,11 @@ export class BroadcastDto {
   @IsString()
   @MaxLength(256)
   deepLink?: string;
+
+  @ApiPropertyOptional({ description: 'HTML ko\'rinishidagi to\'liq matn (in-app detail sahifasi uchun)' })
+  @IsOptional()
+  @IsString()
+  richBody?: string;
 }
 
 export class TemplateDto {
@@ -68,6 +73,11 @@ export class TemplateDto {
   @IsString()
   @MaxLength(512)
   body!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  richBody?: string;
 }
 
 export class UpdateTemplateDto {
@@ -88,4 +98,9 @@ export class UpdateTemplateDto {
   @IsString()
   @MaxLength(512)
   body?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  richBody?: string;
 }

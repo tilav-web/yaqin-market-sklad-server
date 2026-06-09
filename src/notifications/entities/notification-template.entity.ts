@@ -21,6 +21,9 @@ export class NotificationTemplate {
   @Column({ type: 'varchar', length: 512 })
   body!: string;
 
+  @Column({ type: 'text', nullable: true })
+  richBody?: string;
+
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt!: Date;
 
