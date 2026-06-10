@@ -17,7 +17,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Role } from '../auth/role.enum';
 import { SellerApplicationStatus } from './entities/seller-application.entity';
-import { CreateSellerApplicationDto, RejectApplicationDto } from './dto/seller-application.dto';
+import { ApproveApplicationDto, CreateSellerApplicationDto, RejectApplicationDto } from './dto/seller-application.dto';
 import { SellersService } from './sellers.service';
 
 @ApiBearerAuth()
@@ -55,8 +55,12 @@ export class SellersController {
   @UseGuards(RolesGuard)
   @Roles(Role.Admin)
   @Post('admin/applications/:id/approve')
-  adminApprove(@CurrentUser() admin: JwtPayload, @Param('id', ParseUUIDPipe) id: string) {
-    return this.sellers.approve(id, admin.sub);
+  adminApprove(
+    @CurrentUser() admin: JwtPayload,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ApproveApplicationDto,
+  ) {
+    return this.sellers.approve(id, admin.sub, dto);
   }
 
   @UseGuards(RolesGuard)

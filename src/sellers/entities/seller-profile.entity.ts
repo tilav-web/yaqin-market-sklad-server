@@ -26,6 +26,16 @@ export class SellerProfile {
   @Column({ type: 'varchar', length: 128, nullable: true })
   bankCardHolderName!: string | null;
 
+  /** YaTT, MChJ, AJ, etc. */
+  @Column({ type: 'varchar', length: 64, nullable: true })
+  entityType!: string | null;
+
+  @Column({ type: 'varchar', length: 64, nullable: true })
+  contractNumber!: string | null;
+
+  @Column({ type: 'date', nullable: true })
+  contractDate!: string | null;
+
   @Column({ type: 'timestamptz', nullable: true })
   verifiedAt!: Date | null;
 

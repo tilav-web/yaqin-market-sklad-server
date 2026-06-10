@@ -507,12 +507,10 @@ async function seed() {
     await appRepo.save(
       appRepo.create({
         userId: owner.id,
-        shopName: def.name,
-        shopAddress: def.address,
-        shopLatitude: loc.lat,
-        shopLongitude: loc.lng,
-        shopPhotos: [img(def.name, def.bg)],
-        stir: String(randInt(100000000, 999999999)),
+        firstName: owner.name?.split(' ')[0] ?? 'Seller',
+        lastName: owner.name?.split(' ').slice(1).join(' ') || 'Test',
+        contactPhone: null,
+        note: null,
         status: SellerApplicationStatus.Approved,
         reviewedByUserId: admin.id,
         reviewedAt: new Date(),

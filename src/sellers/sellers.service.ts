@@ -3,7 +3,6 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
 import { PaymentsService } from '../payments/payments.service';
-import { Shop } from '../shops/entities/shop.entity';
 import { User } from '../users/entities/user.entity';
 import { SellerApplication, SellerApplicationStatus } from './entities/seller-application.entity';
 import { SellerProfile } from './entities/seller-profile.entity';
@@ -15,8 +14,6 @@ export class SellersService {
     private readonly apps: Repository<SellerApplication>,
     @InjectRepository(User)
     private readonly users: Repository<User>,
-    @InjectRepository(Shop)
-    private readonly shops: Repository<Shop>,
     @InjectRepository(SellerProfile)
     private readonly profiles: Repository<SellerProfile>,
     private readonly payments: PaymentsService,
@@ -25,12 +22,10 @@ export class SellersService {
   async submitApplication(
     userId: string,
     dto: {
-      shopName: string;
-      shopAddress: string;
-      shopLatitude: number;
-      shopLongitude: number;
-      shopPhotos: string[];
-      stir?: string;
+      firstName: string;
+      lastName: string;
+      contactPhone?: string;
+      note?: string;
     },
   ): Promise<SellerApplication> {
     const existingPending = await this.apps.findOne({
@@ -41,12 +36,10 @@ export class SellersService {
     }
     const app = this.apps.create({
       userId,
-      shopName: dto.shopName,
-      shopAddress: dto.shopAddress,
-      shopLatitude: dto.shopLatitude,
-      shopLongitude: dto.shopLongitude,
-      shopPhotos: dto.shopPhotos,
-      stir: dto.stir ?? null,
+      firstName: dto.firstName,
+      lastName: dto.lastName,
+      contactPhone: dto.contactPhone ?? null,
+      note: dto.note ?? null,
       status: SellerApplicationStatus.Pending,
     });
     return this.apps.save(app);
@@ -70,30 +63,37 @@ export class SellersService {
     return app;
   }
 
-  async approve(id: string, adminUserId: string): Promise<{ application: SellerApplication; shop: Shop }> {
+  async approve(
+    id: string,
+    adminUserId: string,
+    profileDto: Partial<Pick<
+      SellerProfile,
+      'fullName' | 'passportOrPinfl' | 'stir' | 'entityType' |
+      'bankCardNumber' | 'bankCardHolderName' | 'contractNumber' |
+      'contractDate' | 'adminNotes'
+    >>,
+  ): Promise<{ application: SellerApplication }> {
     const app = await this.getApplication(id);
     if (app.status !== SellerApplicationStatus.Pending) {
       throw new BadRequestException('Ariza allaqachon ko\'rib chiqilgan');
     }
+
+    let profile = await this.profiles.findOne({ where: { userId: app.userId } });
+    if (!profile) profile = this.profiles.create({ userId: app.userId });
+    Object.assign(profile, profileDto);
+    profile.verifiedAt = new Date();
+    profile.verifiedByAdminId = adminUserId;
+    await this.profiles.save(profile);
+
     app.status = SellerApplicationStatus.Approved;
     app.reviewedByUserId = adminUserId;
     app.reviewedAt = new Date();
     await this.apps.save(app);
 
     await this.users.update(app.userId, { isSellerApproved: true });
-
-    const shop = this.shops.create({
-      ownerId: app.userId,
-      name: app.shopName,
-      address: app.shopAddress,
-      latitude: app.shopLatitude,
-      longitude: app.shopLongitude,
-      photos: app.shopPhotos,
-    });
-    const savedShop = await this.shops.save(shop);
     await this.payments.ensureBalance(app.userId);
 
-    return { application: app, shop: savedShop };
+    return { application: app };
   }
 
   async reject(id: string, adminUserId: string, reason: string): Promise<SellerApplication> {

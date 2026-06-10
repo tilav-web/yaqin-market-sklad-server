@@ -1,47 +1,28 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import {
-  ArrayMaxSize,
-  ArrayMinSize,
-  IsArray,
-  IsLatitude,
-  IsLongitude,
-  IsOptional,
-  IsString,
-  IsUrl,
-  MaxLength,
-} from 'class-validator';
+import { IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class CreateSellerApplicationDto {
   @ApiProperty()
   @IsString()
-  @MaxLength(128)
-  shopName!: string;
+  @MaxLength(64)
+  firstName!: string;
 
   @ApiProperty()
   @IsString()
-  @MaxLength(512)
-  shopAddress!: string;
-
-  @ApiProperty()
-  @IsLatitude()
-  shopLatitude!: number;
-
-  @ApiProperty()
-  @IsLongitude()
-  shopLongitude!: number;
-
-  @ApiProperty({ type: [String] })
-  @IsArray()
-  @ArrayMinSize(1)
-  @ArrayMaxSize(5)
-  @IsUrl({}, { each: true })
-  shopPhotos!: string[];
+  @MaxLength(64)
+  lastName!: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-  @MaxLength(64)
-  stir?: string;
+  @MaxLength(32)
+  contactPhone?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  note?: string;
 }
 
 export class RejectApplicationDto {
@@ -49,4 +30,58 @@ export class RejectApplicationDto {
   @IsString()
   @MaxLength(512)
   reason!: string;
+}
+
+export class ApproveApplicationDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(128)
+  fullName?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  passportOrPinfl?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(16)
+  stir?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  entityType?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(32)
+  bankCardNumber?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(128)
+  bankCardHolderName?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  contractNumber?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  contractDate?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  adminNotes?: string;
 }

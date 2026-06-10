@@ -31,23 +31,17 @@ export class SellerApplication {
   @JoinColumn({ name: 'userId' })
   user!: User;
 
-  @Column({ type: 'varchar', length: 128 })
-  shopName!: string;
+  @Column({ type: 'varchar', length: 64 })
+  firstName!: string;
 
-  @Column({ type: 'varchar', length: 512 })
-  shopAddress!: string;
+  @Column({ type: 'varchar', length: 64 })
+  lastName!: string;
 
-  @Column({ type: 'double precision' })
-  shopLatitude!: number;
+  @Column({ type: 'varchar', length: 32, nullable: true })
+  contactPhone!: string | null;
 
-  @Column({ type: 'double precision' })
-  shopLongitude!: number;
-
-  @Column({ type: 'jsonb', default: () => "'[]'::jsonb" })
-  shopPhotos!: string[];
-
-  @Column({ type: 'varchar', length: 64, nullable: true })
-  stir!: string | null;
+  @Column({ type: 'text', nullable: true })
+  note!: string | null;
 
   @Column({ type: 'enum', enum: SellerApplicationStatus, default: SellerApplicationStatus.Pending })
   status!: SellerApplicationStatus;
