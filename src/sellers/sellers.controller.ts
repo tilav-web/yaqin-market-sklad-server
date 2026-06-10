@@ -93,8 +93,11 @@ export class SellersController {
       fullName?: string;
       passportOrPinfl?: string;
       stir?: string;
+      entityType?: string;
       bankCardNumber?: string;
       bankCardHolderName?: string;
+      contractNumber?: string;
+      contractDate?: string;
       adminNotes?: string;
       verify?: boolean;
     },

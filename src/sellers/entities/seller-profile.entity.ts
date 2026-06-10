@@ -1,4 +1,6 @@
-import { Column, Entity, Index, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
+import { Column, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
+
+import { User } from '../../users/entities/user.entity';
 
 @Entity({ name: 'seller_profiles' })
 @Index(['userId'], { unique: true })
@@ -8,6 +10,10 @@ export class SellerProfile {
 
   @Column({ type: 'uuid', unique: true })
   userId!: string;
+
+  @ManyToOne(() => User, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'userId' })
+  user!: User;
 
   @Column({ type: 'varchar', length: 128, nullable: true })
   fullName!: string | null;
