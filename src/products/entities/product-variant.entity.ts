@@ -63,6 +63,10 @@ export class ProductVariant {
   @Column({ type: 'int', default: 5 })
   lowStockThreshold!: number;
 
+  /** Kritik daraja: darhol push (null = GlobalSetting default). */
+  @Column({ type: 'int', nullable: true })
+  criticalThreshold!: number | null;
+
   @Column({ type: 'varchar', length: 64, nullable: true })
   barcode!: string | null;
 

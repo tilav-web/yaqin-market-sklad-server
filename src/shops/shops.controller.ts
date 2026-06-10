@@ -137,6 +137,11 @@ export class SellerShopsController {
     return this.shops.listBlockedUsers(user.sub, id);
   }
 
+  @Get(':id/completeness')
+  completeness(@CurrentUser() user: JwtPayload, @Param('id', ParseUUIDPipe) id: string) {
+    return this.shops.getCompleteness(user.sub, id);
+  }
+
   // ---- Staff management (owner) ----
   @Post(':id/staff/invitations')
   createStaffInvite(@CurrentUser() user: JwtPayload, @Param('id', ParseUUIDPipe) id: string) {

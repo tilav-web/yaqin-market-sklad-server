@@ -52,4 +52,11 @@ export class OrderItem {
    */
   @Column({ type: 'int', default: 0 })
   costOfGoods!: number;
+
+  /** Qo'llanilgan aksiya (snapshot uchun). */
+  @Column({ type: 'uuid', nullable: true })
+  appliedPromotionId!: string | null;
+
+  @Column({ type: 'int', default: 0 })
+  promotionDiscountAmount!: number;
 }

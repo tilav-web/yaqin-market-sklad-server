@@ -44,6 +44,9 @@ export const ALL_STAFF_PERMISSIONS = [
   'debt.manage',
   // reviews
   'reviews.view',
+  // promotions
+  'promotions.view',
+  'promotions.manage',
 ] as const;
 
 export type StaffPermission = (typeof ALL_STAFF_PERMISSIONS)[number];
@@ -83,6 +86,8 @@ export const PRESET_PERMISSIONS: Record<Exclude<StaffPreset, 'custom'>, StaffPer
     'shop.toggle_open',
     'shop.settings.view',
     'debt.manage',
+    'promotions.view',
+    'promotions.manage',
   ],
   sklad: [
     'inventory.view',

@@ -887,4 +887,36 @@ export class OrdersService {
     }
     if (reminded.size > 0) this.logger.log(`Sent review reminders to ${reminded.size} user(s)`);
   }
+
+  // ─── Yetkazib berish marshruti ────────────────────────────────────────────
+
+  async getDeliveryRoute(actorUserId: string, shopId: string) {
+    const shop = await this.shops.findOne({ where: { id: shopId } });
+    if (!shop) throw new Error('Do\'kon topilmadi');
+
+    const deliveringOrders = await this.orders.find({
+      where: { shopId, status: OrderStatus.Delivering },
+      relations: { deliveryAddress: true },
+    });
+
+    return {
+      shopLocation: { lat: shop.latitude, lng: shop.longitude },
+      orders: deliveringOrders
+        .filter((o) => o.deliveryAddress)
+        .map((o) => ({
+          id: o.id,
+          orderNumber: o.orderNumber,
+          address: o.deliveryAddress!.address,
+          lat: o.deliveryAddress!.latitude,
+          lng: o.deliveryAddress!.longitude,
+          customerPhone: o.deliveryAddress ? undefined : undefined,
+          total: o.total,
+        }))
+        .sort((a, b) => {
+          const distA = haversineKm(shop.latitude, shop.longitude, a.lat, a.lng);
+          const distB = haversineKm(shop.latitude, shop.longitude, b.lat, b.lng);
+          return distA - distB;
+        }),
+    };
+  }
 }

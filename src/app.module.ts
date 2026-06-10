@@ -7,6 +7,8 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { AnalyticsModule } from './analytics/analytics.module';
 import { AppReleasesModule } from './app-releases/app-releases.module';
+import { ChatTemplatesModule } from './chat-templates/chat-templates.module';
+import { PromotionsModule } from './promotions/promotions.module';
 import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { CategoriesModule } from './categories/categories.module';
@@ -61,6 +63,8 @@ import { UsersModule } from './users/users.module';
     SettingsModule,
     PaymentsModule,
     PrimeModule,
+    PromotionsModule,
+    ChatTemplatesModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsFilter },

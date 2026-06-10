@@ -8,6 +8,10 @@ const DEFAULTS: Record<string, { value: string; description: string }> = {
   [SETTING_KEYS.COMMISSION_RATE_DEFAULT]: { value: '12.00', description: 'Standart komissiya foizi (%)' },
   [SETTING_KEYS.DEBT_DUE_DAYS]: { value: '30', description: 'Qarz to\'lash muddati (kun)' },
   [SETTING_KEYS.SETTLEMENT_HOURS]: { value: '24', description: 'Pul yetkazilgandan necha soat keyin chiqariladi' },
+  [SETTING_KEYS.EXPIRY_WARNING_DAYS]: { value: '7', description: 'Yaroqlilik muddati ogohlantirish (kun)' },
+  [SETTING_KEYS.EXPIRY_CRITICAL_DAYS]: { value: '2', description: 'Yaroqlilik muddati kritik (kun)' },
+  [SETTING_KEYS.LOW_STOCK_WARNING_DEFAULT]: { value: '10', description: 'Kam qoldiq ogohlantirish default' },
+  [SETTING_KEYS.LOW_STOCK_CRITICAL_DEFAULT]: { value: '3', description: 'Kam qoldiq kritik default' },
 };
 
 @Injectable()

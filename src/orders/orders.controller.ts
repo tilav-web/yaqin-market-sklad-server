@@ -132,4 +132,12 @@ export class SellerOrdersController {
   ) {
     return this.orders.assignOrder(user.sub, shopId, orderId, dto.staffId ?? null);
   }
+
+  @Get('delivery-route')
+  deliveryRoute(
+    @CurrentUser() user: JwtPayload,
+    @Param('shopId', ParseUUIDPipe) shopId: string,
+  ) {
+    return this.orders.getDeliveryRoute(user.sub, shopId);
+  }
 }

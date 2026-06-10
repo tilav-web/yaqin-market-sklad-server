@@ -10,6 +10,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Between, DataSource, In, Repository } from 'typeorm';
 
 import { Order } from '../orders/entities/order.entity';
+import { ProductVariant } from '../products/entities/product-variant.entity';
 import { User } from '../users/entities/user.entity';
 import { boundingBox, calcDeliveryFee, haversineKm } from '../geo/geo.util';
 import { Shop } from './entities/shop.entity';
@@ -53,6 +54,8 @@ export class ShopsService {
     private readonly users: Repository<User>,
     @InjectRepository(Order)
     private readonly orders: Repository<Order>,
+    @InjectRepository(ProductVariant)
+    private readonly variants: Repository<ProductVariant>,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -421,5 +424,38 @@ export class ShopsService {
     if (!shop) throw new NotFoundException('Do\'kon topilmadi');
     shop.isActive = isActive;
     return this.shops.save(shop);
+  }
+
+  // ─── Do'kon profil to'liqligi ─────────────────────────────────────────────
+
+  async getCompleteness(userId: string, shopId: string) {
+    const shop = await this.shops.findOne({ where: { id: shopId } });
+    if (!shop) throw new NotFoundException('Do\'kon topilmadi');
+
+    const totalVariants = await this.variants.count({ where: { shopId, isActive: true } });
+    const withPhoto = await this.variants.count({
+      where: { shopId, isActive: true },
+    }).then(async () => {
+      const rows = await this.variants.find({ where: { shopId, isActive: true }, select: { photos: true } });
+      return rows.filter((v) => v.photos?.length > 0).length;
+    });
+
+    const checks = [
+      { key: 'photo_1', label: 'Do\'kon rasmi bor (≥1)', done: (shop.photos?.length ?? 0) >= 1, points: 10 },
+      { key: 'photo_3', label: 'Do\'kon rasmi bor (≥3)', done: (shop.photos?.length ?? 0) >= 3, points: 5 },
+      { key: 'description', label: 'Do\'kon tavsifi yozilgan', done: !!shop.description?.trim(), points: 10 },
+      { key: 'working_hours', label: 'Ish vaqti to\'liq (7 kun)', done: (shop.workingHours?.length ?? 0) >= 7, points: 15 },
+      { key: 'delivery_zone', label: 'Yetkazib berish zonasi', done: !!shop.deliveryZone?.maxKm, points: 15 },
+      { key: 'products_10', label: '10+ mahsulot', done: totalVariants >= 10, points: 10 },
+      { key: 'products_50', label: '50+ mahsulot', done: totalVariants >= 50, points: 10 },
+      { key: 'products_100', label: '100+ mahsulot', done: totalVariants >= 100, points: 5 },
+      { key: 'product_photos', label: 'Mahsulotlarning ≥80% da rasm bor', done: totalVariants > 0 && withPhoto / totalVariants >= 0.8, points: 10 },
+      { key: 'gps', label: 'GPS manzil belgilangan', done: !!shop.latitude && !!shop.longitude, points: 10 },
+    ];
+
+    const score = checks.reduce((sum, c) => sum + (c.done ? c.points : 0), 0);
+    const missing = checks.filter((c) => !c.done).map((c) => ({ key: c.key, label: c.label, points: c.points }));
+
+    return { score, maxScore: 100, checks, missing };
   }
 }

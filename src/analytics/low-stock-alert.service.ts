@@ -4,40 +4,38 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 
 import { ProductVariant } from '../products/entities/product-variant.entity';
-import { StockBatch } from '../products/entities/stock-batch.entity';
 import { PushService } from '../push/push.service';
 import { SETTING_KEYS } from '../settings/entities/global-setting.entity';
 import { SettingsService } from '../settings/settings.service';
 import { Shop } from '../shops/entities/shop.entity';
 
 @Injectable()
-export class ExpiryAlertService {
-  private readonly logger = new Logger(ExpiryAlertService.name);
+export class LowStockAlertService {
+  private readonly logger = new Logger(LowStockAlertService.name);
 
   constructor(
-    @InjectRepository(StockBatch)
-    private readonly batches: Repository<StockBatch>,
-    @InjectRepository(Shop)
-    private readonly shops: Repository<Shop>,
     @InjectRepository(ProductVariant)
     private readonly variants: Repository<ProductVariant>,
+    @InjectRepository(Shop)
+    private readonly shops: Repository<Shop>,
     private readonly push: PushService,
     private readonly settings: SettingsService,
   ) {}
 
-  /** Kritik: muddati 2 kun ichida tugayotgan mahsulotlar — har soatda tekshiriladi. */
-  @Cron(CronExpression.EVERY_HOUR)
-  async sendCriticalExpiryAlerts(): Promise<void> {
-    const criticalDays = this.settings.getNumber(SETTING_KEYS.EXPIRY_CRITICAL_DAYS, 2);
-    const cutoff = new Date(Date.now() + criticalDays * 24 * 60 * 60 * 1000);
+  /** Darhol push: stock kritik darajadan past tushganda (har 15 daqiqada tekshiriladi). */
+  @Cron(CronExpression.EVERY_10_MINUTES)
+  async sendCriticalAlerts(): Promise<void> {
+    const defaultCritical = this.settings.getNumber(SETTING_KEYS.LOW_STOCK_CRITICAL_DEFAULT, 3);
 
     const rows = await this.variants
       .createQueryBuilder('v')
       .where('v.isActive = true')
-      .andWhere('v.expiryDate IS NOT NULL')
-      .andWhere('v.expiryDate <= :cutoff', { cutoff })
+      .andWhere(
+        '(v.criticalThreshold IS NOT NULL AND v.stock <= v.criticalThreshold) OR (v.criticalThreshold IS NULL AND v.stock <= :def)',
+        { def: defaultCritical },
+      )
       .andWhere('v.stock > 0')
-      .select(['v.shopId', 'v.id', 'v.name', 'v.expiryDate', 'v.stock'])
+      .select(['v.shopId', 'v.id', 'v.name', 'v.stock', 'v.criticalThreshold'])
       .getMany();
 
     if (!rows.length) return;
@@ -56,29 +54,31 @@ export class ExpiryAlertService {
     for (const [shopId, items] of grouped) {
       const ownerId = ownerMap.get(shopId);
       if (!ownerId) continue;
-      const names = items.slice(0, 3).map((v) => v.name).join(', ');
+      const names = items.slice(0, 3).map((v) => `${v.name} (${v.stock} ta)`).join(', ');
+      const more = items.length > 3 ? ` va yana ${items.length - 3} ta` : '';
       await this.push.sendToUser(ownerId, {
-        title: '🔴 Muddati tugayapti (kritik)',
-        body: `${items.length} ta mahsulot ${criticalDays} kun ichida yaroqsiz: ${names}`,
-        data: { kind: 'stock:expiry_critical', shopId },
+        title: '⚠️ Kritik: tovar tugayapti',
+        body: `${names}${more}`,
+        data: { kind: 'stock:critical', shopId },
       });
     }
-    this.logger.log(`Critical expiry alerts sent for ${grouped.size} shop(s)`);
+    this.logger.log(`Critical low-stock alerts sent for ${grouped.size} shop(s)`);
   }
 
-  /** Kunlik xulasa soat 20:00: ogohlantirish darajasidagi muddatlar. */
+  /** Kunlik xulasa: ogohlantirish darajasidagilar (soat 20:00). */
   @Cron('0 20 * * *')
-  async sendDailyExpiryDigest(): Promise<void> {
-    const warningDays = this.settings.getNumber(SETTING_KEYS.EXPIRY_WARNING_DAYS, 7);
-    const cutoff = new Date(Date.now() + warningDays * 24 * 60 * 60 * 1000);
+  async sendDailyWarningDigest(): Promise<void> {
+    const defaultWarning = this.settings.getNumber(SETTING_KEYS.LOW_STOCK_WARNING_DEFAULT, 10);
 
     const rows = await this.variants
       .createQueryBuilder('v')
       .where('v.isActive = true')
-      .andWhere('v.expiryDate IS NOT NULL')
-      .andWhere('v.expiryDate <= :cutoff', { cutoff })
+      .andWhere(
+        '(v.stock <= v.lowStockThreshold) OR (v.stock <= :def)',
+        { def: defaultWarning },
+      )
       .andWhere('v.stock > 0')
-      .select(['v.shopId', 'v.id', 'v.name', 'v.expiryDate'])
+      .select(['v.shopId', 'v.id', 'v.name', 'v.stock'])
       .getMany();
 
     if (!rows.length) return;
@@ -97,12 +97,14 @@ export class ExpiryAlertService {
     for (const [shopId, items] of grouped) {
       const ownerId = ownerMap.get(shopId);
       if (!ownerId) continue;
+      const top = items.slice(0, 5).map((v) => `${v.name}: ${v.stock} ta`).join(', ');
+      const more = items.length > 5 ? ` va yana ${items.length - 5} ta` : '';
       await this.push.sendToUser(ownerId, {
-        title: 'Muddati tugayotgan tovarlar',
-        body: `${items.length} ta mahsulotning muddati ${warningDays} kun ichida — Sklad → Muddatlar`,
-        data: { kind: 'stock:expiring', shopId },
+        title: 'Kam qoldiqlar — kunlik hisobot',
+        body: `${items.length} ta mahsulot kam: ${top}${more}`,
+        data: { kind: 'stock:warning_digest', shopId },
       });
     }
-    this.logger.log(`Expiry digest sent to ${grouped.size} shop(s)`);
+    this.logger.log(`Daily low-stock digest sent for ${grouped.size} shop(s)`);
   }
 }

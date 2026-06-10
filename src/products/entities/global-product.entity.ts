@@ -25,8 +25,8 @@ export class GlobalProduct {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
 
-  @Column({ type: 'varchar', length: 64 })
-  barcode!: string;
+  @Column({ type: 'varchar', length: 64, nullable: true })
+  barcode!: string | null;
 
   @Column({ type: 'varchar', length: 256 })
   name!: string;
@@ -53,6 +53,16 @@ export class GlobalProduct {
   /** Curated by an admin (trusted). */
   @Column({ type: 'boolean', default: false })
   isVerified!: boolean;
+
+  @Column({ type: 'text', nullable: true })
+  description!: string | null;
+
+  /** Variantlarni guruhlash uchun (masalan "Coca-Cola"). */
+  @Column({ type: 'varchar', length: 128, nullable: true })
+  groupName!: string | null;
+
+  @Column({ type: 'boolean', default: true })
+  isActive!: boolean;
 
   /** How many shops currently stock this product — popularity / trust signal. */
   @Column({ type: 'int', default: 0 })

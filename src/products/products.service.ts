@@ -1,6 +1,9 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Between, DataSource, ILike, In, Repository } from 'typeorm';
+import { Between, DataSource, ILike, In, IsNull, LessThanOrEqual, Repository } from 'typeorm';
+
+import { SettingsService } from '../settings/settings.service';
+import { SETTING_KEYS } from '../settings/entities/global-setting.entity';
 
 import { boundingBox, calcDeliveryFee, haversineKm } from '../geo/geo.util';
 import { Review } from '../orders/entities/review.entity';
@@ -63,6 +66,7 @@ export class ProductsService {
     private readonly users: Repository<User>,
     private readonly dataSource: DataSource,
     private readonly push: PushService,
+    private readonly settings: SettingsService,
   ) {}
 
   /** Owner, or active staff holding `permission`. */
@@ -793,5 +797,277 @@ export class ProductsService {
 
     const nextPage = page * limit < total ? page + 1 : null;
     return { items, nextPage };
+  }
+
+  // ─── Mahsulot nusxalash (Duplicate) ───────────────────────────────────────
+
+  async duplicateVariant(userId: string, variantId: string): Promise<ProductVariant> {
+    const src = await this.getVariant(variantId);
+    await this.ensureShopAccess(userId, src.shopId, 'inventory.product.create');
+    const copy = this.variants.create({
+      shopId: src.shopId,
+      productFamilyId: src.productFamilyId,
+      name: `${src.name} — nusxa`,
+      photos: src.photos,
+      description: src.description,
+      unitType: src.unitType,
+      unitSize: src.unitSize,
+      price: src.price,
+      discountPrice: src.discountPrice,
+      stock: 0,
+      lowStockThreshold: src.lowStockThreshold,
+      criticalThreshold: src.criticalThreshold,
+      barcode: null,
+      globalProductId: null,
+      expiryDate: null,
+    });
+    return this.variants.save(copy);
+  }
+
+  // ─── Ommaviy narx yangilash ───────────────────────────────────────────────
+
+  async bulkPriceUpdate(
+    userId: string,
+    shopId: string,
+    dto: {
+      scope: 'all' | 'category' | 'selected';
+      categoryId?: string;
+      variantIds?: string[];
+      adjustType: 'percent' | 'fixed';
+      adjustValue: number;
+      direction: 'increase' | 'decrease';
+    },
+  ): Promise<{ updated: number }> {
+    await this.ensureShopAccess(userId, shopId, 'inventory.product.edit_price');
+
+    const qb = this.variants
+      .createQueryBuilder('v')
+      .innerJoin('v.productFamily', 'pf')
+      .where('v.shopId = :shopId', { shopId })
+      .andWhere('v.isActive = true');
+
+    if (dto.scope === 'category' && dto.categoryId) {
+      qb.andWhere('pf.categoryId = :categoryId', { categoryId: dto.categoryId });
+    } else if (dto.scope === 'selected' && dto.variantIds?.length) {
+      qb.andWhere('v.id IN (:...ids)', { ids: dto.variantIds });
+    }
+
+    const targets = await qb.getMany();
+    if (targets.length === 0) return { updated: 0 };
+
+    const sign = dto.direction === 'increase' ? 1 : -1;
+    const updated = targets.map((v) => {
+      const delta =
+        dto.adjustType === 'percent'
+          ? Math.round(v.price * (dto.adjustValue / 100))
+          : dto.adjustValue;
+      const newPrice = Math.max(1, v.price + sign * delta);
+      return { ...v, price: newPrice };
+    });
+
+    await this.variants.save(updated);
+    return { updated: updated.length };
+  }
+
+  // ─── Muddati o'tayotganlar ────────────────────────────────────────────────
+
+  async listExpiring(
+    userId: string,
+    shopId: string,
+    days?: number,
+  ): Promise<ProductVariant[]> {
+    await this.ensureShopAccess(userId, shopId, 'inventory.view');
+    const warningDays = days ?? this.settings.getNumber(SETTING_KEYS.EXPIRY_WARNING_DAYS, 7);
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() + warningDays);
+
+    return this.variants
+      .createQueryBuilder('v')
+      .where('v.shopId = :shopId', { shopId })
+      .andWhere('v.isActive = true')
+      .andWhere('v.expiryDate IS NOT NULL')
+      .andWhere('v.expiryDate <= :cutoff', { cutoff })
+      .orderBy('v.expiryDate', 'ASC')
+      .getMany();
+  }
+
+  // ─── Global katalog (seller uchun qidiruv) ────────────────────────────────
+
+  async searchGlobalCatalog(
+    query: string,
+    limit = 20,
+  ): Promise<GlobalProduct[]> {
+    const qb = this.globalProducts
+      .createQueryBuilder('gp')
+      .where('gp.isActive = true')
+      .orderBy('gp.usageCount', 'DESC')
+      .take(Math.min(limit, 50));
+
+    const q = query.trim();
+    if (q) {
+      qb.andWhere('(gp.name ILIKE :q OR gp.barcode = :exact OR gp.brand ILIKE :q)', {
+        q: `%${q}%`,
+        exact: q,
+      });
+    }
+    return qb.getMany();
+  }
+
+  async cloneFromGlobalCatalog(
+    userId: string,
+    shopId: string,
+    dto: {
+      globalProductId: string;
+      price: number;
+      stock: number;
+      costPrice?: number;
+      discountPrice?: number;
+      expiryDate?: string;
+      lowStockThreshold?: number;
+      criticalThreshold?: number;
+    },
+  ): Promise<ProductVariant> {
+    await this.ensureShopAccess(userId, shopId, 'inventory.product.create');
+
+    const global = await this.globalProducts.findOne({ where: { id: dto.globalProductId, isActive: true } });
+    if (!global) throw new NotFoundException('Global mahsulot topilmadi');
+
+    return this.dataSource.transaction(async (manager) => {
+      // Family yaratamiz yoki mavjudini topamiz
+      let family = await manager.findOne(ProductFamily, {
+        where: { shopId, name: global.name },
+      });
+      if (!family) {
+        family = await manager.save(manager.create(ProductFamily, {
+          shopId,
+          name: global.name,
+          categoryId: global.categoryId,
+          brand: global.brand,
+        }));
+      }
+
+      const variant = manager.create(ProductVariant, {
+        shopId,
+        productFamilyId: family.id,
+        name: global.name,
+        photos: global.photos,
+        unitType: global.defaultUnitType,
+        unitSize: global.defaultUnitSize,
+        price: dto.price,
+        discountPrice: dto.discountPrice ?? null,
+        stock: 0,
+        lowStockThreshold: dto.lowStockThreshold ?? this.settings.getNumber(SETTING_KEYS.LOW_STOCK_WARNING_DEFAULT, 10),
+        criticalThreshold: dto.criticalThreshold ?? null,
+        barcode: global.barcode,
+        globalProductId: global.id,
+        expiryDate: dto.expiryDate ? new Date(dto.expiryDate) : null,
+      });
+      const saved = await manager.save(variant);
+
+      // usageCount++
+      await manager.increment(GlobalProduct, { id: global.id }, 'usageCount', 1);
+
+      if (dto.stock > 0) {
+        await receiveBatch(manager, {
+          variant: saved,
+          quantity: dto.stock,
+          costPrice: dto.costPrice ?? 0,
+          expiryDate: dto.expiryDate ? new Date(dto.expiryDate) : null,
+          userId,
+          reason: 'Katalogdan qo\'shildi',
+        });
+      }
+      return saved;
+    });
+  }
+
+  // ─── Admin: GlobalProduct CRUD ────────────────────────────────────────────
+
+  async adminListGlobalProducts(opts: {
+    q?: string;
+    limit?: number;
+    offset?: number;
+    activeOnly?: boolean;
+  }): Promise<{ items: GlobalProduct[]; total: number }> {
+    const qb = this.globalProducts
+      .createQueryBuilder('gp')
+      .orderBy('gp.usageCount', 'DESC')
+      .addOrderBy('gp.createdAt', 'DESC');
+
+    if (opts.q) {
+      qb.where('(gp.name ILIKE :q OR gp.barcode = :exact OR gp.brand ILIKE :q)', {
+        q: `%${opts.q}%`,
+        exact: opts.q.trim(),
+      });
+    }
+    if (opts.activeOnly) qb.andWhere('gp.isActive = true');
+
+    const limit = Math.min(opts.limit ?? 50, 100);
+    const offset = opts.offset ?? 0;
+    const [items, total] = await qb.skip(offset).take(limit).getManyAndCount();
+    return { items, total };
+  }
+
+  async adminCreateGlobalProduct(dto: {
+    name: string;
+    barcode?: string;
+    brand?: string;
+    categoryId?: string;
+    defaultUnitType?: ProductVariant['unitType'];
+    defaultUnitSize?: number;
+    photos?: string[];
+    description?: string;
+    groupName?: string;
+  }): Promise<GlobalProduct> {
+    if (dto.barcode) {
+      const existing = await this.globalProducts.findOne({ where: { barcode: dto.barcode } });
+      if (existing) throw new BadRequestException('Bu barcode allaqachon katalogda mavjud');
+    }
+    const gp = this.globalProducts.create({
+      name: dto.name,
+      barcode: dto.barcode ?? null,
+      brand: dto.brand ?? null,
+      categoryId: dto.categoryId ?? null,
+      defaultUnitType: dto.defaultUnitType ?? 'piece',
+      defaultUnitSize: dto.defaultUnitSize ?? 1,
+      photos: dto.photos ?? [],
+      description: dto.description ?? null,
+      groupName: dto.groupName ?? null,
+      isVerified: true,
+      isActive: true,
+    });
+    return this.globalProducts.save(gp);
+  }
+
+  async adminUpdateGlobalProduct(
+    id: string,
+    dto: Partial<{
+      name: string;
+      barcode: string | null;
+      brand: string | null;
+      categoryId: string | null;
+      defaultUnitType: ProductVariant['unitType'];
+      defaultUnitSize: number;
+      photos: string[];
+      description: string | null;
+      groupName: string | null;
+      isActive: boolean;
+    }>,
+  ): Promise<GlobalProduct> {
+    const gp = await this.globalProducts.findOne({ where: { id } });
+    if (!gp) throw new NotFoundException('Global mahsulot topilmadi');
+    if (dto.barcode && dto.barcode !== gp.barcode) {
+      const existing = await this.globalProducts.findOne({ where: { barcode: dto.barcode } });
+      if (existing) throw new BadRequestException('Bu barcode allaqachon katalogda mavjud');
+    }
+    Object.assign(gp, dto);
+    return this.globalProducts.save(gp);
+  }
+
+  async adminGetGlobalProductStats(id: string) {
+    const gp = await this.globalProducts.findOne({ where: { id } });
+    if (!gp) throw new NotFoundException('Global mahsulot topilmadi');
+    const shopCount = await this.variants.count({ where: { globalProductId: id, isActive: true } });
+    return { ...gp, activeShopCount: shopCount };
   }
 }

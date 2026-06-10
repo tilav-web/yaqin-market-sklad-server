@@ -7,9 +7,11 @@ import {
   HttpStatus,
   NotFoundException,
   Param,
+  ParseIntPipe,
   ParseUUIDPipe,
   Patch,
   Post,
+  Put,
   Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
@@ -231,5 +233,140 @@ export class CatalogController {
     @Param('familyId', ParseUUIDPipe) familyId: string,
   ) {
     return this.products.getVariantsFromFamily(shopId, familyId);
+  }
+}
+
+// ─── Seller: katalog + kengaytirilgan sklad operatsiyalari ───────────────────
+
+@ApiBearerAuth()
+@ApiTags('seller-catalog')
+@Controller('seller/shops/:shopId/catalog')
+export class SellerCatalogController {
+  constructor(private readonly products: ProductsService) {}
+
+  @Get('search')
+  searchGlobal(@Query('q') q = '', @Query('limit') limit = '20') {
+    return this.products.searchGlobalCatalog(q, Number(limit));
+  }
+
+  @Post('clone')
+  cloneFromCatalog(
+    @CurrentUser() user: JwtPayload,
+    @Param('shopId', ParseUUIDPipe) shopId: string,
+    @Body() dto: {
+      globalProductId: string;
+      price: number;
+      stock: number;
+      costPrice?: number;
+      discountPrice?: number;
+      expiryDate?: string;
+      lowStockThreshold?: number;
+      criticalThreshold?: number;
+    },
+  ) {
+    return this.products.cloneFromGlobalCatalog(user.sub, shopId, dto);
+  }
+}
+
+@ApiBearerAuth()
+@ApiTags('seller-products-extra')
+@Controller('seller/shops/:shopId/products')
+export class SellerProductsExtraController {
+  constructor(private readonly products: ProductsService) {}
+
+  @Post('variants/:variantId/duplicate')
+  duplicate(
+    @CurrentUser() user: JwtPayload,
+    @Param('variantId', ParseUUIDPipe) variantId: string,
+  ) {
+    return this.products.duplicateVariant(user.sub, variantId);
+  }
+
+  @Post('bulk-price')
+  bulkPrice(
+    @CurrentUser() user: JwtPayload,
+    @Param('shopId', ParseUUIDPipe) shopId: string,
+    @Body() dto: {
+      scope: 'all' | 'category' | 'selected';
+      categoryId?: string;
+      variantIds?: string[];
+      adjustType: 'percent' | 'fixed';
+      adjustValue: number;
+      direction: 'increase' | 'decrease';
+    },
+  ) {
+    return this.products.bulkPriceUpdate(user.sub, shopId, dto);
+  }
+
+  @Get('expiring')
+  listExpiring(
+    @CurrentUser() user: JwtPayload,
+    @Param('shopId', ParseUUIDPipe) shopId: string,
+    @Query('days') days?: string,
+  ) {
+    return this.products.listExpiring(user.sub, shopId, days ? Number(days) : undefined);
+  }
+}
+
+// ─── Admin: Global katalog boshqaruvi ────────────────────────────────────────
+
+@ApiBearerAuth()
+@ApiTags('admin-catalog')
+@Controller('admin/catalog')
+export class AdminGlobalCatalogController {
+  constructor(private readonly products: ProductsService) {}
+
+  @Get()
+  list(
+    @Query('q') q?: string,
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+    @Query('activeOnly') activeOnly?: string,
+  ) {
+    return this.products.adminListGlobalProducts({
+      q,
+      limit: limit ? Number(limit) : undefined,
+      offset: offset ? Number(offset) : undefined,
+      activeOnly: activeOnly === 'true',
+    });
+  }
+
+  @Post()
+  create(@Body() dto: {
+    name: string;
+    barcode?: string;
+    brand?: string;
+    categoryId?: string;
+    defaultUnitType?: 'piece' | 'kg' | 'liter' | 'gram' | 'pack';
+    defaultUnitSize?: number;
+    photos?: string[];
+    description?: string;
+    groupName?: string;
+  }) {
+    return this.products.adminCreateGlobalProduct(dto);
+  }
+
+  @Patch(':id')
+  update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: Partial<{
+      name: string;
+      barcode: string | null;
+      brand: string | null;
+      categoryId: string | null;
+      defaultUnitType: 'piece' | 'kg' | 'liter' | 'gram' | 'pack';
+      defaultUnitSize: number;
+      photos: string[];
+      description: string | null;
+      groupName: string | null;
+      isActive: boolean;
+    }>,
+  ) {
+    return this.products.adminUpdateGlobalProduct(id, dto);
+  }
+
+  @Get(':id/stats')
+  stats(@Param('id', ParseUUIDPipe) id: string) {
+    return this.products.adminGetGlobalProductStats(id);
   }
 }
