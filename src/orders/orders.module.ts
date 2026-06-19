@@ -7,6 +7,7 @@ import { PrimeModule } from '../prime/prime.module';
 import { PushModule } from '../push/push.module';
 import { SettingsModule } from '../settings/settings.module';
 import { RealtimeModule } from '../realtime/realtime.module';
+import { RedisModule } from '../redis/redis.module';
 import { Shop } from '../shops/entities/shop.entity';
 import { ShopStaff } from '../shops/entities/shop-staff.entity';
 import { UserAddress } from '../users/entities/user-address.entity';
@@ -32,6 +33,7 @@ import { OrdersService } from './orders.service';
       UserAddress,
     ]),
     RealtimeModule,
+    RedisModule,
     PushModule,
     PaymentsModule,
     PrimeModule,

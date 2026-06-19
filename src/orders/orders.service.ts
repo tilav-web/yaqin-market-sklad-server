@@ -26,7 +26,7 @@ import { isShopOpenNow } from '../shops/shop-hours.util';
 import { UserAddress } from '../users/entities/user-address.entity';
 import { ChatMessage } from './entities/chat-message.entity';
 import { OrderItem } from './entities/order-item.entity';
-import { Order, OrderChannel, OrderStatus, OrderTimelineEvent, PaymentMethod } from './entities/order.entity';
+import { Order, OrderChannel, OrderStatus, OrderTimelineEvent, PaymentMethod, PaymentStatus } from './entities/order.entity';
 import { Review } from './entities/review.entity';
 
 const orderNumberGen = customAlphabet('ABCDEFGHJKLMNPQRSTUVWXYZ23456789', 8);
@@ -106,7 +106,7 @@ export class OrdersService {
 
   async create(
     userId: string,
-    dto: { shopId: string; deliveryAddressId: string; items: { productVariantId: string; quantity: number }[] },
+    dto: { shopId: string; deliveryAddressId: string; items: { productVariantId: string; quantity: number }[]; paymentMethod?: PaymentMethod },
   ): Promise<Order> {
     const shop = await this.shops.findOne({ where: { id: dto.shopId, isActive: true } });
     if (!shop) throw new NotFoundException('Do\'kon topilmadi');
@@ -169,7 +169,10 @@ export class OrdersService {
         total: subTotal + deliveryFee,
         distanceKm,
         status: OrderStatus.New,
-        paymentMethod: PaymentMethod.Cash,
+        paymentMethod: dto.paymentMethod ?? PaymentMethod.Cash,
+        paymentStatus: (dto.paymentMethod ?? PaymentMethod.Cash) === PaymentMethod.ClickOnline
+          ? PaymentStatus.Pending
+          : PaymentStatus.NotRequired,
         timeline: [{ status: OrderStatus.New, at: new Date().toISOString(), byUserId: userId }],
       });
       const savedOrder = await manager.save(order);

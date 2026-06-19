@@ -29,6 +29,17 @@ export enum PaymentMethod {
   ClickOnline = 'click_online',
 }
 
+export enum PaymentStatus {
+  /** Cash order — no online payment needed. */
+  NotRequired = 'not_required',
+  /** click_online order awaiting payment. */
+  Pending = 'pending',
+  /** Payment confirmed by Click webhook. */
+  Paid = 'paid',
+  /** Payment failed or cancelled. */
+  Failed = 'failed',
+}
+
 export enum OrderChannel {
   /** Customer placed it in the app for delivery. */
   Delivery = 'delivery',
@@ -101,6 +112,9 @@ export class Order {
 
   @Column({ type: 'enum', enum: PaymentMethod, default: PaymentMethod.Cash })
   paymentMethod!: PaymentMethod;
+
+  @Column({ type: 'enum', enum: PaymentStatus, default: PaymentStatus.NotRequired })
+  paymentStatus!: PaymentStatus;
 
   @Column({ type: 'uuid', nullable: true })
   acceptedByStaffId!: string | null;

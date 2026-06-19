@@ -12,6 +12,7 @@ import { Repository } from 'typeorm';
 
 import type { JwtPayload } from '../auth/decorators/current-user.decorator';
 import type { EnvironmentVariables } from '../config/configuration';
+import { RedisService } from '../redis/redis.service';
 import { Shop } from '../shops/entities/shop.entity';
 import { ShopStaff } from '../shops/entities/shop-staff.entity';
 
@@ -40,6 +41,7 @@ export class RealtimeGateway implements OnGatewayConnection {
     private readonly shops: Repository<Shop>,
     @InjectRepository(ShopStaff)
     private readonly staff: Repository<ShopStaff>,
+    private readonly redis: RedisService,
   ) {}
 
   /** Only the shop owner or an active staff member may watch a shop's stream. */
@@ -76,6 +78,34 @@ export class RealtimeGateway implements OnGatewayConnection {
       });
       client.on('leave:shop', (shopId: unknown) => {
         if (typeof shopId === 'string') void client.leave(`shop:${shopId}`);
+      });
+
+      // Customer subscribes to an order's real-time stream (courier location, etc.)
+      client.on('join:order', (orderId: unknown) => {
+        if (typeof orderId === 'string' && orderId.length > 0) {
+          void client.join(`order:${orderId}`);
+        }
+      });
+
+      // Courier (staff) emits location while delivering
+      client.on('courier:location', (data: unknown) => {
+        if (
+          typeof data !== 'object' || data === null ||
+          !('orderId' in data) || !('lat' in data) || !('lng' in data)
+        ) return;
+        const { orderId, lat, lng } = data as { orderId: string; lat: number; lng: number };
+        if (typeof orderId !== 'string' || typeof lat !== 'number' || typeof lng !== 'number') return;
+
+        const payload = { lat, lng, updatedAt: new Date().toISOString() };
+        // Cache in Redis for 60s so latecomers can GET it via REST
+        void this.redis.client.set(
+          `courier:location:${orderId}`,
+          JSON.stringify(payload),
+          'EX',
+          60,
+        );
+        // Broadcast to everyone watching this order (customer, etc.)
+        this.server.to(`order:${orderId}`).emit('courier:location', payload);
       });
     } catch {
       client.disconnect(true);

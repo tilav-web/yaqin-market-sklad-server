@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
+import { RedisModule } from '../redis/redis.module';
 import { Shop } from '../shops/entities/shop.entity';
 import { ShopStaff } from '../shops/entities/shop-staff.entity';
 import { RealtimeGateway } from './realtime.gateway';
@@ -11,7 +12,7 @@ import { RealtimeGateway } from './realtime.gateway';
  * {@link RealtimeGateway} to push real-time events.
  */
 @Module({
-  imports: [JwtModule.register({}), TypeOrmModule.forFeature([Shop, ShopStaff])],
+  imports: [JwtModule.register({}), TypeOrmModule.forFeature([Shop, ShopStaff]), RedisModule],
   providers: [RealtimeGateway],
   exports: [RealtimeGateway],
 })

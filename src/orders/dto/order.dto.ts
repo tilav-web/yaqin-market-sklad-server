@@ -14,7 +14,8 @@ import {
   ValidateNested,
 } from 'class-validator';
 
-import { OrderStatus } from '../entities/order.entity';
+
+import { OrderStatus, PaymentMethod } from '../entities/order.entity';
 
 export class OrderItemDto {
   @ApiProperty()
@@ -42,6 +43,11 @@ export class CreateOrderDto {
   @ValidateNested({ each: true })
   @Type(() => OrderItemDto)
   items!: OrderItemDto[];
+
+  @ApiPropertyOptional({ enum: PaymentMethod, default: PaymentMethod.Cash })
+  @IsOptional()
+  @IsEnum(PaymentMethod)
+  paymentMethod?: PaymentMethod;
 }
 
 export class AssignOrderDto {

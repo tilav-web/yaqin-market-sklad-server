@@ -12,6 +12,7 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { JwtPayload } from '../auth/decorators/current-user.decorator';
+import { RedisService } from '../redis/redis.service';
 import {
   AssignOrderDto,
   CreateOrderDto,
@@ -29,7 +30,21 @@ import { OrdersService } from './orders.service';
 @ApiTags('orders')
 @Controller('orders')
 export class OrdersController {
-  constructor(private readonly orders: OrdersService) {}
+  constructor(
+    private readonly orders: OrdersService,
+    private readonly redis: RedisService,
+  ) {}
+
+  /** Customer: get live courier location while order is delivering. */
+  @Get(':id/courier-location')
+  async getCourierLocation(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    const raw = await this.redis.client.get(`courier:location:${id}`);
+    if (!raw) return null;
+    return JSON.parse(raw) as { lat: number; lng: number; updatedAt: string };
+  }
 
   @Post()
   create(@CurrentUser() user: JwtPayload, @Body() dto: CreateOrderDto) {
