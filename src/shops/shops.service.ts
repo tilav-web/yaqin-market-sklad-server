@@ -491,8 +491,7 @@ export class ShopsService {
     ];
 
     const score = checks.reduce((sum, c) => sum + (c.done ? c.points : 0), 0);
-    const missing = checks.filter((c) => !c.done).map((c) => ({ key: c.key, label: c.label, points: c.points }));
 
-    return { score, maxScore: 100, checks, missing };
+    return { score, maxScore: 100, items: checks };
   }
 }
