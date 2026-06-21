@@ -79,6 +79,14 @@ export class Shop {
   @Column({ type: 'jsonb', default: () => "'{\"maxKm\":2,\"freeKm\":2,\"pricingType\":\"flat\",\"pricePerStep\":0}'::jsonb" })
   deliveryZone!: DeliveryZone;
 
+  /** Customer yetkazib berish hududi (GeoJSON Polygon, null = faqat km asosida ishlaydi). */
+  @Column({ type: 'jsonb', nullable: true, default: null })
+  deliveryPolygon!: import('../../geo/geo.util').GeoJsonPolygon | null;
+
+  /** Tekin yetkazib berish hududi (deliveryPolygon ichida bo'lishi kerak). */
+  @Column({ type: 'jsonb', nullable: true, default: null })
+  freeDeliveryPolygon!: import('../../geo/geo.util').GeoJsonPolygon | null;
+
   @Column({ type: 'jsonb', default: () => "'[]'::jsonb" })
   blockedUserIds!: string[];
 

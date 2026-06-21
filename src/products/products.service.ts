@@ -11,7 +11,7 @@ import { Between, DataSource, EntityManager, In, Repository } from 'typeorm';
 import { SettingsService } from '../settings/settings.service';
 import { SETTING_KEYS } from '../settings/entities/global-setting.entity';
 
-import { boundingBox, calcDeliveryFee, haversineKm } from '../geo/geo.util';
+import { boundingBox, calcDeliveryFee, haversineKm, pointInPolygon } from '../geo/geo.util';
 import { Review } from '../orders/entities/review.entity';
 import { PushService } from '../push/push.service';
 import { Shop } from '../shops/entities/shop.entity';
@@ -934,7 +934,12 @@ export class ProductsService {
         const distanceKm = haversineKm(opts.latitude, opts.longitude, s.latitude, s.longitude);
         return { shop: s, distanceKm };
       })
-      .filter(({ shop, distanceKm }) => distanceKm <= shop.deliveryZone.maxKm);
+      .filter(({ shop, distanceKm }) => {
+        if (shop.deliveryPolygon) {
+          return pointInPolygon(opts.latitude, opts.longitude, shop.deliveryPolygon);
+        }
+        return distanceKm <= shop.deliveryZone.maxKm;
+      });
 
     if (reachableShops.length === 0) {
       return { items: [], nextPage: null };
@@ -994,7 +999,12 @@ export class ProductsService {
       const ref = shopMap.get(v.shopId);
       const distanceKm = ref?.distanceKm ?? 0;
       const shop = ref?.shop;
-      const deliveryFeeAtUser = shop
+      const isFreeByPolygon =
+        shop?.freeDeliveryPolygon != null &&
+        pointInPolygon(opts.latitude, opts.longitude, shop.freeDeliveryPolygon);
+      const deliveryFeeAtUser =
+        isFreeByPolygon ? 0
+        : shop
         ? calcDeliveryFee({
             distanceKm,
             freeKm: shop.deliveryZone.freeKm,

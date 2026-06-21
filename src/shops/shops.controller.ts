@@ -29,6 +29,7 @@ import {
   BlockUserDto,
   CreateShopDto,
   ToggleOpenDto,
+  UpdateDeliveryZonesDto,
   UpdateShopDto,
 } from './dto/shop.dto';
 import { ShopsService } from './shops.service';
@@ -140,6 +141,15 @@ export class SellerShopsController {
   @Get(':id/completeness')
   completeness(@CurrentUser() user: JwtPayload, @Param('id', ParseUUIDPipe) id: string) {
     return this.shops.getCompleteness(user.sub, id);
+  }
+
+  @Patch(':shopId/delivery-zones')
+  updateDeliveryZones(
+    @CurrentUser() user: JwtPayload,
+    @Param('shopId', ParseUUIDPipe) shopId: string,
+    @Body() dto: UpdateDeliveryZonesDto,
+  ) {
+    return this.shops.updateDeliveryZones(user.sub, shopId, dto);
   }
 
   // ---- Staff management (owner) ----

@@ -2,9 +2,11 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
+  ArrayMinSize,
   IsArray,
   IsBoolean,
   IsEnum,
+  IsIn,
   IsInt,
   IsLatitude,
   IsLongitude,
@@ -220,4 +222,29 @@ export class UpdateShopDto {
   @ValidateNested()
   @Type(() => DeliveryZoneDto)
   deliveryZone?: DeliveryZoneDto;
+}
+
+export class GeoJsonPolygonDto {
+  @ApiProperty()
+  @IsIn(['Polygon'])
+  type!: 'Polygon';
+
+  @ApiProperty()
+  @IsArray()
+  @ArrayMinSize(1)
+  coordinates!: [number, number][][];
+}
+
+export class UpdateDeliveryZonesDto {
+  @ApiPropertyOptional({ type: GeoJsonPolygonDto, nullable: true })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => GeoJsonPolygonDto)
+  deliveryPolygon?: GeoJsonPolygonDto | null;
+
+  @ApiPropertyOptional({ type: GeoJsonPolygonDto, nullable: true })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => GeoJsonPolygonDto)
+  freeDeliveryPolygon?: GeoJsonPolygonDto | null;
 }

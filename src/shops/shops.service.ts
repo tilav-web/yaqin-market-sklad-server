@@ -13,7 +13,7 @@ import { Order } from '../orders/entities/order.entity';
 import { GlobalProduct } from '../products/entities/global-product.entity';
 import { ProductVariant } from '../products/entities/product-variant.entity';
 import { User } from '../users/entities/user.entity';
-import { boundingBox, calcDeliveryFee, haversineKm } from '../geo/geo.util';
+import { boundingBox, calcDeliveryFee, GeoJsonPolygon, haversineKm, pointInPolygon } from '../geo/geo.util';
 import { Shop } from './entities/shop.entity';
 import {
   PRESET_PERMISSIONS,
@@ -390,6 +390,32 @@ export class ShopsService {
       });
     }
     return Object.assign({}, shop, { isOpenManual: isShopOpenNow(shop) });
+  }
+
+  async updateDeliveryZones(
+    userId: string,
+    shopId: string,
+    dto: { deliveryPolygon?: GeoJsonPolygon | null; freeDeliveryPolygon?: GeoJsonPolygon | null },
+  ): Promise<Shop> {
+    const shop = await this.getOwned(userId, shopId);
+
+    if (dto.freeDeliveryPolygon && dto.deliveryPolygon) {
+      const ring = dto.freeDeliveryPolygon.coordinates[0];
+      const allInside = ring.every(([lng, lat]) =>
+        pointInPolygon(lat, lng, dto.deliveryPolygon!),
+      );
+      if (!allInside) {
+        throw new BadRequestException(
+          'Tekin yetkazib berish hududi yetkazib berish hududi ichida bo\'lishi kerak',
+        );
+      }
+    }
+
+    await this.shops.update(shopId, {
+      ...(dto.deliveryPolygon !== undefined && { deliveryPolygon: dto.deliveryPolygon }),
+      ...(dto.freeDeliveryPolygon !== undefined && { freeDeliveryPolygon: dto.freeDeliveryPolygon }),
+    });
+    return this.shops.findOneOrFail({ where: { id: shopId } });
   }
 
   // ---- Admin ---------------------------------------------------------------

@@ -64,3 +64,22 @@ export function calcDeliveryFee(opts: DeliveryFeeOptions): number {
       return opts.pricePerStep;
   }
 }
+
+export interface GeoJsonPolygon {
+  type: 'Polygon';
+  coordinates: [number, number][][]; // [[[lng, lat], ...]] — GeoJSON standard (lng first)
+}
+
+/** Ray-casting point-in-polygon check. polygon coords are [lng, lat] pairs (GeoJSON order). */
+export function pointInPolygon(lat: number, lng: number, polygon: GeoJsonPolygon): boolean {
+  const ring = polygon.coordinates[0];
+  if (!ring || ring.length < 3) return false;
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i]; // xi=lng, yi=lat
+    const [xj, yj] = ring[j];
+    const intersect = yi > lat !== yj > lat && lng < ((xj - xi) * (lat - yi)) / (yj - yi) + xi;
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
