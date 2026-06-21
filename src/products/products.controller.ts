@@ -7,11 +7,10 @@ import {
   HttpStatus,
   NotFoundException,
   Param,
-  ParseIntPipe,
+  ParseFloatPipe,
   ParseUUIDPipe,
   Patch,
   Post,
-  Put,
   Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
@@ -22,12 +21,13 @@ import { Public } from '../auth/decorators/public.decorator';
 import { FeedQueryDto } from './dto/feed-query.dto';
 import {
   AdjustStockDto,
+  CloneFromCatalogDto,
   CountStockDto,
-  CreateProductFamilyDto,
-  CreateProductVariantDto,
+  CreateCustomProductDto,
   ReceiveStockDto,
   UpdateProductVariantDto,
 } from './dto/product.dto';
+import { UnitType } from './entities/global-product.entity';
 import { ProductsService } from './products.service';
 
 @ApiBearerAuth()
@@ -35,20 +35,6 @@ import { ProductsService } from './products.service';
 @Controller('seller/shops/:shopId/products')
 export class SellerProductsController {
   constructor(private readonly products: ProductsService) {}
-
-  @Get('families')
-  listFamilies(@Param('shopId', ParseUUIDPipe) shopId: string) {
-    return this.products.listFamilies(shopId);
-  }
-
-  @Post('families')
-  createFamily(
-    @CurrentUser() user: JwtPayload,
-    @Param('shopId', ParseUUIDPipe) shopId: string,
-    @Body() dto: CreateProductFamilyDto,
-  ) {
-    return this.products.createFamily(user.sub, shopId, dto);
-  }
 
   @Get('variants')
   listVariants(
@@ -67,13 +53,14 @@ export class SellerProductsController {
     });
   }
 
+  /** Create a fully custom product (not yet in shared catalogue). */
   @Post('variants')
-  createVariant(
+  createCustomProduct(
     @CurrentUser() user: JwtPayload,
     @Param('shopId', ParseUUIDPipe) shopId: string,
-    @Body() dto: CreateProductVariantDto,
+    @Body() dto: CreateCustomProductDto,
   ) {
-    return this.products.createVariant(user.sub, shopId, dto);
+    return this.products.createCustomProduct(user.sub, shopId, dto);
   }
 
   @Patch('variants/:variantId')
@@ -103,7 +90,6 @@ export class SellerProductsController {
     return this.products.adjustStock(user.sub, variantId, dto.delta, dto.reason);
   }
 
-  // Formal stock receipt with cost ("Kirim") — creates a FIFO batch.
   @Post('variants/:variantId/receive')
   receiveStock(
     @CurrentUser() user: JwtPayload,
@@ -113,7 +99,6 @@ export class SellerProductsController {
     return this.products.receiveStock(user.sub, variantId, dto);
   }
 
-  // Inventarizatsiya — set stock to a counted number, reconciled via FIFO.
   @Post('variants/:variantId/count')
   countStock(
     @CurrentUser() user: JwtPayload,
@@ -163,6 +148,7 @@ export class GlobalCatalogController {
   constructor(private readonly products: ProductsService) {}
 
   /** Scan a barcode → shared catalogue entry (name/brand/photo/unit) or 404. */
+  @Public()
   @Get('by-barcode/:barcode')
   async byBarcode(@Param('barcode') barcode: string) {
     const found = await this.products.lookupGlobalByBarcode(barcode);
@@ -176,11 +162,6 @@ export class GlobalCatalogController {
 export class CatalogController {
   constructor(private readonly products: ProductsService) {}
 
-  /**
-   * Global product feed for the customer Home tab.
-   * Returns products from every shop whose delivery zone reaches `lat`/`lng`,
-   * decorated with shop name, distance and computed delivery fee.
-   */
   @Public()
   @Get('products')
   feed(@Query() query: FeedQueryDto) {
@@ -226,13 +207,19 @@ export class CatalogController {
     return this.products.listShopCatalog(shopId, q, categoryId);
   }
 
+  /** All shops offering the same GlobalProduct — for customer price comparison. */
   @Public()
-  @Get('shops/:shopId/products/families/:familyId/variants')
-  familyVariants(
-    @Param('shopId', ParseUUIDPipe) shopId: string,
-    @Param('familyId', ParseUUIDPipe) familyId: string,
+  @Get('global-products/:globalProductId/offers')
+  globalProductOffers(
+    @Param('globalProductId', ParseUUIDPipe) globalProductId: string,
+    @Query('lat') lat?: string,
+    @Query('lng') lng?: string,
   ) {
-    return this.products.getVariantsFromFamily(shopId, familyId);
+    return this.products.getGlobalProductOffers(
+      globalProductId,
+      lat ? parseFloat(lat) : undefined,
+      lng ? parseFloat(lng) : undefined,
+    );
   }
 }
 
@@ -245,26 +232,22 @@ export class SellerCatalogController {
   constructor(private readonly products: ProductsService) {}
 
   @Get('search')
-  searchGlobal(@Query('q') q = '', @Query('limit') limit = '20') {
-    return this.products.searchGlobalCatalog(q, Number(limit));
+  searchGlobal(
+    @Param('shopId', ParseUUIDPipe) shopId: string,
+    @Query('q') q = '',
+    @Query('limit') limit = '20',
+  ) {
+    return this.products.searchGlobalCatalog(shopId, q, Number(limit));
   }
 
+  /** Add a shared-catalogue product to this shop (scan → price+stock only). */
   @Post('clone')
   cloneFromCatalog(
     @CurrentUser() user: JwtPayload,
     @Param('shopId', ParseUUIDPipe) shopId: string,
-    @Body() dto: {
-      globalProductId: string;
-      price: number;
-      stock: number;
-      costPrice?: number;
-      discountPrice?: number;
-      expiryDate?: string;
-      lowStockThreshold?: number;
-      criticalThreshold?: number;
-    },
+    @Body() dto: CloneFromCatalogDto,
   ) {
-    return this.products.cloneFromGlobalCatalog(user.sub, shopId, dto);
+    return this.products.createFromGlobal(user.sub, shopId, dto);
   }
 }
 
@@ -273,14 +256,6 @@ export class SellerCatalogController {
 @Controller('seller/shops/:shopId/products')
 export class SellerProductsExtraController {
   constructor(private readonly products: ProductsService) {}
-
-  @Post('variants/:variantId/duplicate')
-  duplicate(
-    @CurrentUser() user: JwtPayload,
-    @Param('variantId', ParseUUIDPipe) variantId: string,
-  ) {
-    return this.products.duplicateVariant(user.sub, variantId);
-  }
 
   @Post('bulk-price')
   bulkPrice(
@@ -322,12 +297,14 @@ export class AdminGlobalCatalogController {
     @Query('limit') limit?: string,
     @Query('offset') offset?: string,
     @Query('activeOnly') activeOnly?: string,
+    @Query('categoryId') categoryId?: string,
   ) {
     return this.products.adminListGlobalProducts({
       q,
       limit: limit ? Number(limit) : undefined,
       offset: offset ? Number(offset) : undefined,
       activeOnly: activeOnly === 'true',
+      categoryId,
     });
   }
 
@@ -337,11 +314,12 @@ export class AdminGlobalCatalogController {
     barcode?: string;
     brand?: string;
     categoryId?: string;
-    defaultUnitType?: 'piece' | 'kg' | 'liter' | 'gram' | 'pack';
-    defaultUnitSize?: number;
+    unitType?: UnitType;
+    unitSize?: number;
     photos?: string[];
     description?: string;
-    groupName?: string;
+    parentGlobalProductId?: string;
+    isVerified?: boolean;
   }) {
     return this.products.adminCreateGlobalProduct(dto);
   }
@@ -354,11 +332,12 @@ export class AdminGlobalCatalogController {
       barcode: string | null;
       brand: string | null;
       categoryId: string | null;
-      defaultUnitType: 'piece' | 'kg' | 'liter' | 'gram' | 'pack';
-      defaultUnitSize: number;
+      unitType: UnitType;
+      unitSize: number;
       photos: string[];
       description: string | null;
-      groupName: string | null;
+      parentGlobalProductId: string | null;
+      isVerified: boolean;
       isActive: boolean;
     }>,
   ) {
@@ -368,5 +347,10 @@ export class AdminGlobalCatalogController {
   @Get(':id/stats')
   stats(@Param('id', ParseUUIDPipe) id: string) {
     return this.products.adminGetGlobalProductStats(id);
+  }
+
+  @Get(':id/usage')
+  usage(@Param('id', ParseUUIDPipe) id: string) {
+    return this.products.adminGetGlobalProductUsage(id);
   }
 }

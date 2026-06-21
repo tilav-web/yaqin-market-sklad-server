@@ -10,6 +10,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Between, DataSource, In, Repository } from 'typeorm';
 
 import { Order } from '../orders/entities/order.entity';
+import { GlobalProduct } from '../products/entities/global-product.entity';
 import { ProductVariant } from '../products/entities/product-variant.entity';
 import { User } from '../users/entities/user.entity';
 import { boundingBox, calcDeliveryFee, haversineKm } from '../geo/geo.util';
@@ -56,6 +57,8 @@ export class ShopsService {
     private readonly orders: Repository<Order>,
     @InjectRepository(ProductVariant)
     private readonly variants: Repository<ProductVariant>,
+    @InjectRepository(GlobalProduct)
+    private readonly globalProducts: Repository<GlobalProduct>,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -433,12 +436,20 @@ export class ShopsService {
     if (!shop) throw new NotFoundException('Do\'kon topilmadi');
 
     const totalVariants = await this.variants.count({ where: { shopId, isActive: true } });
-    const withPhoto = await this.variants.count({
-      where: { shopId, isActive: true },
-    }).then(async () => {
-      const rows = await this.variants.find({ where: { shopId, isActive: true }, select: { photos: true } });
-      return rows.filter((v) => v.photos?.length > 0).length;
-    });
+    const withPhoto = await (async () => {
+      const rows = await this.variants.find({
+        where: { shopId, isActive: true },
+        select: { globalProductId: true },
+      });
+      if (!rows.length) return 0;
+      const gpIds = [...new Set(rows.map((v) => v.globalProductId))];
+      const gps = await this.globalProducts.find({
+        where: { id: In(gpIds) },
+        select: { id: true, photos: true },
+      });
+      const gpPhotoMap = new Map(gps.map((gp) => [gp.id, (gp.photos?.length ?? 0) > 0]));
+      return rows.filter((v) => gpPhotoMap.get(v.globalProductId)).length;
+    })();
 
     const checks = [
       { key: 'photo_1', label: 'Do\'kon rasmi bor (≥1)', done: (shop.photos?.length ?? 0) >= 1, points: 10 },

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
+import { GlobalProduct } from '../products/entities/global-product.entity';
 import { ProductVariant } from '../products/entities/product-variant.entity';
 import { Shop } from '../shops/entities/shop.entity';
 import { ShopStaff } from '../shops/entities/shop-staff.entity';
@@ -10,7 +11,7 @@ import { Debt } from './entities/debt.entity';
 import { DebtPayment } from './entities/debt-payment.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Debt, DebtPayment, Shop, ShopStaff, ProductVariant])],
+  imports: [TypeOrmModule.forFeature([Debt, DebtPayment, Shop, ShopStaff, ProductVariant, GlobalProduct])],
   controllers: [DebtsController],
   providers: [DebtsService],
 })

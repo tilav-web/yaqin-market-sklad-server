@@ -1,7 +1,8 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 
+import { GlobalProduct } from '../products/entities/global-product.entity';
 import { InventoryMovement, MovementType } from '../products/entities/inventory-movement.entity';
 import { ProductVariant } from '../products/entities/product-variant.entity';
 import { StockBatch } from '../products/entities/stock-batch.entity';
@@ -73,6 +74,8 @@ export class AnalyticsService {
     private readonly shops: Repository<Shop>,
     @InjectRepository(User)
     private readonly users: Repository<User>,
+    @InjectRepository(GlobalProduct)
+    private readonly globalProducts: Repository<GlobalProduct>,
   ) {}
 
   private async ensureOwned(userId: string, shopId: string): Promise<void> {
@@ -159,6 +162,10 @@ export class AnalyticsService {
 
     const variants = await this.variants.find({ where: { shopId, isActive: true } });
     if (variants.length === 0) return [];
+    const gpIds = [...new Set(variants.map((v) => v.globalProductId))];
+    const gps = await this.globalProducts.findBy({ id: In(gpIds) });
+    const gpNameMap = new Map(gps.map((gp) => [gp.id, gp.name]));
+    const variantNameMap = new Map(variants.map((v) => [v.id, gpNameMap.get(v.globalProductId) ?? '']));
 
     // Units sold per variant over the last 30 days (from the movement ledger).
     // NET demand = sold − returned/cancelled, so cancelled orders don't inflate
@@ -201,7 +208,7 @@ export class AnalyticsService {
       const target = Math.max(Math.ceil(perDay * 14), v.lowStockThreshold * 2);
       out.push({
         variantId: v.id,
-        name: v.name,
+        name: variantNameMap.get(v.id) ?? '',
         stock: v.stock,
         lowStockThreshold: v.lowStockThreshold,
         soldLast30,
@@ -228,7 +235,8 @@ export class AnalyticsService {
     const rows = await this.batches
       .createQueryBuilder('b')
       .innerJoin(ProductVariant, 'v', 'v.id = b.productVariantId')
-      .select(['b.id AS id', 'b.productVariantId AS vid', 'v.name AS name'])
+      .innerJoin(GlobalProduct, 'gp', 'gp.id = v."globalProductId"')
+      .select(['b.id AS id', 'b.productVariantId AS vid', 'gp.name AS name'])
       .addSelect('b.quantityRemaining', 'qty')
       .addSelect('b.costPrice', 'cost')
       .addSelect('b.expiryDate', 'expiry')

@@ -23,8 +23,9 @@ import { Order, OrderStatus, PaymentMethod } from '../orders/entities/order.enti
 import { OrderItem } from '../orders/entities/order-item.entity';
 import { Review } from '../orders/entities/review.entity';
 import { InventoryMovement, MovementType } from '../products/entities/inventory-movement.entity';
-import { ProductFamily } from '../products/entities/product-family.entity';
-import { ProductVariant, UnitType } from '../products/entities/product-variant.entity';
+import { GlobalProduct, UnitType } from '../products/entities/global-product.entity';
+import { ProductVariant } from '../products/entities/product-variant.entity';
+import { StockBatch } from '../products/entities/stock-batch.entity';
 import {
   SellerApplication,
   SellerApplicationStatus,
@@ -56,8 +57,9 @@ const AppDataSource = new DataSource({
     ShopStaff,
     StaffInvitation,
     SellerApplication,
-    ProductFamily,
+    GlobalProduct,
     ProductVariant,
+    StockBatch,
     InventoryMovement,
     Order,
     OrderItem,
@@ -160,7 +162,9 @@ const CATEGORY_TREE: CatNode[] = [
 ];
 
 // ---------------------------------------------------------------------------
-// Product catalog (master templates distributed across shops)
+// Product catalog
+// Each entry becomes one or more GlobalProducts (one per variant label).
+// Variants within the same family are size-grouped via parentGlobalProductId.
 // ---------------------------------------------------------------------------
 interface VariantTpl {
   label: string;
@@ -368,8 +372,8 @@ async function seed() {
   // 1. Wipe -------------------------------------------------------------------
   await AppDataSource.query(`
     TRUNCATE TABLE
-      reviews, order_items, orders, inventory_movements,
-      product_variants, product_families,
+      reviews, order_items, orders, stock_batches, inventory_movements,
+      product_variants, global_products,
       staff_invitations, shop_staff, seller_applications,
       shops, user_addresses, categories, users
     RESTART IDENTITY CASCADE;
@@ -382,8 +386,9 @@ async function seed() {
   const appRepo = AppDataSource.getRepository(SellerApplication);
   const shopRepo = AppDataSource.getRepository(Shop);
   const staffRepo = AppDataSource.getRepository(ShopStaff);
-  const familyRepo = AppDataSource.getRepository(ProductFamily);
+  const gpRepo = AppDataSource.getRepository(GlobalProduct);
   const variantRepo = AppDataSource.getRepository(ProductVariant);
+  const batchRepo = AppDataSource.getRepository(StockBatch);
   const moveRepo = AppDataSource.getRepository(InventoryMovement);
   const orderRepo = AppDataSource.getRepository(Order);
   const reviewRepo = AppDataSource.getRepository(Review);
@@ -419,7 +424,43 @@ async function seed() {
   }
   console.log(`📂 Categories: ${catBySlug.size}`);
 
-  // 3. Users ------------------------------------------------------------------
+  // 3. Shared GlobalProduct catalogue ----------------------------------------
+  // Each CATALOG entry creates GlobalProducts once (shared across all shops).
+  // Variants within the same family are size-grouped via parentGlobalProductId.
+  const globalProductMap = new Map<string, GlobalProduct[]>(); // family → [gp, ...]
+  for (const tpl of CATALOG) {
+    const category = catBySlug.get(tpl.categorySlug) ?? null;
+    const familyGps: GlobalProduct[] = [];
+    let parentId: string | null = null;
+
+    for (let vi = 0; vi < tpl.variants.length; vi++) {
+      const v = tpl.variants[vi];
+      const gp: GlobalProduct = await gpRepo.save(
+        gpRepo.create({
+          name: v.label,
+          brand: tpl.brand ?? null,
+          unitType: v.unitType,
+          unitSize: v.unitSize,
+          categoryId: category?.id ?? null,
+          photos: [img(v.label, tpl.bg ?? '0046AD')],
+          description: tpl.desc ?? null,
+          barcode: null,
+          isVerified: true,
+          isActive: true,
+          usageCount: 0,
+          ownerShopId: null,
+          // First variant of a multi-variant family becomes the parent
+          parentGlobalProductId: vi === 0 ? null : parentId,
+        }),
+      );
+      if (vi === 0) parentId = gp.id;
+      familyGps.push(gp);
+    }
+    globalProductMap.set(tpl.family, familyGps);
+  }
+  console.log(`📋 Global products: ${[...globalProductMap.values()].flat().length}`);
+
+  // 4. Users ------------------------------------------------------------------
   const admin = await userRepo.save(
     userRepo.create({
       phone: ADMIN.phone,
@@ -476,7 +517,7 @@ async function seed() {
   }
   console.log(`👤 Users: ${1 + owners.length + staffUsers.length + customers.length}`);
 
-  // 4. Addresses (customers near CENTER so deliveries are in-zone) -------------
+  // 5. Addresses (customers near CENTER so deliveries are in-zone) -------------
   const addrByUser = new Map<string, UserAddress>();
   const labels = ['Uy', 'Ish'];
   const allRegularUsers = [...customers, ...owners, ...staffUsers];
@@ -498,7 +539,7 @@ async function seed() {
   }
   console.log(`📍 Addresses: ${addrByUser.size}`);
 
-  // 5. Shops + approved seller applications -----------------------------------
+  // 6. Shops + approved seller applications -----------------------------------
   const shops: Shop[] = [];
   for (const def of SHOPS) {
     const owner = owners[def.ownerIdx];
@@ -544,7 +585,7 @@ async function seed() {
   }
   console.log(`🏪 Shops: ${shops.length}`);
 
-  // 6. Staff (shop 0 gets a cashier + a courier) ------------------------------
+  // 7. Staff (shop 0 gets a cashier + a courier) ------------------------------
   await staffRepo.save(
     staffRepo.create({
       shopId: shops[0].id,
@@ -565,65 +606,68 @@ async function seed() {
       isActive: true,
     }),
   );
-  // Reflect staff roles
   staffUsers[0].roles = ['customer', 'staff'];
   staffUsers[1].roles = ['customer', 'staff'];
   await userRepo.save(staffUsers);
   console.log('👥 Staff: 2 (shop 1)');
 
-  // 7. Products per shop ------------------------------------------------------
+  // 8. ProductVariants per shop (thin offerings pointing to shared GlobalProducts)
   const variantsByShop = new Map<string, ProductVariant[]>();
-  let familyCount = 0;
+  // variantId → GlobalProduct name (for order item snapshots)
+  const variantNameMap = new Map<string, string>();
   let variantCount = 0;
 
+  const catalogEntries = [...globalProductMap.entries()];
   for (let si = 0; si < shops.length; si++) {
     const shop = shops[si];
     const def = SHOPS[si];
     const shopVariants: ProductVariant[] = [];
 
     for (let i = 0; i < def.productCount; i++) {
-      const tpl = CATALOG[(si * 5 + i) % CATALOG.length];
-      const category = tpl.categorySlug ? catBySlug.get(tpl.categorySlug) ?? null : null;
-
-      const family = await familyRepo.save(
-        familyRepo.create({
-          shopId: shop.id,
-          categoryId: category?.id ?? null,
-          name: tpl.family,
-          brand: tpl.brand ?? null,
-          description: tpl.desc ?? null,
-        }),
-      );
-      familyCount++;
+      const tplIdx = (si * 5 + i) % CATALOG.length;
+      const tpl = CATALOG[tplIdx];
+      const gps = globalProductMap.get(tpl.family) ?? [];
 
       // Per-shop price jitter (±10%)
       const jitter = 0.92 + (rnd() * 0.16);
-      for (const v of tpl.variants) {
-        const price = Math.round((v.price * jitter) / 500) * 500;
-        const discount = v.discount
-          ? Math.round((v.discount * jitter) / 500) * 500
+      for (const gp of gps) {
+        // Find template variant matching this GlobalProduct's name
+        const vtpl = tpl.variants.find((v) => v.label === gp.name) ?? tpl.variants[0];
+        const price = Math.round((vtpl.price * jitter) / 500) * 500;
+        const discount = vtpl.discount
+          ? Math.round((vtpl.discount * jitter) / 500) * 500
           : null;
         const stock = randInt(8, 200);
+
         const variant = await variantRepo.save(
           variantRepo.create({
             shopId: shop.id,
-            productFamilyId: family.id,
-            name: v.label,
-            photos: [img(v.label, tpl.bg ?? def.bg)],
-            description: tpl.desc ?? null,
-            unitType: v.unitType,
-            unitSize: v.unitSize,
+            globalProductId: gp.id,
             price,
             discountPrice: discount,
             stock,
             lowStockThreshold: 5,
-            barcode: rnd() > 0.5 ? String(randInt(4_600_000_000_000, 4_799_999_999_999)) : null,
             expiryDate: null,
             isActive: true,
           }),
         );
         shopVariants.push(variant);
+        variantNameMap.set(variant.id, gp.name);
         variantCount++;
+
+        // FIFO stock batch
+        await batchRepo.save(
+          batchRepo.create({
+            productVariantId: variant.id,
+            shopId: shop.id,
+            costPrice: Math.round(price * 0.75),
+            quantityReceived: stock,
+            quantityRemaining: stock,
+            expiryDate: null,
+            receivedAt: new Date(),
+            performedByUserId: shop.ownerId,
+          }),
+        );
 
         // Initial stock-in movement
         await moveRepo.save(
@@ -637,13 +681,16 @@ async function seed() {
             performedByUserId: shop.ownerId,
           }),
         );
+
+        // Increment usageCount on GlobalProduct
+        await gpRepo.increment({ id: gp.id }, 'usageCount', 1);
       }
     }
     variantsByShop.set(shop.id, shopVariants);
   }
-  console.log(`📦 Product families: ${familyCount}, variants: ${variantCount}`);
+  console.log(`📦 Variants: ${variantCount}`);
 
-  // 8. Orders + reviews (delivered history → seeds ratings) -------------------
+  // 9. Orders + reviews -------------------------------------------------------
   const reviewTexts = [
     'Juda sifatli, rahmat!',
     'Tez yetkazib berishdi.',
@@ -654,13 +701,11 @@ async function seed() {
   ];
   let orderCount = 0;
   let reviewCount = 0;
-  // Accumulate review stars per variant to roll up ratings later.
   const variantStars = new Map<string, number[]>();
 
   for (let ci = 0; ci < customers.length; ci++) {
     const customer = customers[ci];
     const addr = addrByUser.get(customer.id)!;
-    // Each customer places 2 delivered orders from different shops.
     for (let k = 0; k < 2; k++) {
       const shop = shops[(ci * 2 + k) % shops.length];
       const pool = variantsByShop.get(shop.id)!;
@@ -681,7 +726,7 @@ async function seed() {
         items.push(
           orderRepo.manager.create(OrderItem, {
             productVariantId: v.id,
-            productName: v.name,
+            productName: variantNameMap.get(v.id) ?? '',
             quantity: qty,
             unitPrice,
             lineTotal,
@@ -725,7 +770,6 @@ async function seed() {
       );
       orderCount++;
 
-      // Review ~70% of items
       for (const it of order.items) {
         if (rnd() > 0.7) continue;
         const stars = randInt(3, 5);
@@ -747,7 +791,7 @@ async function seed() {
   }
   console.log(`🧾 Orders: ${orderCount}, Reviews: ${reviewCount}`);
 
-  // 9. Roll up ratings: variant avg from reviews, shop avg from its variants ---
+  // 10. Roll up ratings -------------------------------------------------------
   for (const [variantId, stars] of variantStars) {
     const avg = stars.reduce((a, b) => a + b, 0) / stars.length;
     await variantRepo.update(variantId, {

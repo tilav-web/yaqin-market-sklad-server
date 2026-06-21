@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { InventoryMovement } from '../products/entities/inventory-movement.entity';
+import { GlobalProduct } from '../products/entities/global-product.entity';
 import { ProductVariant } from '../products/entities/product-variant.entity';
 import { StockBatch } from '../products/entities/stock-batch.entity';
 import { OrderItem } from '../orders/entities/order-item.entity';
@@ -17,7 +18,7 @@ import { LowStockAlertService } from './low-stock-alert.service';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Order, OrderItem, ProductVariant, StockBatch, InventoryMovement, Shop, User]),
+    TypeOrmModule.forFeature([Order, OrderItem, GlobalProduct, ProductVariant, StockBatch, InventoryMovement, Shop, User]),
     PushModule,
     SettingsModule,
   ],

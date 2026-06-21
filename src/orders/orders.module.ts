@@ -11,6 +11,7 @@ import { RedisModule } from '../redis/redis.module';
 import { Shop } from '../shops/entities/shop.entity';
 import { ShopStaff } from '../shops/entities/shop-staff.entity';
 import { UserAddress } from '../users/entities/user-address.entity';
+import { GlobalProduct } from '../products/entities/global-product.entity';
 import { ProductVariant } from '../products/entities/product-variant.entity';
 import { ChatMessage } from './entities/chat-message.entity';
 import { OrderItem } from './entities/order-item.entity';
@@ -28,6 +29,7 @@ import { OrdersService } from './orders.service';
       ChatMessage,
       Shop,
       ShopStaff,
+      GlobalProduct,
       ProductVariant,
       InventoryMovement,
       UserAddress,

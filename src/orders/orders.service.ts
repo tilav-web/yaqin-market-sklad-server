@@ -12,6 +12,7 @@ import { Between, DataSource, In, LessThan, Repository } from 'typeorm';
 
 import { calcDeliveryFee, haversineKm } from '../geo/geo.util';
 import { PaymentsService } from '../payments/payments.service';
+import { GlobalProduct } from '../products/entities/global-product.entity';
 import { MovementType } from '../products/entities/inventory-movement.entity';
 import { ProductVariant } from '../products/entities/product-variant.entity';
 import { consumeFifo, restockReturn, unitCostOf } from '../products/inventory.util';
@@ -55,6 +56,8 @@ export class OrdersService {
     private readonly chat: Repository<ChatMessage>,
     @InjectRepository(ShopStaff)
     private readonly staff: Repository<ShopStaff>,
+    @InjectRepository(GlobalProduct)
+    private readonly globalProducts: Repository<GlobalProduct>,
     private readonly dataSource: DataSource,
     private readonly realtime: RealtimeGateway,
     private readonly push: PushService,
@@ -71,6 +74,15 @@ export class OrdersService {
     [OrderStatus.Delivered]: 'Yetkazildi',
     [OrderStatus.Cancelled]: 'Bekor qilindi',
   };
+
+  /** Build a variantId → productName map from a list of variants (single IN query). */
+  private async variantNameMap(variants: ProductVariant[]): Promise<Map<string, string>> {
+    if (!variants.length) return new Map();
+    const gpIds = [...new Set(variants.map((v) => v.globalProductId))];
+    const gps = await this.globalProducts.findBy({ id: In(gpIds) });
+    const gpMap = new Map(gps.map((gp) => [gp.id, gp.name]));
+    return new Map(variants.map((v) => [v.id, gpMap.get(v.globalProductId) ?? '']));
+  }
 
   /** Notify the customer and the shop's devices that an order changed. */
   private emitOrderEvent(
@@ -132,13 +144,14 @@ export class OrdersService {
     }
 
     const variantMap = new Map(variants.map((v) => [v.id, v]));
+    const nameMap = await this.variantNameMap(variants);
     let subTotal = 0;
     const lineItems: { variant: ProductVariant; quantity: number; unitPrice: number; lineTotal: number }[] = [];
     for (const it of dto.items) {
       const v = variantMap.get(it.productVariantId);
       if (!v) throw new BadRequestException('Mahsulot topilmadi');
       if (v.stock < it.quantity) {
-        throw new BadRequestException(`"${v.name}" mahsulotidan ${v.stock} ta qoldi, ${it.quantity} ta so'ralgan`);
+        throw new BadRequestException(`"${nameMap.get(v.id) ?? ''}" mahsulotidan ${v.stock} ta qoldi, ${it.quantity} ta so'ralgan`);
       }
       const unitPrice = v.discountPrice ?? v.price;
       const lineTotal = unitPrice * it.quantity;
@@ -187,27 +200,29 @@ export class OrdersService {
         });
         if (!locked) throw new BadRequestException('Mahsulot topilmadi');
         if (locked.stock < li.quantity) {
-          throw new BadRequestException(`"${locked.name}" mahsulotidan ${locked.stock} ta qoldi`);
+          throw new BadRequestException(`"${nameMap.get(locked.id) ?? ''}" mahsulotidan ${locked.stock} ta qoldi`);
         }
         const beforeStock = locked.stock;
         // Drain oldest FIFO batches first; the returned cost of goods lets us
         // compute this order's profit later.
+        const pName = nameMap.get(locked.id) ?? '';
         const { costOfGoods } = await consumeFifo(manager, {
           variant: locked,
           quantity: li.quantity,
           type: MovementType.Sold,
           orderId: savedOrder.id,
+          displayName: pName,
           reason: 'Sotildi',
         });
         // Alert the shop only when this sale pushes the item to/below its
         // low-stock threshold for the first time.
         if (beforeStock > locked.lowStockThreshold && locked.stock <= locked.lowStockThreshold) {
-          lowAlerts.push({ name: locked.name, stock: locked.stock });
+          lowAlerts.push({ name: pName, stock: locked.stock });
         }
         const item = manager.create(OrderItem, {
           orderId: savedOrder.id,
           productVariantId: locked.id,
-          productName: locked.name,
+          productName: pName,
           quantity: li.quantity,
           unitPrice: li.unitPrice,
           lineTotal: li.lineTotal,
@@ -267,13 +282,14 @@ export class OrdersService {
       where: { id: In(items.map((i) => i.productVariantId)), shopId, isActive: true },
     });
     const variantMap = new Map(variants.map((v) => [v.id, v]));
+    const nameMap = await this.variantNameMap(variants);
     let subTotal = 0;
     const lineItems: { variant: ProductVariant; quantity: number; unitPrice: number; lineTotal: number }[] = [];
     for (const it of items) {
       const v = variantMap.get(it.productVariantId);
       if (!v) throw new BadRequestException('Mahsulot topilmadi');
       if (v.stock < it.quantity) {
-        throw new BadRequestException(`"${v.name}" qoldig'i yetarli emas (${v.stock} ta)`);
+        throw new BadRequestException(`"${nameMap.get(v.id) ?? ''}" qoldig'i yetarli emas (${v.stock} ta)`);
       }
       const unitPrice = v.discountPrice ?? v.price;
       const lineTotal = unitPrice * it.quantity;
@@ -306,8 +322,9 @@ export class OrdersService {
           where: { id: li.variant.id },
           lock: { mode: 'pessimistic_write' },
         });
+        const liName = nameMap.get(li.variant.id) ?? '';
         if (!locked || locked.stock < li.quantity) {
-          throw new BadRequestException(`"${li.variant.name}" qoldig'i yetarli emas`);
+          throw new BadRequestException(`"${liName}" qoldig'i yetarli emas`);
         }
         const { costOfGoods } = await consumeFifo(manager, {
           variant: locked,
@@ -315,13 +332,14 @@ export class OrdersService {
           type: MovementType.Sold,
           orderId: savedOrder.id,
           userId,
+          displayName: liName,
           reason: 'Do\'konda sotildi',
         });
         await manager.save(
           manager.create(OrderItem, {
             orderId: savedOrder.id,
             productVariantId: li.variant.id,
-            productName: li.variant.name,
+            productName: liName,
             quantity: li.quantity,
             unitPrice: li.unitPrice,
             lineTotal: li.lineTotal,

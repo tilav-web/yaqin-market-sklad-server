@@ -14,39 +14,81 @@ import {
   Min,
 } from 'class-validator';
 
-import type { UnitType } from '../entities/product-variant.entity';
+import type { UnitType } from '../entities/global-product.entity';
 
-export class CreateProductFamilyDto {
+const UNIT_TYPES = ['piece', 'kg', 'liter', 'gram', 'pack'] as const;
+
+/**
+ * Clone a GlobalProduct into this shop — only commercial fields needed
+ * since display data lives in the shared GlobalProduct.
+ */
+export class CloneFromCatalogDto {
+  @ApiProperty({ description: 'GlobalProduct ID' })
+  @IsUUID()
+  globalProductId!: string;
+
+  @ApiProperty({ example: 5000 })
+  @IsInt()
+  @Min(0)
+  price!: number;
+
+  @ApiProperty({ example: 10 })
+  @IsInt()
+  @Min(0)
+  stock!: number;
+
+  @ApiPropertyOptional({ example: 3500 })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  costPrice?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  discountPrice?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  lowStockThreshold?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  criticalThreshold?: number;
+
+  @ApiPropertyOptional({ example: '2027-01-01' })
+  @IsOptional()
+  @IsString()
+  expiryDate?: string;
+}
+
+/** Create a new product not yet in the shared catalogue. */
+export class CreateCustomProductDto {
   @ApiProperty()
   @IsString()
   @MaxLength(256)
   name!: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsUUID()
-  categoryId?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
   brand?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ enum: UNIT_TYPES })
   @IsOptional()
-  @IsString()
-  description?: string;
-}
+  @IsEnum(UNIT_TYPES)
+  unitType?: UnitType;
 
-export class CreateProductVariantDto {
-  @ApiProperty()
-  @IsUUID()
-  productFamilyId!: string;
-
-  @ApiProperty()
-  @IsString()
-  @MaxLength(256)
-  name!: string;
+  @ApiPropertyOptional({ example: 1 })
+  @IsOptional()
+  @IsNumber()
+  @IsPositive()
+  unitSize?: number;
 
   @ApiPropertyOptional({ type: [String] })
   @IsOptional()
@@ -60,14 +102,16 @@ export class CreateProductVariantDto {
   @IsString()
   description?: string;
 
-  @ApiProperty({ enum: ['piece', 'kg', 'liter', 'gram', 'pack'] })
-  @IsEnum(['piece', 'kg', 'liter', 'gram', 'pack'])
-  unitType!: UnitType;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
+  categoryId?: string;
 
-  @ApiProperty({ example: 1 })
-  @IsNumber()
-  @IsPositive()
-  unitSize!: number;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  barcode?: string;
 
   @ApiProperty({ example: 5000 })
   @IsInt()
@@ -85,7 +129,7 @@ export class CreateProductVariantDto {
   @Min(0)
   stock!: number;
 
-  @ApiPropertyOptional({ example: 3500, description: 'Boshlang\'ich qoldiq tannarxi (dona uchun)' })
+  @ApiPropertyOptional({ example: 3500 })
   @IsOptional()
   @IsInt()
   @Min(0)
@@ -99,8 +143,9 @@ export class CreateProductVariantDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsString()
-  barcode?: string;
+  @IsInt()
+  @Min(0)
+  criticalThreshold?: number;
 
   @ApiPropertyOptional({ example: '2027-01-01' })
   @IsOptional()
@@ -109,9 +154,11 @@ export class CreateProductVariantDto {
 }
 
 export class UpdateProductVariantDto {
+  // Display fields — only editable for private (seller-owned) GlobalProducts
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(256)
   name?: string;
 
   @ApiPropertyOptional({ type: [String] })
@@ -126,6 +173,7 @@ export class UpdateProductVariantDto {
   @IsString()
   description?: string;
 
+  // Commercial fields — always editable
   @ApiPropertyOptional()
   @IsOptional()
   @IsInt()
@@ -143,6 +191,12 @@ export class UpdateProductVariantDto {
   @IsInt()
   @Min(0)
   lowStockThreshold?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  criticalThreshold?: number | null;
 
   @ApiPropertyOptional()
   @IsOptional()

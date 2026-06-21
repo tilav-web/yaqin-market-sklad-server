@@ -3,6 +3,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 
+import { GlobalProduct } from '../products/entities/global-product.entity';
 import { ProductVariant } from '../products/entities/product-variant.entity';
 import { StockBatch } from '../products/entities/stock-batch.entity';
 import { PushService } from '../push/push.service';
@@ -21,9 +22,19 @@ export class ExpiryAlertService {
     private readonly shops: Repository<Shop>,
     @InjectRepository(ProductVariant)
     private readonly variants: Repository<ProductVariant>,
+    @InjectRepository(GlobalProduct)
+    private readonly globalProducts: Repository<GlobalProduct>,
     private readonly push: PushService,
     private readonly settings: SettingsService,
   ) {}
+
+  private async loadNameMap(rows: ProductVariant[]): Promise<Map<string, string>> {
+    if (!rows.length) return new Map();
+    const gpIds = [...new Set(rows.map((v) => v.globalProductId))];
+    const gps = await this.globalProducts.findBy({ id: In(gpIds) });
+    const gpMap = new Map(gps.map((gp) => [gp.id, gp.name]));
+    return new Map(rows.map((v) => [v.id, gpMap.get(v.globalProductId) ?? '']));
+  }
 
   /** Kritik: muddati 2 kun ichida tugayotgan mahsulotlar — har soatda tekshiriladi. */
   @Cron(CronExpression.EVERY_HOUR)
@@ -37,11 +48,12 @@ export class ExpiryAlertService {
       .andWhere('v.expiryDate IS NOT NULL')
       .andWhere('v.expiryDate <= :cutoff', { cutoff })
       .andWhere('v.stock > 0')
-      .select(['v.shopId', 'v.id', 'v.name', 'v.expiryDate', 'v.stock'])
+      .select(['v.shopId', 'v.id', 'v.globalProductId', 'v.expiryDate', 'v.stock'])
       .getMany();
 
     if (!rows.length) return;
 
+    const nameMap = await this.loadNameMap(rows);
     const shopIds = [...new Set(rows.map((r) => r.shopId))];
     const shops = await this.shops.find({ where: { id: In(shopIds) } });
     const ownerMap = new Map(shops.map((s) => [s.id, s.ownerId]));
@@ -56,7 +68,7 @@ export class ExpiryAlertService {
     for (const [shopId, items] of grouped) {
       const ownerId = ownerMap.get(shopId);
       if (!ownerId) continue;
-      const names = items.slice(0, 3).map((v) => v.name).join(', ');
+      const names = items.slice(0, 3).map((v) => nameMap.get(v.id) ?? '').join(', ');
       await this.push.sendToUser(ownerId, {
         title: '🔴 Muddati tugayapti (kritik)',
         body: `${items.length} ta mahsulot ${criticalDays} kun ichida yaroqsiz: ${names}`,
@@ -66,7 +78,7 @@ export class ExpiryAlertService {
     this.logger.log(`Critical expiry alerts sent for ${grouped.size} shop(s)`);
   }
 
-  /** Kunlik xulasa soat 20:00: ogohlantirish darajasidagi muddatlar. */
+  /** Kunlik xulosa soat 20:00: ogohlantirish darajasidagi muddatlar. */
   @Cron('0 20 * * *')
   async sendDailyExpiryDigest(): Promise<void> {
     const warningDays = this.settings.getNumber(SETTING_KEYS.EXPIRY_WARNING_DAYS, 7);
@@ -78,7 +90,7 @@ export class ExpiryAlertService {
       .andWhere('v.expiryDate IS NOT NULL')
       .andWhere('v.expiryDate <= :cutoff', { cutoff })
       .andWhere('v.stock > 0')
-      .select(['v.shopId', 'v.id', 'v.name', 'v.expiryDate'])
+      .select(['v.shopId', 'v.id', 'v.globalProductId', 'v.expiryDate'])
       .getMany();
 
     if (!rows.length) return;

@@ -82,6 +82,8 @@ export interface ConsumeInput {
   orderId?: string | null;
   userId?: string | null;
   reason?: string;
+  /** Product name for error messages (fetched from GlobalProduct by caller). */
+  displayName?: string;
 }
 
 /**
@@ -96,7 +98,8 @@ export async function consumeFifo(
   let need = input.quantity;
   if (need <= 0) return { costOfGoods: 0 };
   if (variant.stock < need) {
-    throw new BadRequestException(`"${variant.name}" qoldig'i yetarli emas`);
+    const label = input.displayName ? `"${input.displayName}"` : 'Mahsulot';
+    throw new BadRequestException(`${label} qoldig'i yetarli emas`);
   }
 
   const batches = await manager.find(StockBatch, {

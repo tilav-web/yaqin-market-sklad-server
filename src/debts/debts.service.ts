@@ -2,6 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
 
+import { GlobalProduct } from '../products/entities/global-product.entity';
 import { MovementType } from '../products/entities/inventory-movement.entity';
 import { ProductVariant } from '../products/entities/product-variant.entity';
 import { consumeFifo } from '../products/inventory.util';
@@ -33,6 +34,8 @@ export class DebtsService {
     private readonly staff: Repository<ShopStaff>,
     @InjectRepository(ProductVariant)
     private readonly variants: Repository<ProductVariant>,
+    @InjectRepository(GlobalProduct)
+    private readonly globalProducts: Repository<GlobalProduct>,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -59,16 +62,20 @@ export class DebtsService {
       const ids = inputs.map((l) => l.variantId);
       const found = await this.variants.find({ where: { id: In(ids), shopId } });
       variantMap = new Map(found.map((v) => [v.id, v]));
+      const gpIds = [...new Set(found.map((v) => v.globalProductId))];
+      const gps = await this.globalProducts.findBy({ id: In(gpIds) });
+      const gpNameMap = new Map(gps.map((gp) => [gp.id, gp.name]));
+      const nameMap = new Map(found.map((v) => [v.id, gpNameMap.get(v.globalProductId) ?? '']));
       for (const input of inputs) {
         const v = variantMap.get(input.variantId);
         if (!v) throw new NotFoundException('Mahsulot topilmadi');
         if (dto.decrementStock && v.stock < input.quantity) {
-          throw new BadRequestException(`"${v.name}" qoldig'i yetarli emas (${v.stock} ta)`);
+          throw new BadRequestException(`"${nameMap.get(v.id) ?? ''}" qoldig'i yetarli emas (${v.stock} ta)`);
         }
         const unitPrice = v.discountPrice ?? v.price;
         const lineTotal = unitPrice * input.quantity;
         itemsTotal += lineTotal;
-        lines.push({ variantId: v.id, name: v.name, quantity: input.quantity, unitPrice, lineTotal });
+        lines.push({ variantId: v.id, name: nameMap.get(v.id) ?? '', quantity: input.quantity, unitPrice, lineTotal });
       }
     }
 

@@ -3,6 +3,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 
+import { GlobalProduct } from '../products/entities/global-product.entity';
 import { ProductVariant } from '../products/entities/product-variant.entity';
 import { PushService } from '../push/push.service';
 import { SETTING_KEYS } from '../settings/entities/global-setting.entity';
@@ -18,11 +19,21 @@ export class LowStockAlertService {
     private readonly variants: Repository<ProductVariant>,
     @InjectRepository(Shop)
     private readonly shops: Repository<Shop>,
+    @InjectRepository(GlobalProduct)
+    private readonly globalProducts: Repository<GlobalProduct>,
     private readonly push: PushService,
     private readonly settings: SettingsService,
   ) {}
 
-  /** Darhol push: stock kritik darajadan past tushganda (har 15 daqiqada tekshiriladi). */
+  private async loadNameMap(rows: ProductVariant[]): Promise<Map<string, string>> {
+    if (!rows.length) return new Map();
+    const gpIds = [...new Set(rows.map((v) => v.globalProductId))];
+    const gps = await this.globalProducts.findBy({ id: In(gpIds) });
+    const gpMap = new Map(gps.map((gp) => [gp.id, gp.name]));
+    return new Map(rows.map((v) => [v.id, gpMap.get(v.globalProductId) ?? '']));
+  }
+
+  /** Darhol push: stock kritik darajadan past tushganda (har 10 daqiqada tekshiriladi). */
   @Cron(CronExpression.EVERY_10_MINUTES)
   async sendCriticalAlerts(): Promise<void> {
     const defaultCritical = this.settings.getNumber(SETTING_KEYS.LOW_STOCK_CRITICAL_DEFAULT, 3);
@@ -35,11 +46,12 @@ export class LowStockAlertService {
         { def: defaultCritical },
       )
       .andWhere('v.stock > 0')
-      .select(['v.shopId', 'v.id', 'v.name', 'v.stock', 'v.criticalThreshold'])
+      .select(['v.shopId', 'v.id', 'v.globalProductId', 'v.stock', 'v.criticalThreshold'])
       .getMany();
 
     if (!rows.length) return;
 
+    const nameMap = await this.loadNameMap(rows);
     const shopIds = [...new Set(rows.map((r) => r.shopId))];
     const shops = await this.shops.find({ where: { id: In(shopIds) } });
     const ownerMap = new Map(shops.map((s) => [s.id, s.ownerId]));
@@ -54,7 +66,7 @@ export class LowStockAlertService {
     for (const [shopId, items] of grouped) {
       const ownerId = ownerMap.get(shopId);
       if (!ownerId) continue;
-      const names = items.slice(0, 3).map((v) => `${v.name} (${v.stock} ta)`).join(', ');
+      const names = items.slice(0, 3).map((v) => `${nameMap.get(v.id) ?? ''} (${v.stock} ta)`).join(', ');
       const more = items.length > 3 ? ` va yana ${items.length - 3} ta` : '';
       await this.push.sendToUser(ownerId, {
         title: '⚠️ Kritik: tovar tugayapti',
@@ -78,11 +90,12 @@ export class LowStockAlertService {
         { def: defaultWarning },
       )
       .andWhere('v.stock > 0')
-      .select(['v.shopId', 'v.id', 'v.name', 'v.stock'])
+      .select(['v.shopId', 'v.id', 'v.globalProductId', 'v.stock'])
       .getMany();
 
     if (!rows.length) return;
 
+    const nameMap = await this.loadNameMap(rows);
     const shopIds = [...new Set(rows.map((r) => r.shopId))];
     const shops = await this.shops.find({ where: { id: In(shopIds) } });
     const ownerMap = new Map(shops.map((s) => [s.id, s.ownerId]));
@@ -97,7 +110,7 @@ export class LowStockAlertService {
     for (const [shopId, items] of grouped) {
       const ownerId = ownerMap.get(shopId);
       if (!ownerId) continue;
-      const top = items.slice(0, 5).map((v) => `${v.name}: ${v.stock} ta`).join(', ');
+      const top = items.slice(0, 5).map((v) => `${nameMap.get(v.id) ?? ''}: ${v.stock} ta`).join(', ');
       const more = items.length > 5 ? ` va yana ${items.length - 5} ta` : '';
       await this.push.sendToUser(ownerId, {
         title: 'Kam qoldiqlar — kunlik hisobot',

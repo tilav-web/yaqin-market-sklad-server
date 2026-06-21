@@ -9,7 +9,6 @@ import { ShopStaff } from '../shops/entities/shop-staff.entity';
 import { User } from '../users/entities/user.entity';
 import { GlobalProduct } from './entities/global-product.entity';
 import { InventoryMovement } from './entities/inventory-movement.entity';
-import { ProductFamily } from './entities/product-family.entity';
 import { ProductVariant } from './entities/product-variant.entity';
 import { StockBatch } from './entities/stock-batch.entity';
 import {
@@ -25,7 +24,6 @@ import { ProductsService } from './products.service';
 @Module({
   imports: [
     TypeOrmModule.forFeature([
-      ProductFamily,
       ProductVariant,
       InventoryMovement,
       StockBatch,

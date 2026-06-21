@@ -6,18 +6,19 @@ import {
   JoinColumn,
   ManyToOne,
   PrimaryGeneratedColumn,
+  Unique,
   UpdateDateColumn,
 } from 'typeorm';
 
 import { Shop } from '../../shops/entities/shop.entity';
-import { ProductFamily } from './product-family.entity';
+import { GlobalProduct } from './global-product.entity';
 
-export type UnitType = 'piece' | 'kg' | 'liter' | 'gram' | 'pack';
-
+/** One shop's commercial offering of a GlobalProduct (price, stock, discounts). */
 @Entity({ name: 'product_variants' })
 @Index(['shopId'])
-@Index(['productFamilyId'])
-@Index(['barcode'])
+@Index(['shopId', 'isActive', 'createdAt'])
+@Index(['globalProductId'])
+@Unique(['shopId', 'globalProductId'])
 export class ProductVariant {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
@@ -30,26 +31,11 @@ export class ProductVariant {
   shop!: Shop;
 
   @Column({ type: 'uuid' })
-  productFamilyId!: string;
+  globalProductId!: string;
 
-  @ManyToOne(() => ProductFamily, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'productFamilyId' })
-  productFamily!: ProductFamily;
-
-  @Column({ type: 'varchar', length: 256 })
-  name!: string;
-
-  @Column({ type: 'jsonb', default: () => "'[]'::jsonb" })
-  photos!: string[];
-
-  @Column({ type: 'text', nullable: true })
-  description!: string | null;
-
-  @Column({ type: 'varchar', length: 16, default: 'piece' })
-  unitType!: UnitType;
-
-  @Column({ type: 'double precision', default: 1 })
-  unitSize!: number;
+  @ManyToOne(() => GlobalProduct, { onDelete: 'RESTRICT' })
+  @JoinColumn({ name: 'globalProductId' })
+  globalProduct!: GlobalProduct;
 
   @Column({ type: 'int' })
   price!: number;
@@ -57,22 +43,16 @@ export class ProductVariant {
   @Column({ type: 'int', nullable: true })
   discountPrice!: number | null;
 
+  /** Cached sum of FIFO batch quantities. Updated by receiveBatch/consumeFifo. */
   @Column({ type: 'int', default: 0 })
   stock!: number;
 
   @Column({ type: 'int', default: 5 })
   lowStockThreshold!: number;
 
-  /** Kritik daraja: darhol push (null = GlobalSetting default). */
+  /** Critical level: triggers immediate push (null = GlobalSetting default). */
   @Column({ type: 'int', nullable: true })
   criticalThreshold!: number | null;
-
-  @Column({ type: 'varchar', length: 64, nullable: true })
-  barcode!: string | null;
-
-  /** Links this shop offering to the shared catalogue entry (by barcode). */
-  @Column({ type: 'uuid', nullable: true })
-  globalProductId!: string | null;
 
   @Column({ type: 'date', nullable: true })
   expiryDate!: Date | null;

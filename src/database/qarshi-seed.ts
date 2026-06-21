@@ -24,8 +24,9 @@ import { DataSource } from 'typeorm';
 
 import { Category } from '../categories/entities/category.entity';
 import { InventoryMovement, MovementType } from '../products/entities/inventory-movement.entity';
-import { ProductFamily } from '../products/entities/product-family.entity';
-import { ProductVariant, UnitType } from '../products/entities/product-variant.entity';
+import { GlobalProduct, UnitType } from '../products/entities/global-product.entity';
+import { ProductVariant } from '../products/entities/product-variant.entity';
+import { StockBatch } from '../products/entities/stock-batch.entity';
 import { PRESET_PERMISSIONS, ShopStaff } from '../shops/entities/shop-staff.entity';
 import { DeliveryPricingType, Shop, WorkingHourSlot } from '../shops/entities/shop.entity';
 import { User, UserStatus } from '../users/entities/user.entity';
@@ -44,8 +45,9 @@ const AppDataSource = new DataSource({
     Category,
     Shop,
     ShopStaff,
-    ProductFamily,
+    GlobalProduct,
     ProductVariant,
+    StockBatch,
     InventoryMovement,
     User,
   ],
@@ -162,7 +164,8 @@ const CATEGORY_TREE: CatNode[] = [
 ];
 
 // ---------------------------------------------------------------------------
-// Product catalog (image keyword + variants); reused across shops
+// Product catalog (image keyword + variants)
+// Each entry maps to GlobalProduct(s) shared across shops.
 // ---------------------------------------------------------------------------
 interface VarTpl { label: string; unitType: UnitType; unitSize: number; price: number; discount?: number }
 interface ProdTpl { key: string; family: string; brand?: string; cat: string; kw: string; desc?: string; variants: VarTpl[] }
@@ -275,10 +278,10 @@ const STREETS = [
 ];
 const OWNER_NAMES = [
   'Akmal Karimov', "Sardor To'rayev", 'Jasur Rahmonov', 'Bobur Sodiqov', 'Davron Ergashev',
-  'Sherzod Qodirov', 'Olim Yusupov', 'Farrux Nazarov', 'Ulug\'bek Tosh', 'Aziz Murodov',
+  'Sherzod Qodirov', 'Olim Yusupov', 'Farrux Nazarov', "Ulug'bek Tosh", 'Aziz Murodov',
   'Shavkat Hamroyev', 'Rustam Berdiyev',
 ];
-const STAFF_FIRST = ['Bahodir', 'Anvar', 'Dilshod', 'Sanjar', 'Otabek', 'Jamshid', 'Nodir', 'Sherali', 'Ravshan', 'Kamol', 'Ulug\'bek', 'Doston', 'Sardor', 'Bekzod', 'Aybek'];
+const STAFF_FIRST = ['Bahodir', 'Anvar', 'Dilshod', 'Sanjar', 'Otabek', 'Jamshid', 'Nodir', 'Sherali', 'Ravshan', 'Kamol', "Ulug'bek", 'Doston', 'Sardor', 'Bekzod', 'Aybek'];
 const SHOP_IMG_KW = ['grocery,store', 'supermarket', 'shop,storefront', 'market,fruit', 'convenience,store', 'bakery,shop', 'fruit,market', 'food,store', 'minimarket', 'vegetable,stand', 'store,front', 'grocery,shelf'];
 
 // Demo shops are 24/7 so the feed/map are populated whenever an investor opens
@@ -298,8 +301,9 @@ async function seed() {
   const userRepo = AppDataSource.getRepository(User);
   const shopRepo = AppDataSource.getRepository(Shop);
   const staffRepo = AppDataSource.getRepository(ShopStaff);
-  const familyRepo = AppDataSource.getRepository(ProductFamily);
+  const gpRepo = AppDataSource.getRepository(GlobalProduct);
   const variantRepo = AppDataSource.getRepository(ProductVariant);
+  const batchRepo = AppDataSource.getRepository(StockBatch);
   const moveRepo = AppDataSource.getRepository(InventoryMovement);
 
   // Guard: don't double-seed.
@@ -359,7 +363,43 @@ async function seed() {
     shopImg.push(await seedImage(`shop-${i}`, SHOP_IMG_KW[i], 500 + i));
   }
 
-  // 4. Shops on a ~1 km grid across the city ---------------------------------
+  // 4. Shared GlobalProduct catalogue (once, before shops) -------------------
+  // Each variant template becomes one GlobalProduct shared across all shops.
+  // Multi-variant families are size-grouped via parentGlobalProductId.
+  const globalProductMap = new Map<string, GlobalProduct[]>(); // family key → [gp, ...]
+  let gpCount = 0;
+  for (const tpl of CATALOG) {
+    const category = catBySlug.get(tpl.cat) ?? null;
+    const photo = prodImg.get(tpl.key) ?? '';
+    const familyGps: GlobalProduct[] = [];
+    let parentId: string | null = null;
+
+    for (let vi = 0; vi < tpl.variants.length; vi++) {
+      const v = tpl.variants[vi];
+      const gp: GlobalProduct = await gpRepo.save(gpRepo.create({
+        name: v.label,
+        brand: tpl.brand ?? null,
+        unitType: v.unitType,
+        unitSize: v.unitSize,
+        categoryId: category?.id ?? null,
+        photos: photo ? [photo] : [],
+        description: tpl.desc ?? null,
+        barcode: null,
+        isVerified: true,
+        isActive: true,
+        usageCount: 0,
+        ownerShopId: null,
+        parentGlobalProductId: vi === 0 ? null : parentId,
+      }));
+      if (vi === 0) parentId = gp.id;
+      familyGps.push(gp);
+      gpCount++;
+    }
+    globalProductMap.set(tpl.key, familyGps);
+  }
+  console.log(`📋 Global products: ${gpCount}`);
+
+  // 5. Shops on a ~1 km grid across the city ---------------------------------
   const GRID = 7;        // 7x7
   const SPACING = 1.0;   // km between grid points
   const placements: { north: number; east: number }[] = [];
@@ -371,11 +411,9 @@ async function seed() {
       });
     }
   }
-  // Take up to as many shops as we have names for.
   const shopCount = Math.min(SHOP_NAMES.length, placements.length);
 
   let staffSeq = 0;
-  let familyCount = 0;
   let variantCount = 0;
 
   for (let si = 0; si < shopCount; si++) {
@@ -383,7 +421,6 @@ async function seed() {
     const owner = owners[si % owners.length];
     const loc = offset(placements[si].north, placements[si].east);
 
-    // Delivery: max 1 km, mixed free + paid tiers.
     const freeKm = pick([0.3, 0.5, 0.7, 1.0]);
     const fullyFree = freeKm >= 1.0;
     const pricingType: DeliveryPricingType = fullyFree ? 'flat' : pick(['per_500m', 'per_100m', 'per_km']);
@@ -414,7 +451,7 @@ async function seed() {
       ratingCount: randInt(12, 280),
     }));
 
-    // Staff: a cashier always, plus a courier for most shops.
+    // Staff
     const mkStaff = async (preset: 'kassir' | 'yetkazib_beruvchi', role: string) => {
       const u = await userRepo.save(userRepo.create({
         phone: `+9989032${String(staffSeq++).padStart(5, '0')}`,
@@ -430,42 +467,43 @@ async function seed() {
     await mkStaff('kassir', 'Kassir');
     if (rnd() > 0.25) await mkStaff('yetkazib_beruvchi', 'Yetkazib beruvchi');
 
-    // Products: a rotating subset of the catalog, 12–20 families per shop.
+    // Products: a rotating subset of the catalog, 12–20 GlobalProducts per shop.
     const count = randInt(12, 20);
     const start = (si * 5) % CATALOG.length;
     for (let i = 0; i < count; i++) {
       const tpl = CATALOG[(start + i) % CATALOG.length];
-      const category = catBySlug.get(tpl.cat) ?? null;
-      const family = await familyRepo.save(familyRepo.create({
-        shopId: shop.id,
-        categoryId: category?.id ?? null,
-        name: tpl.family,
-        brand: tpl.brand ?? null,
-        description: tpl.desc ?? null,
-      }));
-      familyCount++;
-      const jitter = 0.92 + rnd() * 0.16; // ±8% per-shop price
-      for (const v of tpl.variants) {
-        const price = round500(v.price * jitter);
-        const discountPrice = v.discount ? round500(v.discount * jitter) : null;
+      const gps = globalProductMap.get(tpl.key) ?? [];
+      const jitter = 0.92 + rnd() * 0.16;
+
+      for (const gp of gps) {
+        const vtpl = tpl.variants.find((v) => v.label === gp.name) ?? tpl.variants[0];
+        const price = round500(vtpl.price * jitter);
+        const discountPrice = vtpl.discount ? round500(vtpl.discount * jitter) : null;
         const stock = randInt(8, 200);
+
         const variant = await variantRepo.save(variantRepo.create({
           shopId: shop.id,
-          productFamilyId: family.id,
-          name: v.label,
-          photos: [prodImg.get(tpl.key)!],
-          description: tpl.desc ?? null,
-          unitType: v.unitType,
-          unitSize: v.unitSize,
+          globalProductId: gp.id,
           price,
           discountPrice,
           stock,
           lowStockThreshold: 5,
-          barcode: rnd() > 0.5 ? String(randInt(4_600_000_000_000, 4_799_999_999_999)) : null,
           expiryDate: null,
           isActive: true,
         }));
         variantCount++;
+
+        await batchRepo.save(batchRepo.create({
+          productVariantId: variant.id,
+          shopId: shop.id,
+          costPrice: Math.round(price * 0.75),
+          quantityReceived: stock,
+          quantityRemaining: stock,
+          expiryDate: null,
+          receivedAt: new Date(),
+          performedByUserId: owner.id,
+        }));
+
         await moveRepo.save(moveRepo.create({
           productVariantId: variant.id,
           type: MovementType.In,
@@ -475,6 +513,8 @@ async function seed() {
           reason: "Boshlang'ich kirim",
           performedByUserId: owner.id,
         }));
+
+        await gpRepo.increment({ id: gp.id }, 'usageCount', 1);
       }
     }
     if ((si + 1) % 10 === 0) console.log(`  …${si + 1}/${shopCount} shops`);
@@ -482,7 +522,7 @@ async function seed() {
 
   console.log(`🏪 Shops: ${shopCount}`);
   console.log(`👥 Staff users: ${staffSeq}`);
-  console.log(`📦 Families: ${familyCount}, Variants: ${variantCount}`);
+  console.log(`📦 Variants: ${variantCount}`);
   console.log('✅ Qarshi demo seed complete');
   await AppDataSource.destroy();
 }
