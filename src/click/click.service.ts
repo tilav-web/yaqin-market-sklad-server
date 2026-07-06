@@ -80,14 +80,25 @@ export class ClickService {
     if (!this.amountMatch(order.total, amount)) return errRes(ERR.INVALID_AMOUNT, 'amount mismatch');
 
     return this.dataSource.transaction(async (em) => {
-      const existing = await em.findOne(ClickPaymentTransaction, {
-        where: { clickTransId: click_trans_id },
-      });
-      if (existing?.status === ClickTxStatus.Cancelled) {
+      // Lock any row already tracking this order (mirrors complete()'s
+      // locking) so two concurrent webhook calls for the same order can't
+      // both see "nothing exists yet" and race to insert a duplicate.
+      let tx = click_trans_id
+        ? await em.findOne(ClickPaymentTransaction, {
+            where: { clickTransId: click_trans_id },
+            lock: { mode: 'pessimistic_write' },
+          })
+        : null;
+      if (!tx) {
+        tx = await em.findOne(ClickPaymentTransaction, {
+          where: { orderId: order.id },
+          lock: { mode: 'pessimistic_write' },
+        });
+      }
+      if (tx?.status === ClickTxStatus.Cancelled) {
         return errRes(ERR.TX_CANCELLED, 'transaction cancelled');
       }
 
-      let tx = existing ?? await em.findOne(ClickPaymentTransaction, { where: { orderId: order.id } });
       if (!tx) {
         tx = em.create(ClickPaymentTransaction, {
           orderId: order.id,
@@ -98,7 +109,26 @@ export class ClickService {
       } else if (click_trans_id) {
         tx.clickTransId = click_trans_id;
       }
-      const saved = await em.save(ClickPaymentTransaction, tx);
+
+      let saved: ClickPaymentTransaction;
+      try {
+        saved = await em.save(ClickPaymentTransaction, tx);
+      } catch (e: any) {
+        // Unique orderId race: a concurrent prepare() call inserted first —
+        // fall back to locking and updating the row that won the race.
+        if (e?.code === '23505') {
+          const winner = await em.findOne(ClickPaymentTransaction, {
+            where: { orderId: order.id },
+            lock: { mode: 'pessimistic_write' },
+          });
+          if (!winner) throw e;
+          if (click_trans_id) winner.clickTransId = click_trans_id;
+          saved = await em.save(ClickPaymentTransaction, winner);
+        } else {
+          throw e;
+        }
+      }
+
       return {
         click_trans_id,
         merchant_trans_id,

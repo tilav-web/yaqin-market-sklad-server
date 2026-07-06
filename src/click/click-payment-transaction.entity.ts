@@ -18,7 +18,10 @@ export class ClickPaymentTransaction {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
 
-  @Index()
+  // One transaction row per order — prepare() reuses/updates it across
+  // retries instead of creating a new one, so this must be unique to catch
+  // any duplicate insert race from concurrent webhook calls at the DB level.
+  @Index({ unique: true })
   @Column({ type: 'uuid' })
   orderId!: string;
 
