@@ -10,7 +10,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { customAlphabet } from 'nanoid';
 import { Between, DataSource, In, LessThan, Repository } from 'typeorm';
 
-import { calcDeliveryFee, haversineKm } from '../geo/geo.util';
+import { calcDeliveryFee, haversineKm, pointInPolygon } from '../geo/geo.util';
 import { PaymentsService } from '../payments/payments.service';
 import { GlobalProduct } from '../products/entities/global-product.entity';
 import { MovementType } from '../products/entities/inventory-movement.entity';
@@ -173,7 +173,13 @@ export class OrdersService {
     if (!address) throw new NotFoundException('Manzil topilmadi');
 
     const distanceKm = haversineKm(address.latitude, address.longitude, shop.latitude, shop.longitude);
-    if (distanceKm > shop.deliveryZone.maxKm) {
+    // A configured delivery polygon is authoritative over the circle radius
+    // (mirrors products.service.ts's feedNearby reachability check) — a shop
+    // with an irregular delivery area shouldn't be limited to a circle.
+    const isReachable = shop.deliveryPolygon
+      ? pointInPolygon(address.latitude, address.longitude, shop.deliveryPolygon)
+      : distanceKm <= shop.deliveryZone.maxKm;
+    if (!isReachable) {
       throw new BadRequestException("Manzil do'konning yetkazib berish zonasidan tashqarida");
     }
 
@@ -227,12 +233,20 @@ export class OrdersService {
       throw new BadRequestException(`Minimal buyurtma narxi: ${shop.minOrderPrice} so'm`);
     }
 
-    let deliveryFee = calcDeliveryFee({
-      distanceKm,
-      freeKm: shop.deliveryZone.freeKm,
-      pricingType: shop.deliveryZone.pricingType,
-      pricePerStep: shop.deliveryZone.pricePerStep,
-    });
+    // Free-delivery polygon is authoritative over the circle-based freeKm too
+    // (mirrors products.service.ts's feedNearby fee calc) — a customer inside
+    // the configured free-delivery polygon must not be charged a fee.
+    const isFreeByPolygon =
+      shop.freeDeliveryPolygon != null &&
+      pointInPolygon(address.latitude, address.longitude, shop.freeDeliveryPolygon);
+    let deliveryFee = isFreeByPolygon
+      ? 0
+      : calcDeliveryFee({
+          distanceKm,
+          freeKm: shop.deliveryZone.freeKm,
+          pricingType: shop.deliveryZone.pricingType,
+          pricePerStep: shop.deliveryZone.pricePerStep,
+        });
     // Shop-level free_delivery promotion against the cart subtotal.
     const freeDelivery = await this.promotions.findFreeDeliveryPromotion(shop.id, subTotal);
     if (freeDelivery.free) deliveryFee = 0;
