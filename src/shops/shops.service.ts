@@ -185,6 +185,16 @@ export class ShopsService {
         throw new BadRequestException('Siz do\'kon egasisiz — o\'zingizni xodim qila olmaysiz');
       }
 
+      // Lock the USER row (not the invite — two different invitations from
+      // two different owners are two different rows) so two concurrent
+      // accept-invitation calls for the same user can't both pass the
+      // cross-owner conflict check below; the second one blocks here until
+      // the first transaction commits its ShopStaff insert, then re-reads
+      // fresh membership data. No dedicated DB constraint is practical for
+      // "one staff, one owner" since it spans shops via Shop.ownerId — this
+      // lock is the race-proofing instead (see also shop-staff.entity.ts).
+      await manager.findOne(User, { where: { id: userId }, lock: { mode: 'pessimistic_write' } });
+
       // Business rule: a staff member works for a single owner only.
       const existingMemberships = await manager.find(ShopStaff, {
         where: { userId, isActive: true },

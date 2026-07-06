@@ -108,6 +108,17 @@ export const PRESET_PERMISSIONS: Record<Exclude<StaffPreset, 'custom'>, StaffPer
   ],
 };
 
+/**
+ * Business rule: a staff member works for a single owner only (one user
+ * cannot be active staff at shops owned by two different sellers at once).
+ * There is intentionally no DB-level CHECK/EXCLUDE constraint enforcing
+ * this — it spans rows in the `shops` table (via shop.ownerId) and can't be
+ * expressed as a simple constraint scoped to this table alone (it would
+ * need a cross-table trigger). Race-safety is instead handled at the
+ * application level in shops.service.ts#acceptStaffInvitation, which locks
+ * the target User row before checking existing memberships so two
+ * concurrent invitation-accepts for the same user can't both pass.
+ */
 @Entity({ name: 'shop_staff' })
 @Unique(['shopId', 'userId'])
 @Index(['shopId'])
