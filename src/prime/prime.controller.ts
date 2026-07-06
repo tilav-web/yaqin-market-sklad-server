@@ -2,7 +2,8 @@ import { Body, Controller, Delete, Get, Param, Post, Put, Query, Request } from 
 
 import { Role } from '../auth/role.enum';
 import { Roles } from '../auth/decorators/roles.decorator';
-import { PrimePlan } from './entities/prime-plan.entity';
+import { CreatePrimePlanDto, ExtendPrimeSubDto, UpdatePrimePlanDto } from './dto/prime-plan.dto';
+import { SubscribeDto } from './dto/subscribe.dto';
 import { PrimeService } from './prime.service';
 
 /* ─── Seller endpoints ─── */
@@ -28,10 +29,7 @@ export class SellerPrimeController {
   }
 
   @Post('subscribe')
-  subscribe(
-    @Request() req: any,
-    @Body() body: { planId: string; yearly?: boolean },
-  ) {
+  subscribe(@Request() req: any, @Body() body: SubscribeDto) {
     return this.svc.subscribe(req.user.sub, body.planId, body.yearly ?? false);
   }
 }
@@ -49,12 +47,12 @@ export class AdminPrimeController {
   }
 
   @Post('plans')
-  createPlan(@Body() dto: Partial<PrimePlan>) {
+  createPlan(@Body() dto: CreatePrimePlanDto) {
     return this.svc.createPlan(dto);
   }
 
   @Put('plans/:id')
-  updatePlan(@Param('id') id: string, @Body() dto: Partial<PrimePlan>) {
+  updatePlan(@Param('id') id: string, @Body() dto: UpdatePrimePlanDto) {
     return this.svc.updatePlan(id, dto);
   }
 
@@ -69,7 +67,7 @@ export class AdminPrimeController {
   }
 
   @Put('subscriptions/:id/extend')
-  extend(@Param('id') id: string, @Body('days') days: number) {
-    return this.svc.adminExtend(id, days);
+  extend(@Param('id') id: string, @Body() dto: ExtendPrimeSubDto) {
+    return this.svc.adminExtend(id, dto.days);
   }
 }

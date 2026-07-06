@@ -2,6 +2,9 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException,
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Or, Repository } from 'typeorm';
 
+import { Shop } from '../shops/entities/shop.entity';
+import { ShopStaff } from '../shops/entities/shop-staff.entity';
+import { assertShopPermission } from '../shops/shop-access.util';
 import { ChatTemplate } from './entities/chat-template.entity';
 
 const SYSTEM_TEMPLATES = [
@@ -18,6 +21,10 @@ export class ChatTemplatesService implements OnModuleInit {
   constructor(
     @InjectRepository(ChatTemplate)
     private readonly repo: Repository<ChatTemplate>,
+    @InjectRepository(Shop)
+    private readonly shops: Repository<Shop>,
+    @InjectRepository(ShopStaff)
+    private readonly staff: Repository<ShopStaff>,
   ) {}
 
   async onModuleInit() {
@@ -30,8 +37,14 @@ export class ChatTemplatesService implements OnModuleInit {
     }
   }
 
+  /** Owner always passes; staff need the chat permission (same one that gates order chat). */
+  private ensureAccess(userId: string, shopId: string) {
+    return assertShopPermission(this.shops, this.staff, userId, shopId, 'orders.chat');
+  }
+
   /** Seller uchun: tizim shablonlari + do'kon shablonlari birga. */
-  async list(shopId: string): Promise<ChatTemplate[]> {
+  async list(userId: string, shopId: string): Promise<ChatTemplate[]> {
+    await this.ensureAccess(userId, shopId);
     return this.repo
       .createQueryBuilder('t')
       .where('t.shopId IS NULL OR t.shopId = :shopId', { shopId })
@@ -41,7 +54,8 @@ export class ChatTemplatesService implements OnModuleInit {
       .getMany();
   }
 
-  async create(shopId: string, text: string): Promise<ChatTemplate> {
+  async create(userId: string, shopId: string, text: string): Promise<ChatTemplate> {
+    await this.ensureAccess(userId, shopId);
     const count = await this.repo.count({ where: { shopId, isSystem: false } });
     if (count >= 20) throw new BadRequestException('Maksimum 20 ta shaxsiy shablon');
     const last = await this.repo.findOne({
@@ -57,18 +71,21 @@ export class ChatTemplatesService implements OnModuleInit {
     return this.repo.save(tmpl);
   }
 
-  async update(shopId: string, id: string, text: string): Promise<ChatTemplate> {
+  async update(userId: string, shopId: string, id: string, text: string): Promise<ChatTemplate> {
+    await this.ensureAccess(userId, shopId);
     const tmpl = await this.findOwn(shopId, id);
     tmpl.text = text.trim();
     return this.repo.save(tmpl);
   }
 
-  async remove(shopId: string, id: string): Promise<void> {
+  async remove(userId: string, shopId: string, id: string): Promise<void> {
+    await this.ensureAccess(userId, shopId);
     const tmpl = await this.findOwn(shopId, id);
     await this.repo.remove(tmpl);
   }
 
-  async reorder(shopId: string, ids: string[]): Promise<void> {
+  async reorder(userId: string, shopId: string, ids: string[]): Promise<void> {
+    await this.ensureAccess(userId, shopId);
     for (let i = 0; i < ids.length; i++) {
       await this.repo.update({ id: ids[i], shopId }, { sortOrder: i });
     }
