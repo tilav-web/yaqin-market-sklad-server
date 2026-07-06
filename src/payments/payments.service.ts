@@ -63,8 +63,10 @@ export class PaymentsService {
     const netAmount = orderTotal - commissionAmount;
 
     await this.dataSource.transaction(async (em) => {
-      const bal = await em.findOne(SellerBalance, { where: { sellerId } }) ??
-        em.create(SellerBalance, { sellerId });
+      const bal = (await em.findOne(SellerBalance, {
+        where: { sellerId },
+        lock: { mode: 'pessimistic_write' },
+      })) ?? em.create(SellerBalance, { sellerId });
 
       // Add net to available
       bal.availableBalance = String(parseFloat(bal.availableBalance ?? '0') + netAmount);
@@ -119,8 +121,10 @@ export class PaymentsService {
     settlesAt.setHours(settlesAt.getHours() + hours);
 
     await this.dataSource.transaction(async (em) => {
-      const bal = await em.findOne(SellerBalance, { where: { sellerId } }) ??
-        em.create(SellerBalance, { sellerId });
+      const bal = (await em.findOne(SellerBalance, {
+        where: { sellerId },
+        lock: { mode: 'pessimistic_write' },
+      })) ?? em.create(SellerBalance, { sellerId });
 
       bal.pendingBalance = String(parseFloat(bal.pendingBalance ?? '0') + netAmount);
       await em.save(SellerBalance, bal);
@@ -141,21 +145,26 @@ export class PaymentsService {
 
   /** Deduct available balance to repay debt (called automatically after credits). */
   async autoRepayDebt(sellerId: string): Promise<void> {
-    const bal = await this.balances.findOne({ where: { sellerId } });
-    if (!bal) return;
-
-    const available = parseFloat(bal.availableBalance);
-    const debt = parseFloat(bal.debtBalance);
-    if (debt <= 0 || available <= 0) return;
-
-    const repayAmount = Math.min(available, debt);
+    // Cheap unlocked pre-check to skip starting a transaction when there's
+    // obviously nothing to do; the real numbers are re-read under lock below.
+    const precheck = await this.balances.findOne({ where: { sellerId } });
+    if (!precheck) return;
+    if (parseFloat(precheck.debtBalance) <= 0 || parseFloat(precheck.availableBalance) <= 0) return;
 
     await this.dataSource.transaction(async (em) => {
-      const b = await em.findOne(SellerBalance, { where: { sellerId } });
+      const b = await em.findOne(SellerBalance, {
+        where: { sellerId },
+        lock: { mode: 'pessimistic_write' },
+      });
       if (!b) return;
 
-      b.availableBalance = String(parseFloat(b.availableBalance) - repayAmount);
-      b.debtBalance = String(parseFloat(b.debtBalance) - repayAmount);
+      const available = parseFloat(b.availableBalance);
+      const debt = parseFloat(b.debtBalance);
+      if (!Number.isFinite(available) || !Number.isFinite(debt) || debt <= 0 || available <= 0) return;
+      const repayAmount = Math.min(available, debt);
+
+      b.availableBalance = String(available - repayAmount);
+      b.debtBalance = String(debt - repayAmount);
 
       if (parseFloat(b.debtBalance) <= 0) {
         b.debtBalance = '0';
@@ -178,45 +187,84 @@ export class PaymentsService {
     });
   }
 
-  /** Seller requests a withdrawal */
+  /**
+   * Seller requests a withdrawal.
+   *
+   * Debt-first repayment: if the seller has outstanding debt, it is repaid
+   * out of the requested amount before any payout is created — either
+   * partially (debt < amount: debt cleared, remainder paid out) or fully
+   * (debt >= amount: the whole amount repays debt, no payout is created).
+   */
   async requestWithdrawal(sellerId: string, dto: {
     amount: number;
     bankCardNumber: string;
     bankCardHolderName: string;
   }): Promise<WithdrawalRequest> {
-    const bal = await this.ensureBalance(sellerId);
-    const available = parseFloat(bal.availableBalance);
-    const debt = parseFloat(bal.debtBalance);
-
-    if (available <= 0) {
-      throw new BadRequestException('Yechib olish uchun mablag\' yo\'q');
-    }
-
-    // If debt exists, deduct it first
-    const actualWithdraw = Math.min(dto.amount, available);
-    if (debt > 0) {
-      const repayFirst = Math.min(debt, actualWithdraw);
-      if (repayFirst >= actualWithdraw) {
-        // All goes to debt, nothing left to withdraw
-        await this.autoRepayDebt(sellerId);
-        throw new BadRequestException('Mablag\'ingiz qarzni to\'lash uchun sarflandi');
-      }
-    }
-
-    if (actualWithdraw <= 0) {
+    // Belt-and-suspenders: the DTO already validates this, but never let a
+    // NaN/negative/non-finite amount reach the arithmetic below.
+    if (!Number.isFinite(dto.amount) || dto.amount <= 0) {
       throw new BadRequestException('Yechib olish miqdori noto\'g\'ri');
     }
 
-    await this.dataSource.transaction(async (em) => {
-      const b = await em.findOne(SellerBalance, { where: { sellerId } });
+    // Debt repayment must be committed even when it consumes the whole
+    // requested amount (no payout left) — so we resolve the transaction
+    // normally and only throw the "went to debt" message afterwards,
+    // rather than rolling back a debt repayment that already happened.
+    const result = await this.dataSource.transaction(async (em) => {
+      const b = await em.findOne(SellerBalance, {
+        where: { sellerId },
+        lock: { mode: 'pessimistic_write' },
+      });
       if (!b) throw new BadRequestException('Balans topilmadi');
 
-      b.availableBalance = String(parseFloat(b.availableBalance) - actualWithdraw);
+      const available = parseFloat(b.availableBalance);
+      const debt = parseFloat(b.debtBalance);
+
+      if (!Number.isFinite(available) || available <= 0) {
+        throw new BadRequestException('Yechib olish uchun mablag\' yo\'q');
+      }
+
+      // Total drawn from the available balance this request (bounded by what's there).
+      const totalDrawn = Math.min(dto.amount, available);
+      if (totalDrawn <= 0) {
+        throw new BadRequestException('Yechib olish miqdori noto\'g\'ri');
+      }
+      // Debt-first: repay as much of the drawn amount into debt as possible.
+      const debtRepaid = debt > 0 ? Math.min(debt, totalDrawn) : 0;
+      const payout = totalDrawn - debtRepaid;
+
+      b.availableBalance = String(available - totalDrawn);
+      if (debtRepaid > 0) {
+        const newDebt = debt - debtRepaid;
+        b.debtBalance = String(Math.max(0, newDebt));
+        if (parseFloat(b.debtBalance) <= 0) {
+          b.debtDueDate = null;
+          await em.update(Shop, { ownerId: sellerId, deactivatedByDebt: true }, {
+            isActive: true,
+            deactivatedByDebt: false,
+          });
+        }
+      }
       await em.save(SellerBalance, b);
+
+      if (debtRepaid > 0) {
+        await em.save(SellerTransaction, em.create(SellerTransaction, {
+          sellerId,
+          type: SellerTxType.DebtRepaid,
+          amount: String(-debtRepaid),
+          status: 'settled',
+          description: `Yechib olishdan qarz so\'ndirildi: ${debtRepaid.toLocaleString()} so'm`,
+        }));
+      }
+
+      if (payout <= 0) {
+        // Entire drawn amount went to debt — no payout request to create.
+        return null;
+      }
 
       const req = em.create(WithdrawalRequest, {
         sellerId,
-        amount: String(actualWithdraw),
+        amount: String(payout),
         bankCardNumber: dto.bankCardNumber,
         bankCardHolderName: dto.bankCardHolderName,
         status: WithdrawalStatus.Pending,
@@ -226,13 +274,18 @@ export class PaymentsService {
       await em.save(SellerTransaction, em.create(SellerTransaction, {
         sellerId,
         type: SellerTxType.WithdrawalRequested,
-        amount: String(-actualWithdraw),
+        amount: String(-payout),
         status: 'settled',
-        description: `Yechib olish so\'rovi: ${actualWithdraw.toLocaleString()} so'm`,
+        description: `Yechib olish so\'rovi: ${payout.toLocaleString()} so'm`,
       }));
+
+      return req;
     });
 
-    return this.withdrawals.findOne({ where: { sellerId }, order: { requestedAt: 'DESC' } }) as Promise<WithdrawalRequest>;
+    if (!result) {
+      throw new BadRequestException('Mablag\'ingiz qarzni to\'lash uchun sarflandi');
+    }
+    return result;
   }
 
   async getMyWithdrawals(sellerId: string): Promise<WithdrawalRequest[]> {
@@ -263,7 +316,10 @@ export class PaymentsService {
     if (!approve) {
       // Return money to seller balance
       await this.dataSource.transaction(async (em) => {
-        const b = await em.findOne(SellerBalance, { where: { sellerId: req.sellerId } });
+        const b = await em.findOne(SellerBalance, {
+          where: { sellerId: req.sellerId },
+          lock: { mode: 'pessimistic_write' },
+        });
         if (b) {
           b.availableBalance = String(parseFloat(b.availableBalance) + parseFloat(req.amount));
           await em.save(SellerBalance, b);
@@ -316,9 +372,14 @@ export class PaymentsService {
 
   /** Admin: manual balance adjustment */
   async adminAdjust(sellerId: string, amount: number, description: string): Promise<SellerBalance> {
+    if (!Number.isFinite(amount)) {
+      throw new BadRequestException('Noto\'g\'ri miqdor');
+    }
     await this.dataSource.transaction(async (em) => {
-      const b = await em.findOne(SellerBalance, { where: { sellerId } }) ??
-        em.create(SellerBalance, { sellerId });
+      const b = (await em.findOne(SellerBalance, {
+        where: { sellerId },
+        lock: { mode: 'pessimistic_write' },
+      })) ?? em.create(SellerBalance, { sellerId });
 
       if (amount > 0) {
         b.availableBalance = String(parseFloat(b.availableBalance ?? '0') + amount);
@@ -353,7 +414,10 @@ export class PaymentsService {
 
     for (const tx of pending) {
       await this.dataSource.transaction(async (em) => {
-        const b = await em.findOne(SellerBalance, { where: { sellerId: tx.sellerId } });
+        const b = await em.findOne(SellerBalance, {
+          where: { sellerId: tx.sellerId },
+          lock: { mode: 'pessimistic_write' },
+        });
         if (!b) return;
 
         const amount = parseFloat(tx.amount);
@@ -444,7 +508,10 @@ export class PaymentsService {
     }
 
     await this.dataSource.transaction(async (em) => {
-      const b = await em.findOne(SellerBalance, { where: { sellerId: tx.sellerId } });
+      const b = await em.findOne(SellerBalance, {
+        where: { sellerId: tx.sellerId },
+        lock: { mode: 'pessimistic_write' },
+      });
       if (!b) throw new NotFoundException('Balans topilmadi');
 
       const amount = parseFloat(tx.amount);
@@ -478,7 +545,10 @@ export class PaymentsService {
     }
 
     await this.dataSource.transaction(async (em) => {
-      const b = await em.findOne(SellerBalance, { where: { sellerId: tx.sellerId } });
+      const b = await em.findOne(SellerBalance, {
+        where: { sellerId: tx.sellerId },
+        lock: { mode: 'pessimistic_write' },
+      });
       if (!b) throw new NotFoundException('Balans topilmadi');
 
       const amount = parseFloat(tx.amount);
@@ -516,7 +586,10 @@ export class PaymentsService {
   /** Admin: forgive a seller's entire debt (write it off). */
   async adminForgiveDebt(sellerId: string, adminId: string, reason: string): Promise<SellerBalance> {
     return this.dataSource.transaction(async (em) => {
-      const b = await em.findOne(SellerBalance, { where: { sellerId } });
+      const b = await em.findOne(SellerBalance, {
+        where: { sellerId },
+        lock: { mode: 'pessimistic_write' },
+      });
       if (!b) throw new NotFoundException('Balans topilmadi');
       const forgiven = b.debtBalance;
       b.debtBalance = '0';
@@ -540,16 +613,21 @@ export class PaymentsService {
 
   /** Admin: extend the debt due date by N days. */
   async adminExtendDebtDue(sellerId: string, days: number): Promise<SellerBalance> {
-    const b = await this.balances.findOne({ where: { sellerId } });
-    if (!b) throw new NotFoundException('Balans topilmadi');
-    const current = b.debtDueDate ? new Date(b.debtDueDate) : new Date();
-    current.setDate(current.getDate() + days);
-    b.debtDueDate = current.toISOString().split('T')[0];
-    // Re-activate shops if they were deactivated by expired debt
-    await this.shops.update(
-      { ownerId: sellerId, deactivatedByDebt: true },
-      { isActive: true, deactivatedByDebt: false },
-    );
-    return this.balances.save(b);
+    return this.dataSource.transaction(async (em) => {
+      const b = await em.findOne(SellerBalance, {
+        where: { sellerId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!b) throw new NotFoundException('Balans topilmadi');
+      const current = b.debtDueDate ? new Date(b.debtDueDate) : new Date();
+      current.setDate(current.getDate() + days);
+      b.debtDueDate = current.toISOString().split('T')[0];
+      // Re-activate shops if they were deactivated by expired debt
+      await em.update(Shop, { ownerId: sellerId, deactivatedByDebt: true }, {
+        isActive: true,
+        deactivatedByDebt: false,
+      });
+      return em.save(SellerBalance, b);
+    });
   }
 }

@@ -2,6 +2,13 @@ import { Body, Controller, Get, Param, Post, Put, Query, Request } from '@nestjs
 
 import { Role } from '../auth/role.enum';
 import { Roles } from '../auth/decorators/roles.decorator';
+import {
+  AdjustBalanceDto,
+  ExtendDebtDto,
+  ForgiveDebtDto,
+  ProcessWithdrawalDto,
+  RequestWithdrawalDto,
+} from './dto/payment.dto';
 import { WithdrawalStatus } from './entities/withdrawal-request.entity';
 import { PaymentsService } from './payments.service';
 
@@ -28,10 +35,7 @@ export class SellerBalanceController {
   }
 
   @Post('withdraw')
-  requestWithdrawal(
-    @Request() req: any,
-    @Body() body: { amount: number; bankCardNumber: string; bankCardHolderName: string },
-  ) {
+  requestWithdrawal(@Request() req: any, @Body() body: RequestWithdrawalDto) {
     return this.svc.requestWithdrawal(req.user.sub, body);
   }
 }
@@ -52,7 +56,7 @@ export class AdminBalanceController {
   processWithdrawal(
     @Param('id') id: string,
     @Request() req: any,
-    @Body() body: { approve: boolean; note?: string },
+    @Body() body: ProcessWithdrawalDto,
   ) {
     return this.svc.adminProcessWithdrawal(id, req.user.sub, body.approve, body.note);
   }
@@ -68,10 +72,7 @@ export class AdminBalanceController {
   }
 
   @Post('sellers/:sellerId/adjust')
-  adjust(
-    @Param('sellerId') sellerId: string,
-    @Body() body: { amount: number; description: string },
-  ) {
+  adjust(@Param('sellerId') sellerId: string, @Body() body: AdjustBalanceDto) {
     return this.svc.adminAdjust(sellerId, body.amount, body.description);
   }
 
@@ -94,16 +95,13 @@ export class AdminBalanceController {
   forgiveDebt(
     @Param('sellerId') sellerId: string,
     @Request() req: any,
-    @Body() body: { reason: string },
+    @Body() body: ForgiveDebtDto,
   ) {
-    return this.svc.adminForgiveDebt(sellerId, req.user.sub, body.reason ?? '');
+    return this.svc.adminForgiveDebt(sellerId, req.user.sub, body.reason);
   }
 
   @Post('sellers/:sellerId/extend-debt')
-  extendDebt(
-    @Param('sellerId') sellerId: string,
-    @Body() body: { days: number },
-  ) {
-    return this.svc.adminExtendDebtDue(sellerId, body.days ?? 7);
+  extendDebt(@Param('sellerId') sellerId: string, @Body() body: ExtendDebtDto) {
+    return this.svc.adminExtendDebtDue(sellerId, body.days);
   }
 }
