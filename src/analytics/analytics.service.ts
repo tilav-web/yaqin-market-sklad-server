@@ -1,6 +1,6 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { Between, In, Repository } from 'typeorm';
 
 import { GlobalProduct } from '../products/entities/global-product.entity';
 import { InventoryMovement, MovementType } from '../products/entities/inventory-movement.entity';
@@ -10,6 +10,7 @@ import { OrderItem } from '../orders/entities/order-item.entity';
 import { Order, OrderStatus } from '../orders/entities/order.entity';
 import { Shop } from '../shops/entities/shop.entity';
 import { User } from '../users/entities/user.entity';
+import { AnalyticsEvent, AnalyticsEventType } from './entities/analytics-event.entity';
 
 export type StatsPeriod = 'today' | '7d' | '30d';
 
@@ -76,7 +77,67 @@ export class AnalyticsService {
     private readonly users: Repository<User>,
     @InjectRepository(GlobalProduct)
     private readonly globalProducts: Repository<GlobalProduct>,
+    @InjectRepository(AnalyticsEvent)
+    private readonly events: Repository<AnalyticsEvent>,
   ) {}
+
+  // ─── View → cart → order funnel (SPEC.md §5.3) ────────────────────────────
+
+  /**
+   * Write-only, intentionally minimal: no existence checks against
+   * shop/productVariant so the hot path (called on every product view /
+   * add-to-cart tap) stays a single cheap bulk insert.
+   */
+  async logEvents(
+    userId: string | null,
+    items: { type: AnalyticsEventType; shopId: string; productVariantId?: string }[],
+  ): Promise<void> {
+    if (!items.length) return;
+    await this.events.insert(
+      items.map((i) => ({
+        type: i.type,
+        userId,
+        shopId: i.shopId,
+        productVariantId: i.productVariantId ?? null,
+      })),
+    );
+  }
+
+  /**
+   * Aggregate funnel counts for an admin-chosen date range: product views,
+   * add-to-cart taps, and orders placed (any status — placing an order is
+   * the conversion event; its eventual delivered/cancelled outcome is a
+   * separate concern already covered by the dashboard/timeline endpoints).
+   * MVP scope: aggregate totals only, no per-user/session funnel tracking.
+   */
+  async funnel(from?: string, to?: string): Promise<{
+    from: string;
+    to: string;
+    productViews: number;
+    addToCart: number;
+    orders: number;
+  }> {
+    const toDate = to ? new Date(to) : new Date();
+    const fromDate = from ? new Date(from) : new Date(toDate.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+    const [productViews, addToCart, orders] = await Promise.all([
+      this.events.count({
+        where: { type: AnalyticsEventType.ProductView, createdAt: Between(fromDate, toDate) },
+      }),
+      this.events.count({
+        where: { type: AnalyticsEventType.AddToCart, createdAt: Between(fromDate, toDate) },
+      }),
+      this.orders.count({ where: { createdAt: Between(fromDate, toDate) } }),
+    ]);
+
+    return {
+      from: fromDate.toISOString().slice(0, 10),
+      to: toDate.toISOString().slice(0, 10),
+      productViews,
+      addToCart,
+      orders,
+    };
+  }
 
   private async ensureOwned(userId: string, shopId: string): Promise<void> {
     const shop = await this.shops.findOne({ where: { id: shopId } });

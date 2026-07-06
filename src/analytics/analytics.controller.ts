@@ -1,4 +1,4 @@
-import { Controller, Get, Param, ParseUUIDPipe, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 import { Role } from '../auth/role.enum';
@@ -6,6 +6,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { JwtPayload } from '../auth/decorators/current-user.decorator';
 import { AnalyticsService, StatsPeriod } from './analytics.service';
+import { LogAnalyticsEventsDto } from './dto/analytics-event.dto';
 
 @ApiBearerAuth()
 @ApiTags('admin-analytics')
@@ -33,6 +34,25 @@ export class AdminAnalyticsController {
   timeline(@Query('days') days?: string) {
     const d = Math.min(Math.max(Number(days) || 30, 7), 90);
     return this.analytics.ordersTimeline(d);
+  }
+
+  /** View → cart → order conversion funnel (SPEC.md §5.3). */
+  @Get('funnel')
+  funnel(@Query('from') from?: string, @Query('to') to?: string) {
+    return this.analytics.funnel(from, to);
+  }
+}
+
+/** Customer-facing: batched product-view / add-to-cart event logging. */
+@ApiBearerAuth()
+@ApiTags('analytics-events')
+@Controller('analytics')
+export class AnalyticsEventsController {
+  constructor(private readonly analytics: AnalyticsService) {}
+
+  @Post('events')
+  logEvents(@CurrentUser() user: JwtPayload, @Body() dto: LogAnalyticsEventsDto) {
+    return this.analytics.logEvents(user.sub, dto.events);
   }
 }
 
