@@ -1,7 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
 import { EntityManager } from 'typeorm';
 
-import { InventoryMovement, MovementType } from './entities/inventory-movement.entity';
+import { BrakReasonCode, InventoryMovement, MovementType } from './entities/inventory-movement.entity';
 import { ProductVariant } from './entities/product-variant.entity';
 import { StockBatch } from './entities/stock-batch.entity';
 
@@ -84,6 +84,9 @@ export interface ConsumeInput {
   reason?: string;
   /** Product name for error messages (fetched from GlobalProduct by caller). */
   displayName?: string;
+  /** Set for brak (write-off) consumption only — SPEC.md §26.3. */
+  brakReasonCode?: BrakReasonCode | null;
+  brakReasonNote?: string | null;
 }
 
 /**
@@ -132,6 +135,8 @@ export async function consumeFifo(
       beforeStock: before,
       afterStock: variant.stock,
       reason: input.reason ?? null,
+      brakReasonCode: input.brakReasonCode ?? null,
+      brakReasonNote: input.brakReasonNote ?? null,
       orderId: input.orderId ?? null,
       performedByUserId: input.userId ?? null,
     }),

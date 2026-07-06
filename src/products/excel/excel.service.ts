@@ -29,8 +29,9 @@ const MOVEMENT_LABEL: Record<MovementType, string> = {
   [MovementType.In]: 'Kirim',
   [MovementType.Sold]: 'Sotuv',
   [MovementType.Returned]: 'Qaytarish',
-  [MovementType.Expired]: 'Brak',
+  [MovementType.Expired]: 'Brak (muddati o\'tgan)',
   [MovementType.Adjusted]: "Qo'lda tuzatish",
+  [MovementType.Damaged]: 'Brak (shikastlangan/boshqa)',
 };
 
 const UNIT_LABEL_TO_TYPE: Record<string, UnitType> = {

@@ -13,8 +13,10 @@ import {
   IsUUID,
   MaxLength,
   Min,
+  ValidateIf,
 } from 'class-validator';
 
+import { BrakReasonCode } from '../entities/inventory-movement.entity';
 import type { UnitType } from '../entities/global-product.entity';
 
 const UNIT_TYPES = ['piece', 'kg', 'liter', 'gram', 'pack'] as const;
@@ -214,6 +216,19 @@ export class AdjustStockDto {
   @IsOptional()
   @IsString()
   reason?: string;
+}
+
+/** Write off a variant's entire stock as damaged/expired/etc. (SPEC.md §26.3). */
+export class BrakStockDto {
+  @ApiProperty({ enum: BrakReasonCode })
+  @IsEnum(BrakReasonCode)
+  reasonCode!: BrakReasonCode;
+
+  @ApiPropertyOptional({ description: 'Majburiy — reasonCode "other" bo\'lganda' })
+  @ValidateIf((o) => o.reasonCode === BrakReasonCode.Other)
+  @IsString()
+  @MaxLength(1000)
+  note?: string;
 }
 
 export class CountStockDto {

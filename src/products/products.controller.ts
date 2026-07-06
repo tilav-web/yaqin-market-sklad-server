@@ -25,6 +25,7 @@ import {
   AdjustStockDto,
   AdminCreateGlobalProductDto,
   AdminUpdateGlobalProductDto,
+  BrakStockDto,
   BulkPriceUpdateDto,
   CloneFromCatalogDto,
   CountStockDto,
@@ -101,6 +102,16 @@ export class SellerProductsController {
     @Body() dto: AdjustStockDto,
   ) {
     return this.products.adjustStock(user.sub, variantId, dto.delta, dto.reason);
+  }
+
+  /** Write off a variant's entire stock — expired/damaged/stolen/other (SPEC.md §26.3). */
+  @Post('variants/:variantId/brak')
+  brak(
+    @CurrentUser() user: JwtPayload,
+    @Param('variantId', ParseUUIDPipe) variantId: string,
+    @Body() dto: BrakStockDto,
+  ) {
+    return this.products.brakStock(user.sub, variantId, dto.reasonCode, dto.note);
   }
 
   @Post('variants/:variantId/receive')

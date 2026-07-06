@@ -20,7 +20,7 @@ import { assertShopPermission } from '../shops/shop-access.util';
 import { isShopOpenNow } from '../shops/shop-hours.util';
 import { User } from '../users/entities/user.entity';
 import { GlobalProduct, UnitType } from './entities/global-product.entity';
-import { InventoryMovement, MovementType } from './entities/inventory-movement.entity';
+import { BrakReasonCode, InventoryMovement, MovementType } from './entities/inventory-movement.entity';
 import { ProductVariant } from './entities/product-variant.entity';
 import { StockBatch } from './entities/stock-batch.entity';
 import { consumeFifo, receiveBatch } from './inventory.util';
@@ -566,6 +566,60 @@ export class ProductsService {
     });
   }
 
+  private static readonly BRAK_REASON_LABEL: Record<BrakReasonCode, string> = {
+    [BrakReasonCode.Expired]: 'Muddati o\'tdi',
+    [BrakReasonCode.Damaged]: 'Shikastlangan / singan',
+    [BrakReasonCode.Stolen]: 'Yo\'qolgan / o\'g\'irlangan',
+    [BrakReasonCode.Other]: 'Boshqa',
+  };
+
+  /**
+   * Write off a variant's entire remaining stock as brak — expired, damaged,
+   * stolen or other (SPEC.md §26.3). A reason is always required; 'other'
+   * additionally requires a free-text note (enforced by BrakStockDto).
+   * Reuses the same pessimistic-lock pattern as adjustStock to prevent lost
+   * updates under concurrent stock changes.
+   */
+  async brakStock(
+    userId: string,
+    variantId: string,
+    reasonCode: BrakReasonCode,
+    note?: string,
+  ): Promise<VariantWithGlobal> {
+    const variant = await this.getVariant(variantId);
+    await this.ensureShopAccess(userId, variant.shopId, 'inventory.product.edit_stock');
+
+    return this.dataSource.transaction(async (manager) => {
+      const locked = await manager.findOne(ProductVariant, {
+        where: { id: variantId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!locked) throw new NotFoundException('Mahsulot topilmadi');
+      if (locked.stock <= 0) throw new BadRequestException('Qoldiq allaqachon 0');
+
+      const gp = await this.globalProducts.findOne({
+        where: { id: locked.globalProductId },
+        select: { name: true },
+      });
+      // InventoryMovement.type only distinguishes expired/damaged (the two
+      // spec'd movement kinds) — stolen/other are booked as Damaged too, with
+      // the precise cause preserved in brakReasonCode/brakReasonNote.
+      const movementType = reasonCode === BrakReasonCode.Expired ? MovementType.Expired : MovementType.Damaged;
+      await consumeFifo(manager, {
+        variant: locked,
+        quantity: locked.stock,
+        type: movementType,
+        userId,
+        displayName: gp?.name,
+        reason: `Brak: ${ProductsService.BRAK_REASON_LABEL[reasonCode]}`,
+        brakReasonCode: reasonCode,
+        brakReasonNote: note ?? null,
+      });
+      const updated = await manager.findOneOrFail(ProductVariant, { where: { id: variantId } });
+      return (await this.attachGlobal([updated]))[0];
+    });
+  }
+
   async receiveStock(
     userId: string,
     variantId: string,
@@ -752,16 +806,33 @@ export class ProductsService {
     });
   }
 
-  async listLowStock(userId: string, shopId: string): Promise<VariantWithGlobal[]> {
+  /**
+   * Tiered low-stock list for the "Kam qoldiqlar" screen — mirrors the
+   * warning/critical thresholds low-stock-alert.service.ts's cron already
+   * alerts on (SPEC.md §30), tagging each item so the UI can group/color them.
+   */
+  async listLowStock(
+    userId: string,
+    shopId: string,
+  ): Promise<(VariantWithGlobal & { tier: 'critical' | 'warning' })[]> {
     await this.ensureShopAccess(userId, shopId, 'inventory.view');
+    const defaultWarning = this.settings.getNumber(SETTING_KEYS.LOW_STOCK_WARNING_DEFAULT, 10);
+    const defaultCritical = this.settings.getNumber(SETTING_KEYS.LOW_STOCK_CRITICAL_DEFAULT, 3);
+
     const vs = await this.variants
       .createQueryBuilder('v')
       .where('v.shopId = :shopId', { shopId })
       .andWhere('v.isActive = true')
-      .andWhere('v.stock <= v.lowStockThreshold')
+      .andWhere('(v.stock <= v.lowStockThreshold) OR (v.stock <= :defWarn)', { defWarn: defaultWarning })
       .orderBy('v.stock', 'ASC')
       .getMany();
-    return this.attachGlobal(vs);
+
+    const withGlobal = await this.attachGlobal(vs);
+    return withGlobal.map((v) => {
+      const criticalLine = v.criticalThreshold ?? defaultCritical;
+      const tier: 'critical' | 'warning' = v.stock <= criticalLine ? 'critical' : 'warning';
+      return { ...v, tier };
+    });
   }
 
   // ─── Public catalog ────────────────────────────────────────────────────────
@@ -1138,15 +1209,23 @@ export class ProductsService {
 
   // ─── Muddati o'tayotganlar ────────────────────────────────────────────────
 
+  /**
+   * "Muddati o'tayotganlar" list, tiered exactly like the cron in
+   * expiry-alert.service.ts (SPEC.md §26.2): 🔴 expired (today or past),
+   * 🟠 critical (within EXPIRY_CRITICAL_DAYS), 🟡 warning (within the window).
+   * `days` optionally widens the overall window beyond the warning default.
+   */
   async listExpiring(
     userId: string,
     shopId: string,
     days?: number,
-  ): Promise<VariantWithGlobal[]> {
+  ): Promise<(VariantWithGlobal & { tier: 'expired' | 'critical' | 'warning'; daysToExpiry: number })[]> {
     await this.ensureShopAccess(userId, shopId, 'inventory.view');
-    const warningDays = days ?? this.settings.getNumber(SETTING_KEYS.EXPIRY_WARNING_DAYS, 7);
+    const warningDays = this.settings.getNumber(SETTING_KEYS.EXPIRY_WARNING_DAYS, 7);
+    const criticalDays = this.settings.getNumber(SETTING_KEYS.EXPIRY_CRITICAL_DAYS, 2);
+    const windowDays = days ?? warningDays;
     const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() + warningDays);
+    cutoff.setDate(cutoff.getDate() + windowDays);
 
     const vs = await this.variants
       .createQueryBuilder('v')
@@ -1156,7 +1235,17 @@ export class ProductsService {
       .andWhere('v.expiryDate <= :cutoff', { cutoff })
       .orderBy('v.expiryDate', 'ASC')
       .getMany();
-    return this.attachGlobal(vs);
+
+    const withGlobal = await this.attachGlobal(vs);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return withGlobal.map((v) => {
+      const exp = new Date(v.expiryDate!);
+      const daysToExpiry = Math.round((exp.getTime() - today.getTime()) / (24 * 60 * 60 * 1000));
+      const tier: 'expired' | 'critical' | 'warning' =
+        daysToExpiry <= 0 ? 'expired' : daysToExpiry <= criticalDays ? 'critical' : 'warning';
+      return { ...v, daysToExpiry, tier };
+    });
   }
 
   // ─── Global katalog (seller qidiruvi) ─────────────────────────────────────

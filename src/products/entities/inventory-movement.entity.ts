@@ -16,6 +16,16 @@ export enum MovementType {
   Returned = 'returned',
   Expired = 'expired',
   Adjusted = 'adjusted',
+  Damaged = 'damaged',
+}
+
+/** Mandatory reason for a "brak" (write-off) — SPEC.md §26.3. */
+export enum BrakReasonCode {
+  Expired = 'expired',
+  Damaged = 'damaged',
+  Stolen = 'stolen',
+  /** Requires a free-text note (see BrakStockDto). */
+  Other = 'other',
 }
 
 @Entity({ name: 'inventory_movements' })
@@ -46,6 +56,14 @@ export class InventoryMovement {
 
   @Column({ type: 'varchar', length: 256, nullable: true })
   reason!: string | null;
+
+  /** Set only for brak (write-off) movements — SPEC.md §26.3. */
+  @Column({ type: 'enum', enum: BrakReasonCode, nullable: true })
+  brakReasonCode!: BrakReasonCode | null;
+
+  /** Free-text detail — required by the API when brakReasonCode = 'other'. */
+  @Column({ type: 'text', nullable: true })
+  brakReasonNote!: string | null;
 
   @Column({ type: 'uuid', nullable: true })
   orderId!: string | null;
