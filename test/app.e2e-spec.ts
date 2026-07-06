@@ -16,11 +16,18 @@ describe('AppController (e2e)', () => {
     await app.init();
   });
 
-  it('/ (GET)', () => {
+  // NOTE: the original scaffold-generated test hit `/` expecting the Nest
+  // starter's "Hello World!" — there is no such route in this app (no root
+  // AppController), so it always failed with a 404. `/health` is the actual
+  // always-public, no-auth route (see src/health/health.controller.ts).
+  it('/health (GET)', () => {
     return request(app.getHttpServer())
-      .get('/')
+      .get('/health')
       .expect(200)
-      .expect('Hello World!');
+      .expect((res) => {
+        expect(res.body).toHaveProperty('status');
+        expect(res.body.services).toHaveProperty('database');
+      });
   });
 
   afterEach(async () => {
