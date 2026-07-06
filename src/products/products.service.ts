@@ -491,13 +491,22 @@ export class ProductsService {
     const variant = await this.getVariant(variantId);
     await this.ensureShopAccess(userId, variant.shopId, 'inventory.product.edit_stock');
     if (delta === 0) return (await this.attachGlobal([variant]))[0];
-    if (variant.stock + delta < 0) throw new BadRequestException('Qoldiq manfiy bo\'la olmaydi');
 
     return this.dataSource.transaction(async (manager) => {
+      // Re-fetch WITH a write lock inside the transaction — the `variant`
+      // above was read before the transaction opened, so mutating it here
+      // would silently overwrite a concurrent stock change (lost update).
+      const locked = await manager.findOne(ProductVariant, {
+        where: { id: variantId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!locked) throw new NotFoundException('Mahsulot topilmadi');
+      if (locked.stock + delta < 0) throw new BadRequestException('Qoldiq manfiy bo\'la olmaydi');
+
       if (delta > 0) {
         const lastCost = await this.lastCost(variantId);
         await receiveBatch(manager, {
-          variant,
+          variant: locked,
           quantity: delta,
           costPrice: lastCost,
           userId,
@@ -505,11 +514,11 @@ export class ProductsService {
         });
       } else {
         const gp = await this.globalProducts.findOne({
-          where: { id: variant.globalProductId },
+          where: { id: locked.globalProductId },
           select: { name: true },
         });
         await consumeFifo(manager, {
-          variant,
+          variant: locked,
           quantity: -delta,
           type: MovementType.Adjusted,
           userId,
@@ -536,8 +545,13 @@ export class ProductsService {
     const variant = await this.getVariant(variantId);
     await this.ensureShopAccess(userId, variant.shopId, 'inventory.product.edit_stock');
     return this.dataSource.transaction(async (manager) => {
+      const locked = await manager.findOne(ProductVariant, {
+        where: { id: variantId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!locked) throw new NotFoundException('Mahsulot topilmadi');
       await receiveBatch(manager, {
-        variant,
+        variant: locked,
         quantity: dto.quantity,
         costPrice: dto.costPrice,
         expiryDate: dto.expiryDate ? new Date(dto.expiryDate) : null,
@@ -554,12 +568,17 @@ export class ProductsService {
   async countStock(userId: string, variantId: string, actualQty: number): Promise<VariantWithGlobal> {
     const variant = await this.getVariant(variantId);
     await this.ensureShopAccess(userId, variant.shopId, 'inventory.receive');
-    const delta = actualQty - variant.stock;
-    if (delta === 0) return (await this.attachGlobal([variant]))[0];
     return this.dataSource.transaction(async (manager) => {
+      const locked = await manager.findOne(ProductVariant, {
+        where: { id: variantId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!locked) throw new NotFoundException('Mahsulot topilmadi');
+      const delta = actualQty - locked.stock;
+      if (delta === 0) return (await this.attachGlobal([locked]))[0];
       if (delta > 0) {
         await receiveBatch(manager, {
-          variant,
+          variant: locked,
           quantity: delta,
           costPrice: await this.lastCost(variantId),
           userId,
@@ -567,11 +586,11 @@ export class ProductsService {
         });
       } else {
         const gp = await this.globalProducts.findOne({
-          where: { id: variant.globalProductId },
+          where: { id: locked.globalProductId },
           select: { name: true },
         });
         await consumeFifo(manager, {
-          variant,
+          variant: locked,
           quantity: -delta,
           type: MovementType.Adjusted,
           displayName: gp?.name,
