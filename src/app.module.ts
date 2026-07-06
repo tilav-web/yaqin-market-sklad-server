@@ -12,6 +12,7 @@ import { ClickModule } from './click/click.module';
 import { PromotionsModule } from './promotions/promotions.module';
 import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
+import { RolesGuard } from './auth/guards/roles.guard';
 import { CategoriesModule } from './categories/categories.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { ContactModule } from './contact/contact.module';
@@ -72,6 +73,7 @@ import { UsersModule } from './users/users.module';
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: RolesGuard },
   ],
 })
 export class AppModule {}

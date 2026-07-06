@@ -11,7 +11,6 @@ import {
   Patch,
   Post,
   Query,
-  UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
@@ -19,7 +18,6 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { JwtPayload } from '../auth/decorators/current-user.decorator';
 import { Public } from '../auth/decorators/public.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
-import { RolesGuard } from '../auth/guards/roles.guard';
 import { Role } from '../auth/role.enum';
 import type { StaffPermission, StaffPreset } from './entities/shop-staff.entity';
 import {
@@ -204,7 +202,6 @@ export class StaffController {
 
 @ApiBearerAuth()
 @ApiTags('admin-shops')
-@UseGuards(RolesGuard)
 @Roles(Role.Admin)
 @Controller('admin/shops')
 export class AdminShopsController {

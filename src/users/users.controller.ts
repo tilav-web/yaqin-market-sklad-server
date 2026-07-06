@@ -10,14 +10,12 @@ import {
   Patch,
   Post,
   Query,
-  UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { JwtPayload } from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
-import { RolesGuard } from '../auth/guards/roles.guard';
 import { Role } from '../auth/role.enum';
 import {
   AdminListUsersQuery,
@@ -111,7 +109,6 @@ export class UsersController {
 
 @ApiBearerAuth()
 @ApiTags('admin-users')
-@UseGuards(RolesGuard)
 @Roles(Role.Admin)
 @Controller('admin/users')
 export class AdminUsersController {

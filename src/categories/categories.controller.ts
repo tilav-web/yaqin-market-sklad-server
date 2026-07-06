@@ -9,13 +9,11 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
-  UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 import { Public } from '../auth/decorators/public.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
-import { RolesGuard } from '../auth/guards/roles.guard';
 import { Role } from '../auth/role.enum';
 import { CategoriesService } from './categories.service';
 import { CreateCategoryDto, UpdateCategoryDto } from './dto/category.dto';
@@ -31,7 +29,6 @@ export class CategoriesController {
     return this.categories.findActiveTree();
   }
 
-  @UseGuards(RolesGuard)
   @Roles(Role.Admin)
   @ApiBearerAuth()
   @Get('admin/all')
@@ -39,7 +36,6 @@ export class CategoriesController {
     return this.categories.findAllTree();
   }
 
-  @UseGuards(RolesGuard)
   @Roles(Role.Admin)
   @ApiBearerAuth()
   @Post()
@@ -47,7 +43,6 @@ export class CategoriesController {
     return this.categories.create(dto);
   }
 
-  @UseGuards(RolesGuard)
   @Roles(Role.Admin)
   @ApiBearerAuth()
   @Patch(':id')
@@ -55,7 +50,6 @@ export class CategoriesController {
     return this.categories.update(id, dto);
   }
 
-  @UseGuards(RolesGuard)
   @Roles(Role.Admin)
   @ApiBearerAuth()
   @Delete(':id')

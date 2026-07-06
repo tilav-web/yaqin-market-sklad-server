@@ -18,6 +18,8 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { JwtPayload } from '../auth/decorators/current-user.decorator';
 import { Public } from '../auth/decorators/public.decorator';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { Role } from '../auth/role.enum';
 import { FeedQueryDto } from './dto/feed-query.dto';
 import {
   AdjustStockDto,
@@ -288,6 +290,7 @@ export class SellerProductsExtraController {
 @ApiBearerAuth()
 @ApiTags('admin-catalog')
 @Controller('admin/catalog')
+@Roles(Role.Admin)
 export class AdminGlobalCatalogController {
   constructor(private readonly products: ProductsService) {}
 

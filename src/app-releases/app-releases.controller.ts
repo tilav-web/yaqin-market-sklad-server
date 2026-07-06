@@ -10,7 +10,6 @@ import {
   Post,
   Res,
   UploadedFile,
-  UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -19,7 +18,6 @@ import type { Response } from 'express';
 
 import { Public } from '../auth/decorators/public.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
-import { RolesGuard } from '../auth/guards/roles.guard';
 import { Role } from '../auth/role.enum';
 import { AppReleasesService } from './app-releases.service';
 import { CreateReleaseDto } from './dto/app-release.dto';
@@ -66,7 +64,6 @@ export class AppReleasesController {
 
 @ApiBearerAuth()
 @ApiTags('admin-app-releases')
-@UseGuards(RolesGuard)
 @Roles(Role.Admin)
 @Controller('admin/app-releases')
 export class AdminAppReleasesController {
