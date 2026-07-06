@@ -42,8 +42,8 @@ export class PushController {
 
   @Delete()
   @HttpCode(HttpStatus.NO_CONTENT)
-  async unregister(@Body() dto: UnregisterDeviceDto) {
-    await this.push.removeToken(dto.token);
+  async unregister(@CurrentUser() user: JwtPayload, @Body() dto: UnregisterDeviceDto) {
+    await this.push.removeToken(user.sub, dto.token);
   }
 }
 

@@ -375,7 +375,9 @@ export class ShopsService {
     latitude?: number,
     longitude?: number,
   ): Promise<Shop & { distanceKm?: number; deliveryFeeAtUser?: number; isWithinZone?: boolean }> {
-    const shop = await this.findOne(shopId);
+    // Mirror findNearbyShops/order-creation: an admin-deactivated shop must
+    // not be reachable via direct link either.
+    const shop = await this.shops.findOne({ where: { id: shopId, isActive: true } });
     if (!shop) throw new NotFoundException('Do\'kon topilmadi');
     if (latitude !== undefined && longitude !== undefined) {
       const distanceKm = haversineKm(latitude, longitude, shop.latitude, shop.longitude);
@@ -464,8 +466,9 @@ export class ShopsService {
   // ─── Do'kon profil to'liqligi ─────────────────────────────────────────────
 
   async getCompleteness(userId: string, shopId: string) {
-    const shop = await this.shops.findOne({ where: { id: shopId } });
-    if (!shop) throw new NotFoundException('Do\'kon topilmadi');
+    // Owner always sees it; staff need the same "view shop settings"
+    // permission that gates the rest of the shop-settings surface.
+    const shop = await assertShopPermission(this.shops, this.staff, userId, shopId, 'shop.settings.view');
 
     const totalVariants = await this.variants.count({ where: { shopId, isActive: true } });
     const withPhoto = await (async () => {

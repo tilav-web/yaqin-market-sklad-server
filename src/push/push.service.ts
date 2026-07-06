@@ -53,8 +53,9 @@ export class PushService {
     await this.tokens.save(this.tokens.create({ userId, token, platform }));
   }
 
-  async removeToken(token: string): Promise<void> {
-    await this.tokens.delete({ token });
+  /** Remove a device token — only if it belongs to `userId` (no cross-account deletes). */
+  async removeToken(userId: string, token: string): Promise<void> {
+    await this.tokens.delete({ token, userId });
   }
 
   /** Link every still-anonymous token on this list to a user (called on login). */
