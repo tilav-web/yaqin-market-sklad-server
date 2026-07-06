@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
 import { Role } from '../auth/role.enum';
+import { Order } from '../orders/entities/order.entity';
 import { ShopStaff } from '../shops/entities/shop-staff.entity';
 import { UserAddress } from './entities/user-address.entity';
 import { User, UserStatus } from './entities/user.entity';
@@ -16,6 +17,8 @@ export class UsersService {
     private readonly addresses: Repository<UserAddress>,
     @InjectRepository(ShopStaff)
     private readonly shopStaff: Repository<ShopStaff>,
+    @InjectRepository(Order)
+    private readonly orders: Repository<Order>,
   ) {}
 
   /**
@@ -166,6 +169,21 @@ export class UsersService {
     user.isAdmin = isAdmin;
     await this.computeRoles(user); // re-derive + persist roles
     return this.users.save(user);
+  }
+
+  /** Admin: paginated order history for one user (5.3 "Buyurtma tarixini ko'rish"). */
+  async adminListUserOrders(
+    userId: string,
+    opts: { limit?: number; offset?: number } = {},
+  ): Promise<{ items: Order[]; total: number }> {
+    const [items, total] = await this.orders.findAndCount({
+      where: { userId },
+      relations: { items: true, shop: true },
+      order: { createdAt: 'DESC' },
+      take: Math.min(opts.limit ?? 50, 100),
+      skip: Math.max(opts.offset ?? 0, 0),
+    });
+    return { items, total };
   }
 
   /* ─── Favorites ─── */

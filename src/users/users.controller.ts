@@ -128,4 +128,17 @@ export class AdminUsersController {
   setAdmin(@Param('id', ParseUUIDPipe) id: string, @Body() dto: AdminSetAdminDto) {
     return this.users.adminSetAdmin(id, dto.isAdmin);
   }
+
+  /** User-detail order history (SPEC.md §5.3 "Buyurtma tarixini ko'rish"). */
+  @Get(':id/orders')
+  listOrders(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+  ) {
+    return this.users.adminListUserOrders(id, {
+      limit: limit !== undefined ? Number(limit) : undefined,
+      offset: offset !== undefined ? Number(offset) : undefined,
+    });
+  }
 }
