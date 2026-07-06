@@ -4,6 +4,7 @@ import {
   IsArray,
   IsBoolean,
   IsEnum,
+  IsIn,
   IsInt,
   IsNumber,
   IsOptional,
@@ -249,4 +250,157 @@ export class ReceiveStockDto {
   @IsString()
   @MaxLength(256)
   note?: string;
+}
+
+export class BulkPriceUpdateDto {
+  @ApiProperty({ enum: ['all', 'category', 'selected'] })
+  @IsIn(['all', 'category', 'selected'])
+  scope!: 'all' | 'category' | 'selected';
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
+  categoryId?: string;
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(500)
+  @IsUUID(undefined, { each: true })
+  variantIds?: string[];
+
+  @ApiProperty({ enum: ['percent', 'fixed'] })
+  @IsIn(['percent', 'fixed'])
+  adjustType!: 'percent' | 'fixed';
+
+  @ApiProperty({ example: 10 })
+  @IsNumber()
+  @IsPositive()
+  adjustValue!: number;
+
+  @ApiProperty({ enum: ['increase', 'decrease'] })
+  @IsIn(['increase', 'decrease'])
+  direction!: 'increase' | 'decrease';
+}
+
+/** Admin: create a shared-catalogue product (global_products row). */
+export class AdminCreateGlobalProductDto {
+  @ApiProperty()
+  @IsString()
+  @MaxLength(256)
+  name!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  barcode?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(128)
+  brand?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
+  categoryId?: string;
+
+  @ApiPropertyOptional({ enum: UNIT_TYPES })
+  @IsOptional()
+  @IsEnum(UNIT_TYPES)
+  unitType?: UnitType;
+
+  @ApiPropertyOptional({ example: 1 })
+  @IsOptional()
+  @IsNumber()
+  @IsPositive()
+  unitSize?: number;
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(5)
+  @IsString({ each: true })
+  photos?: string[];
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
+  parentGlobalProductId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isVerified?: boolean;
+}
+
+/** Admin: patch a shared-catalogue product. All fields optional. */
+export class AdminUpdateGlobalProductDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(256)
+  name?: string;
+
+  @ApiPropertyOptional({ nullable: true })
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  barcode?: string | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  @IsOptional()
+  @IsString()
+  @MaxLength(128)
+  brand?: string | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  @IsOptional()
+  @IsUUID()
+  categoryId?: string | null;
+
+  @ApiPropertyOptional({ enum: UNIT_TYPES })
+  @IsOptional()
+  @IsEnum(UNIT_TYPES)
+  unitType?: UnitType;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  @IsPositive()
+  unitSize?: number;
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(5)
+  @IsString({ each: true })
+  photos?: string[];
+
+  @ApiPropertyOptional({ nullable: true })
+  @IsOptional()
+  @IsString()
+  description?: string | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  @IsOptional()
+  @IsUUID()
+  parentGlobalProductId?: string | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isVerified?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
 }

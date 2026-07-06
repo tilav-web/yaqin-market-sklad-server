@@ -3,6 +3,7 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { JwtPayload } from '../auth/decorators/current-user.decorator';
+import { CreatePromotionDto } from './dto/promotion.dto';
 import { PromotionsService } from './promotions.service';
 
 @ApiBearerAuth()
@@ -24,17 +25,7 @@ export class PromotionsController {
   create(
     @CurrentUser() user: JwtPayload,
     @Param('shopId', ParseUUIDPipe) shopId: string,
-    @Body() dto: {
-      name: string;
-      type: 'product_discount' | 'category_discount' | 'free_delivery';
-      discountType?: 'percent' | 'fixed';
-      discountValue?: number;
-      targetProductId?: string;
-      targetCategoryId?: string;
-      freeDeliveryMinAmount?: number;
-      startAt: string;
-      endAt?: string;
-    },
+    @Body() dto: CreatePromotionDto,
   ) {
     return this.svc.create(user.sub, shopId, dto);
   }

@@ -2,6 +2,7 @@ import { Body, Controller, Get, Param, Put } from '@nestjs/common';
 
 import { Role } from '../auth/role.enum';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { SetSettingValueDto } from './dto/setting.dto';
 import { SettingsService } from './settings.service';
 
 @Controller('admin/settings')
@@ -15,7 +16,7 @@ export class SettingsController {
   }
 
   @Put(':key')
-  set(@Param('key') key: string, @Body('value') value: string) {
-    return this.svc.set(key, value);
+  set(@Param('key') key: string, @Body() body: SetSettingValueDto) {
+    return this.svc.set(key, body.value);
   }
 }

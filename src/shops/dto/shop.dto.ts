@@ -69,7 +69,11 @@ export class AdminSetActiveDto {
   isActive!: boolean;
 }
 
+import { ALL_STAFF_PERMISSIONS } from '../entities/shop-staff.entity';
+import type { StaffPermission, StaffPreset } from '../entities/shop-staff.entity';
 import type { DeliveryPricingType, Holiday, WorkingHourSlot } from '../entities/shop.entity';
+
+const STAFF_PRESETS: StaffPreset[] = ['kassir', 'menejer', 'sklad', 'yetkazib_beruvchi', 'custom'];
 
 export class WorkingHourSlotDto implements WorkingHourSlot {
   @ApiProperty({ minimum: 0, maximum: 6 })
@@ -233,6 +237,31 @@ export class GeoJsonPolygonDto {
   @IsArray()
   @ArrayMinSize(1)
   coordinates!: [number, number][][];
+}
+
+export class UpdateStaffDto {
+  @ApiPropertyOptional({ enum: ALL_STAFF_PERMISSIONS })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(ALL_STAFF_PERMISSIONS.length)
+  @IsIn(ALL_STAFF_PERMISSIONS, { each: true })
+  permissions?: StaffPermission[];
+
+  @ApiPropertyOptional({ enum: STAFF_PRESETS })
+  @IsOptional()
+  @IsIn(STAFF_PRESETS)
+  preset?: StaffPreset;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  customRoleName?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
 }
 
 export class UpdateDeliveryZonesDto {

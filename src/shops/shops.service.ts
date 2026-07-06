@@ -259,6 +259,12 @@ export class ShopsService {
     // Selecting a non-custom preset applies that preset's permission set;
     // toggling an individual permission switches the role to "custom".
     if (dto.preset !== undefined) {
+      // Defensive: the DTO already validates `preset` against known values,
+      // but never let an unrecognised one reach the PRESET_PERMISSIONS
+      // lookup (which would throw an uncaught TypeError / 500).
+      if (dto.preset !== 'custom' && !PRESET_PERMISSIONS[dto.preset]) {
+        throw new BadRequestException(`Noto'g'ri rol: ${String(dto.preset)}`);
+      }
       staff.preset = dto.preset;
       if (dto.preset !== 'custom') staff.permissions = [...PRESET_PERMISSIONS[dto.preset]];
     }

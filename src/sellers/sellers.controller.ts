@@ -15,7 +15,12 @@ import type { JwtPayload } from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '../auth/role.enum';
 import { SellerApplicationStatus } from './entities/seller-application.entity';
-import { ApproveApplicationDto, CreateSellerApplicationDto, RejectApplicationDto } from './dto/seller-application.dto';
+import {
+  ApproveApplicationDto,
+  CreateSellerApplicationDto,
+  RejectApplicationDto,
+  UpsertSellerProfileDto,
+} from './dto/seller-application.dto';
 import { SellersService } from './sellers.service';
 
 @ApiBearerAuth()
@@ -81,18 +86,7 @@ export class SellersController {
   upsertProfile(
     @CurrentUser() admin: JwtPayload,
     @Param('userId', ParseUUIDPipe) userId: string,
-    @Body() body: {
-      fullName?: string;
-      passportOrPinfl?: string;
-      stir?: string;
-      entityType?: string;
-      bankCardNumber?: string;
-      bankCardHolderName?: string;
-      contractNumber?: string;
-      contractDate?: string;
-      adminNotes?: string;
-      verify?: boolean;
-    },
+    @Body() body: UpsertSellerProfileDto,
   ) {
     const { verify, ...dto } = body;
     return this.sellers.upsertProfile(userId, admin.sub, dto, verify);

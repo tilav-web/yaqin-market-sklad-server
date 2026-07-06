@@ -23,13 +23,15 @@ import { Role } from '../auth/role.enum';
 import { FeedQueryDto } from './dto/feed-query.dto';
 import {
   AdjustStockDto,
+  AdminCreateGlobalProductDto,
+  AdminUpdateGlobalProductDto,
+  BulkPriceUpdateDto,
   CloneFromCatalogDto,
   CountStockDto,
   CreateCustomProductDto,
   ReceiveStockDto,
   UpdateProductVariantDto,
 } from './dto/product.dto';
-import { UnitType } from './entities/global-product.entity';
 import { ProductsService } from './products.service';
 
 @ApiBearerAuth()
@@ -263,14 +265,7 @@ export class SellerProductsExtraController {
   bulkPrice(
     @CurrentUser() user: JwtPayload,
     @Param('shopId', ParseUUIDPipe) shopId: string,
-    @Body() dto: {
-      scope: 'all' | 'category' | 'selected';
-      categoryId?: string;
-      variantIds?: string[];
-      adjustType: 'percent' | 'fixed';
-      adjustValue: number;
-      direction: 'increase' | 'decrease';
-    },
+    @Body() dto: BulkPriceUpdateDto,
   ) {
     return this.products.bulkPriceUpdate(user.sub, shopId, dto);
   }
@@ -312,37 +307,14 @@ export class AdminGlobalCatalogController {
   }
 
   @Post()
-  create(@Body() dto: {
-    name: string;
-    barcode?: string;
-    brand?: string;
-    categoryId?: string;
-    unitType?: UnitType;
-    unitSize?: number;
-    photos?: string[];
-    description?: string;
-    parentGlobalProductId?: string;
-    isVerified?: boolean;
-  }) {
+  create(@Body() dto: AdminCreateGlobalProductDto) {
     return this.products.adminCreateGlobalProduct(dto);
   }
 
   @Patch(':id')
   update(
     @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: Partial<{
-      name: string;
-      barcode: string | null;
-      brand: string | null;
-      categoryId: string | null;
-      unitType: UnitType;
-      unitSize: number;
-      photos: string[];
-      description: string | null;
-      parentGlobalProductId: string | null;
-      isVerified: boolean;
-      isActive: boolean;
-    }>,
+    @Body() dto: AdminUpdateGlobalProductDto,
   ) {
     return this.products.adminUpdateGlobalProduct(id, dto);
   }

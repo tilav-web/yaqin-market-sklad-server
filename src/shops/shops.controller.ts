@@ -19,7 +19,6 @@ import type { JwtPayload } from '../auth/decorators/current-user.decorator';
 import { Public } from '../auth/decorators/public.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '../auth/role.enum';
-import type { StaffPermission, StaffPreset } from './entities/shop-staff.entity';
 import {
   AcceptInvitationDto,
   AdminListShopsQuery,
@@ -29,6 +28,7 @@ import {
   ToggleOpenDto,
   UpdateDeliveryZonesDto,
   UpdateShopDto,
+  UpdateStaffDto,
 } from './dto/shop.dto';
 import { ShopsService } from './shops.service';
 
@@ -166,13 +166,7 @@ export class SellerShopsController {
     @CurrentUser() user: JwtPayload,
     @Param('id', ParseUUIDPipe) id: string,
     @Param('staffId', ParseUUIDPipe) staffId: string,
-    @Body()
-    body: {
-      permissions?: StaffPermission[];
-      preset?: StaffPreset;
-      customRoleName?: string;
-      isActive?: boolean;
-    },
+    @Body() body: UpdateStaffDto,
   ) {
     return this.shops.updateStaff(user.sub, id, staffId, body);
   }
