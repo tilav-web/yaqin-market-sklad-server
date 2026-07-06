@@ -1,12 +1,16 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
+import { Category } from '../categories/entities/category.entity';
+import { Order } from '../orders/entities/order.entity';
 import { Review } from '../orders/entities/review.entity';
 import { PushModule } from '../push/push.module';
 import { SettingsModule } from '../settings/settings.module';
 import { Shop } from '../shops/entities/shop.entity';
 import { ShopStaff } from '../shops/entities/shop-staff.entity';
 import { User } from '../users/entities/user.entity';
+import { ExcelController } from './excel/excel.controller';
+import { ExcelService } from './excel/excel.service';
 import { GlobalProduct } from './entities/global-product.entity';
 import { InventoryMovement } from './entities/inventory-movement.entity';
 import { ProductVariant } from './entities/product-variant.entity';
@@ -32,6 +36,8 @@ import { ProductsService } from './products.service';
       ShopStaff,
       Review,
       User,
+      Order,
+      Category,
     ]),
     PushModule,
     SettingsModule,
@@ -43,8 +49,9 @@ import { ProductsService } from './products.service';
     GlobalCatalogController,
     CatalogController,
     AdminGlobalCatalogController,
+    ExcelController,
   ],
-  providers: [ProductsService],
+  providers: [ProductsService, ExcelService],
   exports: [ProductsService],
 })
 export class ProductsModule {}
