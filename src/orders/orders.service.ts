@@ -562,7 +562,20 @@ export class OrdersService {
       // The customer confirms receipt; the shop side (owner/courier) may also.
       if (!isCustomer) await this.assertShopCanManage(actorUserId, order, 'orders.update_status');
     } else if (nextStatus === OrderStatus.Cancelled) {
-      if (!isCustomer) await this.assertShopCanManage(actorUserId, order, 'orders.cancel');
+      if (isCustomer) {
+        // The customer may cancel while the shop hasn't dispatched it yet,
+        // but not once a courier is already en route (delivering).
+        const customerCancellableFrom: OrderStatus[] = [
+          OrderStatus.New,
+          OrderStatus.Accepted,
+          OrderStatus.Preparing,
+        ];
+        if (!customerCancellableFrom.includes(order.status)) {
+          throw new BadRequestException('Yetkazib berish boshlangandan keyin buyurtmani bekor qilib bo\'lmaydi');
+        }
+      } else {
+        await this.assertShopCanManage(actorUserId, order, 'orders.cancel');
+      }
     }
 
     const saved = await this.dataSource.transaction(async (manager) => {
