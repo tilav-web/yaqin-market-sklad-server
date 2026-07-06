@@ -150,6 +150,7 @@ export class SellerOrdersController {
     return this.orders.assignOrder(user.sub, shopId, orderId, dto.staffId ?? null);
   }
 
+  /** Nearest-neighbor greedy delivery route for this shop's 'delivering' orders (SPEC.md §27). */
   @Get('delivery-route')
   deliveryRoute(
     @CurrentUser() user: JwtPayload,

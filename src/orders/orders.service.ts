@@ -24,6 +24,7 @@ import { SETTING_KEYS } from '../settings/entities/global-setting.entity';
 import { SettingsService } from '../settings/settings.service';
 import { Shop } from '../shops/entities/shop.entity';
 import { ShopStaff, StaffPermission } from '../shops/entities/shop-staff.entity';
+import { assertShopPermission } from '../shops/shop-access.util';
 import { isShopOpenNow } from '../shops/shop-hours.util';
 import { UserAddress } from '../users/entities/user-address.entity';
 import { ChatMessage } from './entities/chat-message.entity';
@@ -1005,35 +1006,72 @@ export class OrdersService {
     if (reminded.size > 0) this.logger.log(`Sent review reminders to ${reminded.size} user(s)`);
   }
 
-  // ─── Yetkazib berish marshruti ────────────────────────────────────────────
+  // ─── Yetkazib berish marshruti (SPEC.md §27) ──────────────────────────────
 
-  async getDeliveryRoute(actorUserId: string, shopId: string) {
-    const shop = await this.shops.findOne({ where: { id: shopId } });
-    if (!shop) throw new Error('Do\'kon topilmadi');
+  /**
+   * Nearest-neighbor greedy delivery route for a shop's currently-delivering
+   * orders: starting at the shop, repeatedly hop to the nearest unvisited
+   * stop. Gated by 'orders.view_assigned' (owner always passes; the
+   * yetkazib_beruvchi/courier preset already includes this permission) so a
+   * courier can view the route for orders they're delivering. Reuses the
+   * existing haversineKm util — no separate distance calc.
+   */
+  async getDeliveryRoute(actorUserId: string, shopId: string): Promise<{
+    shopLocation: { lat: number; lng: number };
+    stops: Array<{
+      orderId: string;
+      orderNumber: string;
+      sequence: number;
+      address: string;
+      lat: number;
+      lng: number;
+      customerPhone: string | null;
+      total: number;
+      distanceFromPreviousKm: number;
+    }>;
+  }> {
+    const shop = await assertShopPermission(this.shops, this.staff, actorUserId, shopId, 'orders.view_assigned');
 
     const deliveringOrders = await this.orders.find({
       where: { shopId, status: OrderStatus.Delivering },
-      relations: { deliveryAddress: true },
+      relations: { deliveryAddress: true, user: true },
     });
+
+    const unvisited = deliveringOrders
+      .filter((o) => o.deliveryAddress)
+      .map((o) => ({
+        orderId: o.id,
+        orderNumber: o.orderNumber,
+        address: o.deliveryAddress!.address,
+        lat: o.deliveryAddress!.latitude,
+        lng: o.deliveryAddress!.longitude,
+        customerPhone: o.user?.phone ?? null,
+        total: o.total,
+      }));
+
+    let currentLat = shop.latitude;
+    let currentLng = shop.longitude;
+    const stops: Array<(typeof unvisited)[number] & { sequence: number; distanceFromPreviousKm: number }> = [];
+
+    while (unvisited.length > 0) {
+      let nearestIdx = 0;
+      let nearestKm = Infinity;
+      for (let i = 0; i < unvisited.length; i++) {
+        const d = haversineKm(currentLat, currentLng, unvisited[i].lat, unvisited[i].lng);
+        if (d < nearestKm) {
+          nearestKm = d;
+          nearestIdx = i;
+        }
+      }
+      const [next] = unvisited.splice(nearestIdx, 1);
+      stops.push({ ...next, sequence: stops.length + 1, distanceFromPreviousKm: Math.round(nearestKm * 100) / 100 });
+      currentLat = next.lat;
+      currentLng = next.lng;
+    }
 
     return {
       shopLocation: { lat: shop.latitude, lng: shop.longitude },
-      orders: deliveringOrders
-        .filter((o) => o.deliveryAddress)
-        .map((o) => ({
-          id: o.id,
-          orderNumber: o.orderNumber,
-          address: o.deliveryAddress!.address,
-          lat: o.deliveryAddress!.latitude,
-          lng: o.deliveryAddress!.longitude,
-          customerPhone: o.deliveryAddress ? undefined : undefined,
-          total: o.total,
-        }))
-        .sort((a, b) => {
-          const distA = haversineKm(shop.latitude, shop.longitude, a.lat, a.lng);
-          const distB = haversineKm(shop.latitude, shop.longitude, b.lat, b.lng);
-          return distA - distB;
-        }),
+      stops,
     };
   }
 }
