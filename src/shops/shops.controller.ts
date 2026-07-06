@@ -19,6 +19,7 @@ import type { JwtPayload } from '../auth/decorators/current-user.decorator';
 import { Public } from '../auth/decorators/public.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '../auth/role.enum';
+import { ComplaintsService } from '../complaints/complaints.service';
 import {
   AcceptInvitationDto,
   AdminListShopsQuery,
@@ -199,7 +200,10 @@ export class StaffController {
 @Roles(Role.Admin)
 @Controller('admin/shops')
 export class AdminShopsController {
-  constructor(private readonly shops: ShopsService) {}
+  constructor(
+    private readonly shops: ShopsService,
+    private readonly complaints: ComplaintsService,
+  ) {}
 
   @Get()
   list(@Query() query: AdminListShopsQuery) {
@@ -209,5 +213,11 @@ export class AdminShopsController {
   @Patch(':id/active')
   setActive(@Param('id', ParseUUIDPipe) id: string, @Body() dto: AdminSetActiveDto) {
     return this.shops.adminSetActive(id, dto.isActive);
+  }
+
+  /** Shop-detail "shikoyatlarni ko'rish" (SPEC.md §5.3). */
+  @Get(':id/complaints')
+  listComplaints(@Param('id', ParseUUIDPipe) id: string) {
+    return this.complaints.listForShop(id);
   }
 }

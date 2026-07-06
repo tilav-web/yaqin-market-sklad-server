@@ -10,7 +10,9 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { customAlphabet } from 'nanoid';
 import { Between, DataSource, In, LessThan, Repository } from 'typeorm';
 
+import { ComplaintsService } from '../complaints/complaints.service';
 import { calcDeliveryFee, haversineKm, pointInPolygon } from '../geo/geo.util';
+import { SellerTransaction, SellerTxType } from '../payments/entities/seller-transaction.entity';
 import { PaymentsService } from '../payments/payments.service';
 import { GlobalProduct } from '../products/entities/global-product.entity';
 import { MovementType } from '../products/entities/inventory-movement.entity';
@@ -60,6 +62,8 @@ export class OrdersService {
     private readonly staff: Repository<ShopStaff>,
     @InjectRepository(GlobalProduct)
     private readonly globalProducts: Repository<GlobalProduct>,
+    @InjectRepository(SellerTransaction)
+    private readonly sellerTransactions: Repository<SellerTransaction>,
     private readonly dataSource: DataSource,
     private readonly realtime: RealtimeGateway,
     private readonly push: PushService,
@@ -67,6 +71,7 @@ export class OrdersService {
     private readonly prime: PrimeService,
     private readonly settings: SettingsService,
     private readonly promotions: PromotionsService,
+    private readonly complaints: ComplaintsService,
   ) {}
 
   private static readonly STATUS_LABEL: Record<OrderStatus, string> = {
@@ -519,7 +524,13 @@ export class OrdersService {
   async getOne(
     userId: string,
     orderId: string,
-  ): Promise<Order & { reviewedVariantIds: string[] }> {
+  ): Promise<
+    Order & {
+      reviewedVariantIds: string[];
+      complaint: { status: string; reason: string; createdAt: Date; resolvedAt: Date | null } | null;
+      refund: { amount: number; at: Date } | null;
+    }
+  > {
     const order = await this.orders.findOne({
       where: { id: orderId },
       relations: { items: { productVariant: true }, shop: true, deliveryAddress: true, user: true },
@@ -539,7 +550,28 @@ export class OrdersService {
           select: { productVariantId: true },
         })
       : [];
-    return { ...order, reviewedVariantIds: myReviews.map((r) => r.productVariantId) };
+
+    // Surface dispute + refund state so the customer (and shop side) can see
+    // whether an order is under complaint or has already been refunded —
+    // both already tracked in the DB but never returned before now.
+    const complaint = await this.complaints.getForOrder(orderId);
+    const refundTx = await this.sellerTransactions.findOne({
+      where: { orderId, type: SellerTxType.RefundDebit },
+    });
+
+    return {
+      ...order,
+      reviewedVariantIds: myReviews.map((r) => r.productVariantId),
+      complaint: complaint
+        ? {
+            status: complaint.status,
+            reason: complaint.reason,
+            createdAt: complaint.createdAt,
+            resolvedAt: complaint.resolvedAt,
+          }
+        : null,
+      refund: refundTx ? { amount: parseFloat(refundTx.amount), at: refundTx.createdAt } : null,
+    };
   }
 
   async updateStatus(

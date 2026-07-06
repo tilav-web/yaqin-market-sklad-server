@@ -1,7 +1,9 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
+import { ComplaintsModule } from '../complaints/complaints.module';
 import { InventoryMovement } from '../products/entities/inventory-movement.entity';
+import { SellerTransaction } from '../payments/entities/seller-transaction.entity';
 import { PaymentsModule } from '../payments/payments.module';
 import { PrimeModule } from '../prime/prime.module';
 import { PromotionsModule } from '../promotions/promotions.module';
@@ -34,6 +36,7 @@ import { OrdersService } from './orders.service';
       ProductVariant,
       InventoryMovement,
       UserAddress,
+      SellerTransaction,
     ]),
     RealtimeModule,
     RedisModule,
@@ -42,6 +45,7 @@ import { OrdersService } from './orders.service';
     PrimeModule,
     PromotionsModule,
     SettingsModule,
+    ComplaintsModule,
   ],
   controllers: [OrdersController, SellerOrdersController],
   providers: [OrdersService],

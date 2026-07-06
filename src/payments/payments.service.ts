@@ -3,6 +3,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, LessThan, Repository } from 'typeorm';
 
+import { ComplaintsService } from '../complaints/complaints.service';
 import { PushService } from '../push/push.service';
 import { Shop } from '../shops/entities/shop.entity';
 import { SettingsService } from '../settings/settings.service';
@@ -23,6 +24,7 @@ export class PaymentsService {
     private readonly settings: SettingsService,
     private readonly dataSource: DataSource,
     private readonly push: PushService,
+    private readonly complaints: ComplaintsService,
   ) {}
 
   /** Ensure a SellerBalance record exists for this seller (idempotent). */
@@ -410,9 +412,21 @@ export class PaymentsService {
     });
     if (!pending.length) return;
 
-    this.log.log(`Settling ${pending.length} pending transactions`);
+    // An order under an OPEN customer complaint must not auto-settle — it
+    // stays pending until an admin resolves it via force-settle/force-refund
+    // (SPEC.md §8.5, §21).
+    const orderIds = pending.map((t) => t.orderId).filter((id): id is string => !!id);
+    const disputedOrderIds = await this.complaints.openComplaintOrderIds(orderIds);
+    const toSettle = pending.filter((t) => !t.orderId || !disputedOrderIds.has(t.orderId));
+    const skipped = pending.length - toSettle.length;
+    if (skipped > 0) {
+      this.log.log(`Skipping settlement for ${skipped} pending transaction(s) under open complaint`);
+    }
+    if (!toSettle.length) return;
 
-    for (const tx of pending) {
+    this.log.log(`Settling ${toSettle.length} pending transactions`);
+
+    for (const tx of toSettle) {
       await this.dataSource.transaction(async (em) => {
         const b = await em.findOne(SellerBalance, {
           where: { sellerId: tx.sellerId },
