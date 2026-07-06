@@ -345,6 +345,28 @@ export class ShopsService {
     return users.map((u) => ({ id: u.id, name: u.name, phone: u.phone }));
   }
 
+  /**
+   * Cheap proxy for Shop.getCompleteness() usable on the hot search path with
+   * zero extra queries — computed only from fields already loaded on the Shop
+   * row. Deliberately omits the product-count/photo-coverage criteria (10/50/
+   * 100+ products, ≥80% with photos), since those require joining
+   * ProductVariant/GlobalProduct per shop, which is exactly the cost this
+   * proxy exists to avoid. See findNearbyShops for how it's used, and the
+   * task report for the caching follow-up this stands in for.
+   */
+  private static cheapCompletenessProxy(
+    shop: Pick<Shop, 'photos' | 'description' | 'workingHours' | 'deliveryZone' | 'latitude' | 'longitude'>,
+  ): number {
+    let score = 0;
+    if ((shop.photos?.length ?? 0) >= 1) score += 10;
+    if ((shop.photos?.length ?? 0) >= 3) score += 5;
+    if (shop.description?.trim()) score += 10;
+    if ((shop.workingHours?.length ?? 0) >= 7) score += 15;
+    if (shop.deliveryZone?.maxKm) score += 15;
+    if (shop.latitude && shop.longitude) score += 10;
+    return score; // out of 65 (see comment above for the omitted 35)
+  }
+
   // Public: shops near user
   async findNearbyShops(
     latitude: number,
@@ -382,7 +404,20 @@ export class ShopsService {
         });
       })
       .filter((s) => s.isWithinZone)
-      .sort((a, b) => a.distanceKm - b.distanceKm)
+      .sort((a, b) => {
+        // SPEC.md §31.4: among shops at (roughly) the same distance and
+        // rating, the more "complete" profile ranks higher. Distance is
+        // bucketed to 100m so nearly-identical distances count as tied
+        // rather than never matching on raw floating-point km.
+        const bucket = (km: number) => Math.round(km * 10);
+        const distDiff = bucket(a.distanceKm) - bucket(b.distanceKm);
+        if (distDiff !== 0) return distDiff;
+        const ratingDiff = b.ratingAverage - a.ratingAverage;
+        if (ratingDiff !== 0) return ratingDiff;
+        const completenessDiff = ShopsService.cheapCompletenessProxy(b) - ShopsService.cheapCompletenessProxy(a);
+        if (completenessDiff !== 0) return completenessDiff;
+        return a.distanceKm - b.distanceKm; // final stable tiebreak
+      })
       .slice(0, limit);
     return enriched;
   }
