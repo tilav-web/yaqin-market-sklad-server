@@ -116,12 +116,19 @@ export class ShopsService {
     );
   }
 
-  async listShopsWhereStaff(userId: string): Promise<{ shop: Shop; role: string }[]> {
+  async listShopsWhereStaff(
+    userId: string,
+  ): Promise<{ shop: Shop; role: string; preset: StaffPreset; permissions: StaffPermission[] }[]> {
     const staffRecords = await this.staff.find({
       where: { userId, isActive: true },
       relations: { shop: true },
     });
-    return staffRecords.map((s) => ({ shop: s.shop, role: s.customRoleName }));
+    return staffRecords.map((s) => ({
+      shop: s.shop,
+      role: s.customRoleName,
+      preset: s.preset,
+      permissions: s.permissions ?? [],
+    }));
   }
 
   async getOwned(userId: string, shopId: string): Promise<Shop> {
