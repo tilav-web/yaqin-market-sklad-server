@@ -116,6 +116,35 @@ export class OrdersService {
     throw new ForbiddenException('Bu amal uchun ruxsat yo\'q');
   }
 
+  /**
+   * Authorize read access to an order for realtime/tracking endpoints: the
+   * customer who placed it, the shop owner, or any active staff member of
+   * that shop (e.g. the assigned courier) may view it. Mirrors the isParty
+   * check in {@link getOne}.
+   */
+  async assertOrderParty(userId: string, orderId: string): Promise<Order> {
+    const order = await this.orders.findOne({ where: { id: orderId }, relations: { shop: true } });
+    if (!order) throw new NotFoundException('Buyurtma topilmadi');
+    const isParty = order.userId === userId || order.shop.ownerId === userId;
+    if (!isParty) {
+      const staff = await this.staff.findOne({
+        where: { shopId: order.shopId, userId, isActive: true },
+      });
+      if (!staff) throw new ForbiddenException();
+    }
+    return order;
+  }
+
+  /** True if `userId` is the assigned staff (courier) currently handling this order. */
+  async isAssignedCourier(userId: string, orderId: string): Promise<boolean> {
+    const order = await this.orders.findOne({ where: { id: orderId }, select: { id: true, assignedStaffId: true } });
+    if (!order?.assignedStaffId) return false;
+    const staff = await this.staff.findOne({
+      where: { id: order.assignedStaffId, userId, isActive: true },
+    });
+    return !!staff;
+  }
+
   async create(
     userId: string,
     dto: { shopId: string; deliveryAddressId: string; items: { productVariantId: string; quantity: number }[]; paymentMethod?: PaymentMethod },

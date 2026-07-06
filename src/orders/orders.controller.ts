@@ -41,6 +41,8 @@ export class OrdersController {
     @CurrentUser() user: JwtPayload,
     @Param('id', ParseUUIDPipe) id: string,
   ) {
+    // Only a party to the order (customer, shop owner, or shop staff) may read it.
+    await this.orders.assertOrderParty(user.sub, id);
     const raw = await this.redis.client.get(`courier:location:${id}`);
     if (!raw) return null;
     return JSON.parse(raw) as { lat: number; lng: number; updatedAt: string };

@@ -12,6 +12,7 @@ import { Repository } from 'typeorm';
 
 import type { JwtPayload } from '../auth/decorators/current-user.decorator';
 import type { EnvironmentVariables } from '../config/configuration';
+import { Order } from '../orders/entities/order.entity';
 import { RedisService } from '../redis/redis.service';
 import { Shop } from '../shops/entities/shop.entity';
 import { ShopStaff } from '../shops/entities/shop-staff.entity';
@@ -41,6 +42,8 @@ export class RealtimeGateway implements OnGatewayConnection {
     private readonly shops: Repository<Shop>,
     @InjectRepository(ShopStaff)
     private readonly staff: Repository<ShopStaff>,
+    @InjectRepository(Order)
+    private readonly orders: Repository<Order>,
     private readonly redis: RedisService,
   ) {}
 
@@ -50,6 +53,32 @@ export class RealtimeGateway implements OnGatewayConnection {
     if (!shop) return false;
     if (shop.ownerId === userId) return true;
     const member = await this.staff.findOne({ where: { shopId, userId, isActive: true } });
+    return !!member;
+  }
+
+  /** Only the customer who placed the order, the shop owner, or active shop staff may watch it. */
+  private async canWatchOrder(userId: string, orderId: string): Promise<boolean> {
+    const order = await this.orders.findOne({
+      where: { id: orderId },
+      relations: { shop: true },
+      select: { id: true, userId: true, shopId: true, shop: { id: true, ownerId: true } },
+    });
+    if (!order) return false;
+    if (order.userId === userId || order.shop.ownerId === userId) return true;
+    const member = await this.staff.findOne({ where: { shopId: order.shopId, userId, isActive: true } });
+    return !!member;
+  }
+
+  /** True only if `userId` is the staff member currently assigned to deliver this order. */
+  private async isAssignedCourier(userId: string, orderId: string): Promise<boolean> {
+    const order = await this.orders.findOne({
+      where: { id: orderId },
+      select: { id: true, assignedStaffId: true },
+    });
+    if (!order?.assignedStaffId) return false;
+    const member = await this.staff.findOne({
+      where: { id: order.assignedStaffId, userId, isActive: true },
+    });
     return !!member;
   }
 
@@ -81,13 +110,19 @@ export class RealtimeGateway implements OnGatewayConnection {
       });
 
       // Customer subscribes to an order's real-time stream (courier location, etc.)
+      // Only a party to the order (customer, shop owner, or active shop staff) may join.
       client.on('join:order', (orderId: unknown) => {
-        if (typeof orderId === 'string' && orderId.length > 0) {
-          void client.join(`order:${orderId}`);
-        }
+        if (typeof orderId !== 'string' || orderId.length === 0) return;
+        void this.canWatchOrder(payload.sub, orderId).then((ok) => {
+          if (ok) void client.join(`order:${orderId}`);
+        });
+      });
+      client.on('leave:order', (orderId: unknown) => {
+        if (typeof orderId === 'string') void client.leave(`order:${orderId}`);
       });
 
-      // Courier (staff) emits location while delivering
+      // Courier (staff) emits location while delivering — only the staff member
+      // actually assigned to this order may push/broadcast its GPS position.
       client.on('courier:location', (data: unknown) => {
         if (
           typeof data !== 'object' || data === null ||
@@ -96,16 +131,19 @@ export class RealtimeGateway implements OnGatewayConnection {
         const { orderId, lat, lng } = data as { orderId: string; lat: number; lng: number };
         if (typeof orderId !== 'string' || typeof lat !== 'number' || typeof lng !== 'number') return;
 
-        const payload = { lat, lng, updatedAt: new Date().toISOString() };
-        // Cache in Redis for 60s so latecomers can GET it via REST
-        void this.redis.client.set(
-          `courier:location:${orderId}`,
-          JSON.stringify(payload),
-          'EX',
-          60,
-        );
-        // Broadcast to everyone watching this order (customer, etc.)
-        this.server.to(`order:${orderId}`).emit('courier:location', payload);
+        void this.isAssignedCourier(payload.sub, orderId).then((ok) => {
+          if (!ok) return;
+          const locationPayload = { lat, lng, updatedAt: new Date().toISOString() };
+          // Cache in Redis for 60s so latecomers can GET it via REST
+          void this.redis.client.set(
+            `courier:location:${orderId}`,
+            JSON.stringify(locationPayload),
+            'EX',
+            60,
+          );
+          // Broadcast to everyone watching this order (customer, etc.)
+          this.server.to(`order:${orderId}`).emit('courier:location', locationPayload);
+        });
       });
     } catch {
       client.disconnect(true);
