@@ -1,7 +1,7 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
-import { LessThan, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 
 import { PushService } from '../push/push.service';
 import { Shop } from '../shops/entities/shop.entity';
@@ -103,42 +103,73 @@ export class PromotionsService {
     return promo;
   }
 
-  /** Savat uchun: shopId + mahsulot/kategoriya bo'yicha aktiv aksiyani topadi. */
+  /**
+   * Savat uchun: shopId + mahsulot/kategoriya bo'yicha eng foydali (eng katta
+   * chegirma summasidagi) aktiv aksiyani topadi. `unitPrice` — chegirma
+   * qo'llanadigan asl narx (masalan variant.discountPrice ?? variant.price).
+   * Returns the discount amount in so'm for ONE unit (caller multiplies by
+   * quantity), clamped so it never exceeds unitPrice.
+   */
   async findActiveForProduct(
     shopId: string,
     productVariantId: string,
     categoryId: string | null,
-    orderSubtotal: number,
-  ): Promise<{ discountAmount: number; promotionId: string | null; deliveryFree: boolean }> {
+    unitPrice: number,
+  ): Promise<{ discountAmount: number; promotionId: string | null }> {
     const now = new Date();
     const promos = await this.repo
       .createQueryBuilder('p')
       .where('p.shopId = :shopId', { shopId })
       .andWhere('p.isActive = true')
+      .andWhere("p.type IN ('product_discount', 'category_discount')")
       .andWhere('p.startAt <= :now', { now })
       .andWhere('(p.endAt IS NULL OR p.endAt >= :now)', { now })
       .getMany();
 
     let bestDiscount = 0;
     let bestId: string | null = null;
-    let deliveryFree = false;
 
     for (const p of promos) {
-      if (p.type === 'free_delivery' && p.freeDeliveryMinAmount && orderSubtotal >= p.freeDeliveryMinAmount) {
-        deliveryFree = true;
-        continue;
-      }
       if (p.type === 'product_discount' && p.targetProductId !== productVariantId) continue;
       if (p.type === 'category_discount' && (!categoryId || p.targetCategoryId !== categoryId)) continue;
+      if (!p.discountType || !p.discountValue) continue;
 
-      // discount hesoblash
-      if (p.discountType && p.discountValue) {
-        const linePrice = 0; // caller passes this
-        bestDiscount = p.discountValue;
+      const rawDiscount = p.discountType === 'percent'
+        ? Math.round((unitPrice * p.discountValue) / 100)
+        : p.discountValue;
+      const discount = Math.max(0, Math.min(rawDiscount, unitPrice));
+
+      // "Best discount wins" — keep the largest actual so'm discount, not
+      // just the last matching row in iteration order.
+      if (discount > bestDiscount) {
+        bestDiscount = discount;
         bestId = p.id;
       }
     }
-    return { discountAmount: bestDiscount, promotionId: bestId, deliveryFree };
+    return { discountAmount: bestDiscount, promotionId: bestId };
+  }
+
+  /** Savat jami summasiga qarab bepul yetkazib berish aksiyasini tekshiradi. */
+  async findFreeDeliveryPromotion(
+    shopId: string,
+    orderSubtotal: number,
+  ): Promise<{ free: boolean; promotionId: string | null }> {
+    const now = new Date();
+    const promos = await this.repo
+      .createQueryBuilder('p')
+      .where('p.shopId = :shopId', { shopId })
+      .andWhere('p.isActive = true')
+      .andWhere("p.type = 'free_delivery'")
+      .andWhere('p.startAt <= :now', { now })
+      .andWhere('(p.endAt IS NULL OR p.endAt >= :now)', { now })
+      .getMany();
+
+    for (const p of promos) {
+      if (p.freeDeliveryMinAmount && orderSubtotal >= p.freeDeliveryMinAmount) {
+        return { free: true, promotionId: p.id };
+      }
+    }
+    return { free: false, promotionId: null };
   }
 
   @Cron(CronExpression.EVERY_HOUR)

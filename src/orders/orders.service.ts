@@ -17,6 +17,7 @@ import { MovementType } from '../products/entities/inventory-movement.entity';
 import { ProductVariant } from '../products/entities/product-variant.entity';
 import { consumeFifo, restockReturn, unitCostOf } from '../products/inventory.util';
 import { PrimeService } from '../prime/prime.service';
+import { PromotionsService } from '../promotions/promotions.service';
 import { PushService } from '../push/push.service';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { SETTING_KEYS } from '../settings/entities/global-setting.entity';
@@ -64,6 +65,7 @@ export class OrdersService {
     private readonly payments: PaymentsService,
     private readonly prime: PrimeService,
     private readonly settings: SettingsService,
+    private readonly promotions: PromotionsService,
   ) {}
 
   private static readonly STATUS_LABEL: Record<OrderStatus, string> = {
@@ -82,6 +84,15 @@ export class OrdersService {
     const gps = await this.globalProducts.findBy({ id: In(gpIds) });
     const gpMap = new Map(gps.map((gp) => [gp.id, gp.name]));
     return new Map(variants.map((v) => [v.id, gpMap.get(v.globalProductId) ?? '']));
+  }
+
+  /** Build a variantId → GlobalProduct.categoryId map (for category-scoped promotions). */
+  private async variantCategoryMap(variants: ProductVariant[]): Promise<Map<string, string | null>> {
+    if (!variants.length) return new Map();
+    const gpIds = [...new Set(variants.map((v) => v.globalProductId))];
+    const gps = await this.globalProducts.findBy({ id: In(gpIds) });
+    const gpMap = new Map(gps.map((gp) => [gp.id, gp.categoryId]));
+    return new Map(variants.map((v) => [v.id, gpMap.get(v.globalProductId) ?? null]));
   }
 
   /** Notify the customer and the shop's devices that an order changed. */
@@ -174,30 +185,57 @@ export class OrdersService {
 
     const variantMap = new Map(variants.map((v) => [v.id, v]));
     const nameMap = await this.variantNameMap(variants);
+    const categoryMap = await this.variantCategoryMap(variants);
     let subTotal = 0;
-    const lineItems: { variant: ProductVariant; quantity: number; unitPrice: number; lineTotal: number }[] = [];
+    const lineItems: {
+      variant: ProductVariant;
+      quantity: number;
+      unitPrice: number;
+      lineTotal: number;
+      promotionId: string | null;
+      promotionDiscountAmount: number;
+    }[] = [];
     for (const it of dto.items) {
       const v = variantMap.get(it.productVariantId);
       if (!v) throw new BadRequestException('Mahsulot topilmadi');
       if (v.stock < it.quantity) {
         throw new BadRequestException(`"${nameMap.get(v.id) ?? ''}" mahsulotidan ${v.stock} ta qoldi, ${it.quantity} ta so'ralgan`);
       }
-      const unitPrice = v.discountPrice ?? v.price;
+      const basePrice = v.discountPrice ?? v.price;
+      // Promotions are computed dynamically at order time (never mutate
+      // ProductVariant.discountPrice) and snapshotted onto the OrderItem.
+      const promo = await this.promotions.findActiveForProduct(
+        shop.id,
+        v.id,
+        categoryMap.get(v.id) ?? null,
+        basePrice,
+      );
+      const unitPrice = Math.max(0, basePrice - promo.discountAmount);
       const lineTotal = unitPrice * it.quantity;
       subTotal += lineTotal;
-      lineItems.push({ variant: v, quantity: it.quantity, unitPrice, lineTotal });
+      lineItems.push({
+        variant: v,
+        quantity: it.quantity,
+        unitPrice,
+        lineTotal,
+        promotionId: promo.promotionId,
+        promotionDiscountAmount: promo.discountAmount * it.quantity,
+      });
     }
 
     if (subTotal < shop.minOrderPrice) {
       throw new BadRequestException(`Minimal buyurtma narxi: ${shop.minOrderPrice} so'm`);
     }
 
-    const deliveryFee = calcDeliveryFee({
+    let deliveryFee = calcDeliveryFee({
       distanceKm,
       freeKm: shop.deliveryZone.freeKm,
       pricingType: shop.deliveryZone.pricingType,
       pricePerStep: shop.deliveryZone.pricePerStep,
     });
+    // Shop-level free_delivery promotion against the cart subtotal.
+    const freeDelivery = await this.promotions.findFreeDeliveryPromotion(shop.id, subTotal);
+    if (freeDelivery.free) deliveryFee = 0;
 
     const lowAlerts: { name: string; stock: number }[] = [];
     const created = await this.dataSource.transaction(async (manager) => {
@@ -256,6 +294,8 @@ export class OrdersService {
           unitPrice: li.unitPrice,
           lineTotal: li.lineTotal,
           costOfGoods,
+          appliedPromotionId: li.promotionId,
+          promotionDiscountAmount: li.promotionDiscountAmount,
         });
         await manager.save(item);
       }

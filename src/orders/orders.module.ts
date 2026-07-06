@@ -4,6 +4,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { InventoryMovement } from '../products/entities/inventory-movement.entity';
 import { PaymentsModule } from '../payments/payments.module';
 import { PrimeModule } from '../prime/prime.module';
+import { PromotionsModule } from '../promotions/promotions.module';
 import { PushModule } from '../push/push.module';
 import { SettingsModule } from '../settings/settings.module';
 import { RealtimeModule } from '../realtime/realtime.module';
@@ -39,6 +40,7 @@ import { OrdersService } from './orders.service';
     PushModule,
     PaymentsModule,
     PrimeModule,
+    PromotionsModule,
     SettingsModule,
   ],
   controllers: [OrdersController, SellerOrdersController],
