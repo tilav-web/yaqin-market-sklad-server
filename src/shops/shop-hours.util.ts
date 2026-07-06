@@ -1,24 +1,70 @@
 import { Shop } from './entities/shop.entity';
 
-function localDate(now: Date): string {
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, '0');
-  const d = String(now.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
+/**
+ * All shops currently operate in Uzbekistan, so opening-hours checks must be
+ * evaluated in this timezone regardless of the server process's own `TZ` —
+ * relying on an ops-configured env var is fragile (easy to misconfigure /
+ * silently drift on redeploy), so we compute it explicitly every time.
+ */
+const SHOP_TZ = 'Asia/Tashkent';
+
+const WEEKDAY_INDEX: Record<string, number> = {
+  Sun: 0,
+  Mon: 1,
+  Tue: 2,
+  Wed: 3,
+  Thu: 4,
+  Fri: 5,
+  Sat: 6,
+};
+
+interface TzNow {
+  /** YYYY-MM-DD in {@link SHOP_TZ}. */
+  date: string;
+  /** HH:MM (24h) in {@link SHOP_TZ}. */
+  time: string;
+  /** 0 (Sunday) .. 6 (Saturday), matching WorkingHourSlot.dayOfWeek. */
+  dayOfWeek: number;
 }
 
-function localTime(now: Date): string {
-  return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+const formatter = new Intl.DateTimeFormat('en-US', {
+  timeZone: SHOP_TZ,
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  weekday: 'short',
+  hour12: false,
+});
+
+function tzNow(now: Date): TzNow {
+  const parts = formatter.formatToParts(now);
+  const get = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)?.value ?? '';
+  const year = get('year');
+  const month = get('month');
+  const day = get('day');
+  // With hour12:false some environments render midnight as "24" — normalize.
+  const rawHour = get('hour');
+  const hour = rawHour === '24' ? '00' : rawHour;
+  const minute = get('minute');
+  const weekday = get('weekday');
+  return {
+    date: `${year}-${month}-${day}`,
+    time: `${hour}:${minute}`,
+    dayOfWeek: WEEKDAY_INDEX[weekday] ?? now.getUTCDay(),
+  };
 }
 
 /**
  * Whether a shop is open right now, combining the manual switch with the weekly
  * schedule and holidays:
- *   - `isOpenManual` off  → closed (hard override).
- *   - no working hours set → the manual switch alone governs (always open).
- *   - today is a holiday  → closed.
+ *   - `isOpenManual` off      → closed (hard override).
+ *   - no working hours set   → closed (seller hasn't configured a schedule yet;
+ *     an unconfigured shop must not read as "always open").
+ *   - today is a holiday     → closed.
  *   - otherwise open only inside today's slot's open/close time.
- * Uses server-local time (the deployment runs in the shops' timezone).
+ * Always evaluated in Asia/Tashkent, independent of the server process's `TZ`.
  */
 export function isShopOpenNow(
   shop: Pick<Shop, 'isOpenManual' | 'workingHours' | 'holidays'>,
@@ -26,10 +72,11 @@ export function isShopOpenNow(
 ): boolean {
   if (!shop.isOpenManual) return false;
   const hours = shop.workingHours ?? [];
-  if (hours.length === 0) return true;
-  if ((shop.holidays ?? []).some((h) => h.date === localDate(now))) return false;
-  const slot = hours.find((h) => h.dayOfWeek === now.getDay());
+  if (hours.length === 0) return false;
+
+  const { date, time, dayOfWeek } = tzNow(now);
+  if ((shop.holidays ?? []).some((h) => h.date === date)) return false;
+  const slot = hours.find((h) => h.dayOfWeek === dayOfWeek);
   if (!slot || !slot.isOpen) return false;
-  const t = localTime(now);
-  return t >= slot.openTime && t <= slot.closeTime;
+  return time >= slot.openTime && time <= slot.closeTime;
 }
