@@ -76,6 +76,15 @@ export class SellerProductsController {
     return this.products.updateVariant(user.sub, variantId, dto);
   }
 
+  /** Duplicate an existing product into a new one (SPEC.md §24.1). */
+  @Post('variants/:variantId/duplicate')
+  duplicateVariant(
+    @CurrentUser() user: JwtPayload,
+    @Param('variantId', ParseUUIDPipe) variantId: string,
+  ) {
+    return this.products.duplicateVariant(user.sub, variantId);
+  }
+
   @Delete('variants/:variantId')
   @HttpCode(HttpStatus.NO_CONTENT)
   deleteVariant(

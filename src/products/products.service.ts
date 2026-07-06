@@ -317,6 +317,41 @@ export class ProductsService {
   }
 
   /**
+   * Duplicate an existing ProductVariant into a fresh one (SPEC.md §24.1) —
+   * e.g. "Pepsi 0.5L" → "Pepsi 1L" without retyping every field.
+   *
+   * Copies name (with " — nusxa" suffix)/photos/category/unit/description,
+   * resets stock to 0 and does NOT copy discountPrice/expiryDate (fresh
+   * values). Always creates a brand-new PRIVATE GlobalProduct — even if the
+   * source was linked to the shared catalogue — since the name and other
+   * display fields are changing and must not mutate the shared entry; the
+   * duplicate can be re-linked to the catalogue later by the seller if
+   * desired. Reuses createCustomProduct's private-product path rather than
+   * duplicating its logic.
+   */
+  async duplicateVariant(userId: string, variantId: string): Promise<VariantWithGlobal> {
+    const source = await this.getVariantWithGlobal(variantId);
+    await this.ensureShopAccess(userId, source.shopId, 'inventory.product.create');
+
+    return this.createCustomProduct(userId, source.shopId, {
+      name: `${source.name} — nusxa`,
+      brand: source.brand ?? undefined,
+      unitType: source.unitType,
+      unitSize: source.unitSize,
+      photos: source.photos,
+      description: source.globalProduct?.description ?? undefined,
+      categoryId: source.categoryId ?? undefined,
+      // barcode intentionally omitted: the duplicate is always private
+      // (globalProductId = null), never auto-linked back to the shared entry.
+      price: source.price,
+      stock: 0,
+      lowStockThreshold: source.lowStockThreshold,
+      criticalThreshold: source.criticalThreshold ?? undefined,
+      // discountPrice / expiryDate intentionally NOT copied — fresh values.
+    });
+  }
+
+  /**
    * Find existing shared catalogue entry by barcode, or create one.
    * Back-fills blank fields (brand, photos, categoryId) from this seller.
    * Returns the GlobalProduct id.
