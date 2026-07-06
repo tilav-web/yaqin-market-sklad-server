@@ -3,9 +3,13 @@ import {
   CreateDateColumn,
   Entity,
   Index,
+  JoinColumn,
+  ManyToOne,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
+
+import { User } from '../../users/entities/user.entity';
 
 /**
  * A device's Expo push token. `userId` is NULL for an anonymous device (the app
@@ -22,6 +26,10 @@ export class DeviceToken {
   // Null until the device's user logs in (then linked to that user).
   @Column({ type: 'uuid', nullable: true })
   userId!: string | null;
+
+  @ManyToOne(() => User, { nullable: true, onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'userId' })
+  user!: User | null;
 
   @Index({ unique: true })
   @Column({ type: 'varchar', length: 256 })

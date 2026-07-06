@@ -9,6 +9,8 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 
+import { Category } from '../../categories/entities/category.entity';
+
 export type UnitType = 'piece' | 'kg' | 'liter' | 'gram' | 'pack';
 
 /**
@@ -44,6 +46,10 @@ export class GlobalProduct {
 
   @Column({ type: 'uuid', nullable: true })
   categoryId!: string | null;
+
+  @ManyToOne(() => Category, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'categoryId' })
+  category!: Category | null;
 
   @Column({ type: 'jsonb', default: () => "'[]'::jsonb" })
   photos!: string[];

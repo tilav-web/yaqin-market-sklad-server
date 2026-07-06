@@ -3,8 +3,13 @@ import {
   CreateDateColumn,
   Entity,
   Index,
+  JoinColumn,
+  ManyToOne,
   PrimaryGeneratedColumn,
 } from 'typeorm';
+
+import { Category } from '../../categories/entities/category.entity';
+import { ProductVariant } from '../../products/entities/product-variant.entity';
 
 export type PromotionType = 'product_discount' | 'category_discount' | 'free_delivery';
 export type DiscountType = 'percent' | 'fixed';
@@ -34,8 +39,16 @@ export class Promotion {
   @Column({ type: 'uuid', nullable: true })
   targetProductId!: string | null;
 
+  @ManyToOne(() => ProductVariant, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'targetProductId' })
+  targetProduct!: ProductVariant | null;
+
   @Column({ type: 'uuid', nullable: true })
   targetCategoryId!: string | null;
+
+  @ManyToOne(() => Category, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'targetCategoryId' })
+  targetCategory!: Category | null;
 
   @Column({ type: 'int', nullable: true })
   freeDeliveryMinAmount!: number | null;
