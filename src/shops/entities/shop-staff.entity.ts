@@ -42,6 +42,8 @@ export const ALL_STAFF_PERMISSIONS = [
   'shop.settings.view',
   // debt ledger (qarz daftar)
   'debt.manage',
+  // payables — shop's own debts to external creditors (ta'minotchi/ijara/kredit)
+  'payables.manage',
   // reviews
   'reviews.view',
   // promotions
@@ -86,6 +88,7 @@ export const PRESET_PERMISSIONS: Record<Exclude<StaffPreset, 'custom'>, StaffPer
     'shop.toggle_open',
     'shop.settings.view',
     'debt.manage',
+    'payables.manage',
     'promotions.view',
     'promotions.manage',
   ],
