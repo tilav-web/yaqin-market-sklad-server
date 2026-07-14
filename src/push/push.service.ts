@@ -77,9 +77,15 @@ export class PushService {
 
   async sendToUsers(userIds: string[], payload: PushPayload): Promise<void> {
     if (userIds.length === 0) return;
-    await this.saveInbox(userIds, payload);
-    const rows = await this.tokens.find({ where: { userId: In(userIds) } });
-    await this.pushToTokens(rows.map((r) => r.token), payload);
+    try {
+      await this.saveInbox(userIds, payload);
+      const rows = await this.tokens.find({ where: { userId: In(userIds) } });
+      await this.pushToTokens(rows.map((r) => r.token), payload);
+    } catch (err) {
+      // Callers fire this and forget (order/chat/alert flows) — never let a
+      // DB hiccup here become an unhandled rejection that kills the process.
+      this.logger.warn(`sendToUsers failed: ${(err as Error).message}`);
+    }
   }
 
   /** Save one inbox row per registered recipient. */
@@ -122,16 +128,31 @@ export class PushService {
     }));
     for (let i = 0; i < messages.length; i += 100) {
       const chunk = messages.slice(i, i + 100);
+      const chunkTokens = tokens.slice(i, i + 100);
       try {
         const res = await fetch(EXPO_PUSH_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(chunk),
         });
-        if (!res.ok) this.logger.warn(`Expo push HTTP ${res.status}: ${await res.text()}`);
+        if (!res.ok) {
+          this.logger.warn(`Expo push HTTP ${res.status}: ${await res.text()}`);
+          continue;
+        }
+        await this.pruneDeadTokens(chunkTokens, await res.json());
       } catch (err) {
         this.logger.warn(`Expo push failed: ${(err as Error).message}`);
       }
     }
+  }
+
+  /** Drop tokens Expo reports as permanently unregistered so we stop wasting sends on them. */
+  private async pruneDeadTokens(chunkTokens: string[], body: unknown): Promise<void> {
+    const tickets = (body as { data?: { details?: { error?: string } }[] } | null)?.data;
+    if (!Array.isArray(tickets)) return;
+    const dead = tickets
+      .map((t, idx) => (t?.details?.error === 'DeviceNotRegistered' ? chunkTokens[idx] : null))
+      .filter((t): t is string => t !== null);
+    if (dead.length > 0) await this.tokens.delete({ token: In(dead) });
   }
 }

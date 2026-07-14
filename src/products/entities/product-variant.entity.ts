@@ -57,6 +57,14 @@ export class ProductVariant {
   @Column({ type: 'date', nullable: true })
   expiryDate!: Date | null;
 
+  /** Cooldown guard for the every-10-min critical low-stock push (LowStockAlertService). */
+  @Column({ type: 'timestamptz', nullable: true })
+  lastLowStockAlertAt!: Date | null;
+
+  /** Cooldown guard for the hourly critical expiry push (ExpiryAlertService). */
+  @Column({ type: 'timestamptz', nullable: true })
+  lastExpiryAlertAt!: Date | null;
+
   @Column({ type: 'double precision', default: 0 })
   ratingAverage!: number;
 

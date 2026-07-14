@@ -14,6 +14,9 @@ import { Shop } from '../shops/entities/shop.entity';
 export class LowStockAlertService {
   private readonly logger = new Logger(LowStockAlertService.name);
 
+  /** Once a shop is alerted for an item, wait this long before repeating (avoids spam). */
+  private static readonly CRITICAL_ALERT_COOLDOWN_MS = 6 * 60 * 60 * 1000;
+
   constructor(
     @InjectRepository(ProductVariant)
     private readonly variants: Repository<ProductVariant>,
@@ -37,6 +40,7 @@ export class LowStockAlertService {
   @Cron(CronExpression.EVERY_10_MINUTES)
   async sendCriticalAlerts(): Promise<void> {
     const defaultCritical = this.settings.getNumber(SETTING_KEYS.LOW_STOCK_CRITICAL_DEFAULT, 3);
+    const cooldownCutoff = new Date(Date.now() - LowStockAlertService.CRITICAL_ALERT_COOLDOWN_MS);
 
     const rows = await this.variants
       .createQueryBuilder('v')
@@ -46,6 +50,7 @@ export class LowStockAlertService {
         { def: defaultCritical },
       )
       .andWhere('v.stock > 0')
+      .andWhere('(v.lastLowStockAlertAt IS NULL OR v.lastLowStockAlertAt <= :cooldownCutoff)', { cooldownCutoff })
       .select(['v.shopId', 'v.id', 'v.globalProductId', 'v.stock', 'v.criticalThreshold'])
       .getMany();
 
@@ -63,6 +68,7 @@ export class LowStockAlertService {
       grouped.set(r.shopId, list);
     }
 
+    const alertedVariantIds: string[] = [];
     for (const [shopId, items] of grouped) {
       const ownerId = ownerMap.get(shopId);
       if (!ownerId) continue;
@@ -73,6 +79,10 @@ export class LowStockAlertService {
         body: `${names}${more}`,
         data: { kind: 'stock:critical', shopId },
       });
+      alertedVariantIds.push(...items.map((v) => v.id));
+    }
+    if (alertedVariantIds.length > 0) {
+      await this.variants.update({ id: In(alertedVariantIds) }, { lastLowStockAlertAt: new Date() });
     }
     this.logger.log(`Critical low-stock alerts sent for ${grouped.size} shop(s)`);
   }

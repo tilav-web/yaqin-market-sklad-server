@@ -15,6 +15,9 @@ import { Shop } from '../shops/entities/shop.entity';
 export class ExpiryAlertService {
   private readonly logger = new Logger(ExpiryAlertService.name);
 
+  /** Once a shop is alerted for a batch, wait this long before repeating (avoids spam). */
+  private static readonly CRITICAL_ALERT_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+
   constructor(
     @InjectRepository(StockBatch)
     private readonly batches: Repository<StockBatch>,
@@ -41,6 +44,7 @@ export class ExpiryAlertService {
   async sendCriticalExpiryAlerts(): Promise<void> {
     const criticalDays = this.settings.getNumber(SETTING_KEYS.EXPIRY_CRITICAL_DAYS, 2);
     const cutoff = new Date(Date.now() + criticalDays * 24 * 60 * 60 * 1000);
+    const cooldownCutoff = new Date(Date.now() - ExpiryAlertService.CRITICAL_ALERT_COOLDOWN_MS);
 
     const rows = await this.variants
       .createQueryBuilder('v')
@@ -48,6 +52,7 @@ export class ExpiryAlertService {
       .andWhere('v.expiryDate IS NOT NULL')
       .andWhere('v.expiryDate <= :cutoff', { cutoff })
       .andWhere('v.stock > 0')
+      .andWhere('(v.lastExpiryAlertAt IS NULL OR v.lastExpiryAlertAt <= :cooldownCutoff)', { cooldownCutoff })
       .select(['v.shopId', 'v.id', 'v.globalProductId', 'v.expiryDate', 'v.stock'])
       .getMany();
 
@@ -65,6 +70,7 @@ export class ExpiryAlertService {
       grouped.set(r.shopId, list);
     }
 
+    const alertedVariantIds: string[] = [];
     for (const [shopId, items] of grouped) {
       const ownerId = ownerMap.get(shopId);
       if (!ownerId) continue;
@@ -74,6 +80,10 @@ export class ExpiryAlertService {
         body: `${items.length} ta mahsulot ${criticalDays} kun ichida yaroqsiz: ${names}`,
         data: { kind: 'stock:expiry_critical', shopId },
       });
+      alertedVariantIds.push(...items.map((v) => v.id));
+    }
+    if (alertedVariantIds.length > 0) {
+      await this.variants.update({ id: In(alertedVariantIds) }, { lastExpiryAlertAt: new Date() });
     }
     this.logger.log(`Critical expiry alerts sent for ${grouped.size} shop(s)`);
   }
