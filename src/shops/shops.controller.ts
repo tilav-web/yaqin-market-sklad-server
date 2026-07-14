@@ -11,8 +11,10 @@ import {
   Patch,
   Post,
   Query,
+  Res,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import type { Response } from 'express';
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { JwtPayload } from '../auth/decorators/current-user.decorator';
@@ -20,6 +22,7 @@ import { Public } from '../auth/decorators/public.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '../auth/role.enum';
 import { ComplaintsService } from '../complaints/complaints.service';
+import { sendXlsx } from '../common/xlsx.util';
 import {
   AcceptInvitationDto,
   AdminListShopsQuery,
@@ -250,6 +253,12 @@ export class AdminShopsController {
   @Get()
   list(@Query() query: AdminListShopsQuery) {
     return this.shops.adminListShops(query);
+  }
+
+  @Get('export')
+  async export(@Query() query: AdminListShopsQuery, @Res() res: Response) {
+    const buf = await this.shops.adminExportShops(query);
+    sendXlsx(res, buf, 'dokonlar.xlsx');
   }
 
   @Patch(':id/active')

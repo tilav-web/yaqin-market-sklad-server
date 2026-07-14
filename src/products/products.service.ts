@@ -10,6 +10,7 @@ import { Between, DataSource, EntityManager, In, Repository } from 'typeorm';
 
 import { SettingsService } from '../settings/settings.service';
 import { SETTING_KEYS } from '../settings/entities/global-setting.entity';
+import { buildXlsxBuffer } from '../common/xlsx.util';
 
 import { boundingBox, calcDeliveryFee, haversineKm, pointInPolygon } from '../geo/geo.util';
 import { Review } from '../orders/entities/review.entity';
@@ -1327,13 +1328,7 @@ export class ProductsService {
 
   // ─── Admin: GlobalProduct CRUD ────────────────────────────────────────────
 
-  async adminListGlobalProducts(opts: {
-    q?: string;
-    limit?: number;
-    offset?: number;
-    activeOnly?: boolean;
-    categoryId?: string;
-  }): Promise<{ items: GlobalProduct[]; total: number }> {
+  private adminGlobalProductsFilterQuery(opts: { q?: string; activeOnly?: boolean; categoryId?: string }) {
     const qb = this.globalProducts
       .createQueryBuilder('gp')
       // Only shared products in admin view by default
@@ -1349,11 +1344,46 @@ export class ProductsService {
     }
     if (opts.activeOnly) qb.andWhere('gp.isActive = true');
     if (opts.categoryId) qb.andWhere('gp.categoryId = :categoryId', { categoryId: opts.categoryId });
+    return qb;
+  }
 
+  async adminListGlobalProducts(opts: {
+    q?: string;
+    limit?: number;
+    offset?: number;
+    activeOnly?: boolean;
+    categoryId?: string;
+  }): Promise<{ items: GlobalProduct[]; total: number }> {
+    const qb = this.adminGlobalProductsFilterQuery(opts);
     const limit = Math.min(opts.limit ?? 50, 100);
     const offset = opts.offset ?? 0;
     const [items, total] = await qb.skip(offset).take(limit).getManyAndCount();
     return { items, total };
+  }
+
+  async adminExportGlobalProducts(opts: { q?: string; activeOnly?: boolean; categoryId?: string }): Promise<Buffer> {
+    const rows = await this.adminGlobalProductsFilterQuery(opts).take(5000).getMany();
+    return buildXlsxBuffer(
+      'Katalog',
+      [
+        { header: 'Nomi', key: 'name', width: 32 },
+        { header: 'Brend', key: 'brand', width: 20 },
+        { header: 'Barkod', key: 'barcode', width: 18 },
+        { header: 'Birlik', key: 'unit', width: 12 },
+        { header: 'Tasdiqlangan', key: 'isVerified', width: 14 },
+        { header: 'Aktiv', key: 'isActive', width: 10 },
+        { header: "Do'konlar soni", key: 'usageCount', width: 14 },
+      ],
+      rows.map((p) => ({
+        name: p.name,
+        brand: p.brand ?? '',
+        barcode: p.barcode ?? '',
+        unit: `${p.unitSize} ${p.unitType}`,
+        isVerified: p.isVerified ? 'ha' : "yo'q",
+        isActive: p.isActive ? 'ha' : "yo'q",
+        usageCount: p.usageCount,
+      })),
+    );
   }
 
   /** Aggregate counters for the catalog page's summary bar (shared products only). */

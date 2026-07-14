@@ -345,6 +345,19 @@ export class AdminGlobalCatalogController {
     return this.products.adminGetCatalogStats();
   }
 
+  @Get('export')
+  async export(
+    @Query('q') q: string | undefined,
+    @Query('activeOnly') activeOnly: string | undefined,
+    @Query('categoryId') categoryId: string | undefined,
+    @Res() res: Response,
+  ) {
+    const buf = await this.products.adminExportGlobalProducts({ q, activeOnly: activeOnly === 'true', categoryId });
+    res.setHeader('Content-Type', XLSX_CONTENT_TYPE);
+    res.setHeader('Content-Disposition', 'attachment; filename="katalog.xlsx"');
+    res.send(buf);
+  }
+
   @Get('import/template')
   async importTemplate(@Res() res: Response) {
     const buf = await this.catalogImport.downloadTemplate();

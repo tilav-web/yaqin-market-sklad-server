@@ -12,6 +12,7 @@ import { Between, DataSource, In, Repository } from 'typeorm';
 
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { AuditAction } from '../audit-log/entities/admin-audit-log.entity';
+import { buildXlsxBuffer } from '../common/xlsx.util';
 import { Order } from '../orders/entities/order.entity';
 import { GlobalProduct } from '../products/entities/global-product.entity';
 import { ProductVariant } from '../products/entities/product-variant.entity';
@@ -572,7 +573,7 @@ export class ShopsService {
 
   // ---- Admin ---------------------------------------------------------------
 
-  async adminListShops(opts: { search?: string; limit?: number; offset?: number }) {
+  private adminShopsFilterQuery(opts: { search?: string }) {
     const qb = this.shops
       .createQueryBuilder('s')
       .leftJoin('s.owner', 'owner')
@@ -591,13 +592,45 @@ export class ShopsService {
         'owner.name',
         'owner.phone',
       ])
-      .orderBy('s.createdAt', 'DESC')
-      .take(Math.min(opts.limit ?? 50, 100))
-      .skip(Math.max(opts.offset ?? 0, 0));
+      .orderBy('s.createdAt', 'DESC');
     const s = opts.search?.trim();
     if (s) qb.where('s.name ILIKE :q OR s.address ILIKE :q', { q: `%${s}%` });
+    return qb;
+  }
+
+  async adminListShops(opts: { search?: string; limit?: number; offset?: number }) {
+    const qb = this.adminShopsFilterQuery(opts)
+      .take(Math.min(opts.limit ?? 50, 100))
+      .skip(Math.max(opts.offset ?? 0, 0));
     const [items, total] = await qb.getManyAndCount();
     return { items, total };
+  }
+
+  async adminExportShops(opts: { search?: string }): Promise<Buffer> {
+    const rows = await this.adminShopsFilterQuery(opts).take(5000).getMany();
+    return buildXlsxBuffer(
+      "Do'konlar",
+      [
+        { header: 'Nomi', key: 'name', width: 26 },
+        { header: 'Manzil', key: 'address', width: 32 },
+        { header: 'Egasi', key: 'ownerName', width: 20 },
+        { header: 'Egasi telefoni', key: 'ownerPhone', width: 16 },
+        { header: 'Holat', key: 'isActive', width: 12 },
+        { header: 'Ochiq/yopiq', key: 'isOpenManual', width: 12 },
+        { header: 'Reyting', key: 'rating', width: 12 },
+        { header: "Ro'yxatdan o'tgan", key: 'createdAt', width: 20 },
+      ],
+      rows.map((s) => ({
+        name: s.name,
+        address: s.address,
+        ownerName: s.owner?.name ?? '',
+        ownerPhone: s.owner?.phone ?? '',
+        isActive: s.isActive ? 'ha' : "yo'q",
+        isOpenManual: s.isOpenManual ? 'ochiq' : 'yopiq',
+        rating: `${s.ratingAverage.toFixed(1)} (${s.ratingCount})`,
+        createdAt: s.createdAt.toISOString(),
+      })),
+    );
   }
 
   async adminSetActive(
