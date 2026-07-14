@@ -1356,6 +1356,17 @@ export class ProductsService {
     return { items, total };
   }
 
+  /** Aggregate counters for the catalog page's summary bar (shared products only). */
+  async adminGetCatalogStats(): Promise<{ total: number; verified: number; active: number }> {
+    const base = this.globalProducts.createQueryBuilder('gp').where('gp.ownerShopId IS NULL');
+    const [total, verified, active] = await Promise.all([
+      base.clone().getCount(),
+      base.clone().andWhere('gp.isVerified = true').getCount(),
+      base.clone().andWhere('gp.isActive = true').getCount(),
+    ]);
+    return { total, verified, active };
+  }
+
   async adminCreateGlobalProduct(dto: {
     name: string;
     barcode?: string;

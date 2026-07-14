@@ -7,6 +7,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { AnalyticsModule } from './analytics/analytics.module';
 import { AppReleasesModule } from './app-releases/app-releases.module';
+import { AuditLogModule } from './audit-log/audit-log.module';
 import { ChatTemplatesModule } from './chat-templates/chat-templates.module';
 import { ClickModule } from './click/click.module';
 import { ComplaintsModule } from './complaints/complaints.module';
@@ -72,6 +73,7 @@ import { UsersModule } from './users/users.module';
     ChatTemplatesModule,
     ClickModule,
     ComplaintsModule,
+    AuditLogModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsFilter },

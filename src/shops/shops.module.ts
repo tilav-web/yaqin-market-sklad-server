@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
+import { AuditLogModule } from '../audit-log/audit-log.module';
 import { ComplaintsModule } from '../complaints/complaints.module';
 import { Order } from '../orders/entities/order.entity';
 import { GlobalProduct } from '../products/entities/global-product.entity';
@@ -24,6 +25,7 @@ import { StaffInvitation } from './entities/staff-invitation.entity';
       Shop, ShopStaff, ShopStaffPreset, StaffInvitation, User, Order, ProductVariant, GlobalProduct,
     ]),
     ComplaintsModule,
+    AuditLogModule,
   ],
   controllers: [ShopsController, SellerShopsController, StaffController, AdminShopsController],
   providers: [ShopsService],

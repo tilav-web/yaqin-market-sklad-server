@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
+import { AuditLogModule } from '../audit-log/audit-log.module';
 import { Order } from '../orders/entities/order.entity';
 import { ShopStaff } from '../shops/entities/shop-staff.entity';
 import { UserAddress } from './entities/user-address.entity';
@@ -9,7 +10,7 @@ import { AdminUsersController, UsersController } from './users.controller';
 import { UsersService } from './users.service';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([User, UserAddress, ShopStaff, Order])],
+  imports: [TypeOrmModule.forFeature([User, UserAddress, ShopStaff, Order]), AuditLogModule],
   controllers: [UsersController, AdminUsersController],
   providers: [UsersService],
   exports: [UsersService],

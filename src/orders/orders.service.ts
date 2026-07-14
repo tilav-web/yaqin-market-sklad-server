@@ -1241,4 +1241,56 @@ export class OrdersService {
       stops,
     };
   }
+
+  // ─── Admin: platforma bo'ylab buyurtmalarni ko'rish ──────────────────────
+
+  async adminListOrders(opts: {
+    search?: string;
+    status?: OrderStatus;
+    channel?: OrderChannel;
+    paymentMethod?: PaymentMethod;
+    paymentStatus?: PaymentStatus;
+    shopId?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<{ items: Order[]; total: number }> {
+    const qb = this.orders
+      .createQueryBuilder('o')
+      .leftJoinAndSelect('o.shop', 'shop')
+      .leftJoinAndSelect('o.user', 'user')
+      .orderBy('o.createdAt', 'DESC');
+
+    if (opts.status) qb.andWhere('o.status = :status', { status: opts.status });
+    if (opts.channel) qb.andWhere('o.channel = :channel', { channel: opts.channel });
+    if (opts.paymentMethod) qb.andWhere('o.paymentMethod = :paymentMethod', { paymentMethod: opts.paymentMethod });
+    if (opts.paymentStatus) qb.andWhere('o.paymentStatus = :paymentStatus', { paymentStatus: opts.paymentStatus });
+    if (opts.shopId) qb.andWhere('o.shopId = :shopId', { shopId: opts.shopId });
+    // Uzbekistan has a fixed UTC+5 offset (no DST) — parse the admin's
+    // YYYY-MM-DD as Tashkent-local midnight, not UTC midnight, so "bugun"
+    // matches what a Tashkent-based admin actually means by that date.
+    if (opts.dateFrom) qb.andWhere('o.createdAt >= :dateFrom', { dateFrom: new Date(`${opts.dateFrom}T00:00:00+05:00`) });
+    if (opts.dateTo) qb.andWhere('o.createdAt < :dateTo', { dateTo: new Date(new Date(`${opts.dateTo}T00:00:00+05:00`).getTime() + 24 * 3600 * 1000) });
+    if (opts.search) {
+      qb.andWhere(
+        '(o.orderNumber ILIKE :q OR shop.name ILIKE :q OR user.phone ILIKE :q OR user.name ILIKE :q)',
+        { q: `%${opts.search}%` },
+      );
+    }
+
+    const limit = Math.min(opts.limit ?? 30, 100);
+    const offset = Math.max(opts.offset ?? 0, 0);
+    const [items, total] = await qb.skip(offset).take(limit).getManyAndCount();
+    return { items, total };
+  }
+
+  async adminGetOrder(id: string): Promise<Order> {
+    const order = await this.orders.findOne({
+      where: { id },
+      relations: { items: { productVariant: true }, shop: true, user: true, deliveryAddress: true },
+    });
+    if (!order) throw new NotFoundException('Buyurtma topilmadi');
+    return order;
+  }
 }

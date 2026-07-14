@@ -72,8 +72,8 @@ export class AdminBalanceController {
   }
 
   @Post('sellers/:sellerId/adjust')
-  adjust(@Param('sellerId') sellerId: string, @Body() body: AdjustBalanceDto) {
-    return this.svc.adminAdjust(sellerId, body.amount, body.description);
+  adjust(@Param('sellerId') sellerId: string, @Request() req: any, @Body() body: AdjustBalanceDto) {
+    return this.svc.adminAdjust(sellerId, body.amount, body.description, req.user.sub);
   }
 
   @Post('transactions/:txId/force-settle')
@@ -101,7 +101,7 @@ export class AdminBalanceController {
   }
 
   @Post('sellers/:sellerId/extend-debt')
-  extendDebt(@Param('sellerId') sellerId: string, @Body() body: ExtendDebtDto) {
-    return this.svc.adminExtendDebtDue(sellerId, body.days);
+  extendDebt(@Param('sellerId') sellerId: string, @Request() req: any, @Body() body: ExtendDebtDto) {
+    return this.svc.adminExtendDebtDue(sellerId, body.days, req.user.sub);
   }
 }

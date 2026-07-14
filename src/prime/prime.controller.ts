@@ -67,7 +67,7 @@ export class AdminPrimeController {
   }
 
   @Put('subscriptions/:id/extend')
-  extend(@Param('id') id: string, @Body() dto: ExtendPrimeSubDto) {
-    return this.svc.adminExtend(id, dto.days);
+  extend(@Param('id') id: string, @Request() req: any, @Body() dto: ExtendPrimeSubDto) {
+    return this.svc.adminExtend(id, dto.days, req.user.sub);
   }
 }

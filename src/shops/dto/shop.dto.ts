@@ -99,6 +99,12 @@ export class AdminSetActiveDto {
   @ApiProperty()
   @IsBoolean()
   isActive!: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  reason?: string;
 }
 
 import { ALL_STAFF_PERMISSIONS } from '../entities/shop-staff.entity';

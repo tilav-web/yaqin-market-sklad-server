@@ -120,13 +120,21 @@ export class AdminUsersController {
   }
 
   @Patch(':id/status')
-  setStatus(@Param('id', ParseUUIDPipe) id: string, @Body() dto: AdminSetStatusDto) {
-    return this.users.adminSetStatus(id, dto.blocked);
+  setStatus(
+    @CurrentUser() admin: JwtPayload,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: AdminSetStatusDto,
+  ) {
+    return this.users.adminSetStatus(id, dto.blocked, admin.sub, dto.reason);
   }
 
   @Patch(':id/admin')
-  setAdmin(@Param('id', ParseUUIDPipe) id: string, @Body() dto: AdminSetAdminDto) {
-    return this.users.adminSetAdmin(id, dto.isAdmin);
+  setAdmin(
+    @CurrentUser() admin: JwtPayload,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: AdminSetAdminDto,
+  ) {
+    return this.users.adminSetAdmin(id, dto.isAdmin, admin.sub, dto.reason);
   }
 
   /** User-detail order history (SPEC.md §5.3 "Buyurtma tarixini ko'rish"). */

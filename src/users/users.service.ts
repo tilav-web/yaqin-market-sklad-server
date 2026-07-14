@@ -3,6 +3,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
 import { Role } from '../auth/role.enum';
+import { AuditLogService } from '../audit-log/audit-log.service';
+import { AuditAction } from '../audit-log/entities/admin-audit-log.entity';
 import { Order } from '../orders/entities/order.entity';
 import { ShopStaff } from '../shops/entities/shop-staff.entity';
 import { UserAddress } from './entities/user-address.entity';
@@ -19,6 +21,7 @@ export class UsersService {
     private readonly shopStaff: Repository<ShopStaff>,
     @InjectRepository(Order)
     private readonly orders: Repository<Order>,
+    private readonly auditLog: AuditLogService,
   ) {}
 
   /**
@@ -156,19 +159,45 @@ export class UsersService {
     return { items, total };
   }
 
-  async adminSetStatus(userId: string, blocked: boolean): Promise<User> {
+  async adminSetStatus(
+    userId: string,
+    blocked: boolean,
+    adminUserId: string,
+    reason?: string,
+  ): Promise<User> {
     const user = await this.users.findOne({ where: { id: userId } });
     if (!user) throw new NotFoundException('Foydalanuvchi topilmadi');
     user.status = blocked ? UserStatus.Blocked : UserStatus.Active;
-    return this.users.save(user);
+    const saved = await this.users.save(user);
+    void this.auditLog.record({
+      adminUserId,
+      action: blocked ? AuditAction.UserBlocked : AuditAction.UserUnblocked,
+      targetType: 'user',
+      targetId: userId,
+      reason,
+    });
+    return saved;
   }
 
-  async adminSetAdmin(userId: string, isAdmin: boolean): Promise<User> {
+  async adminSetAdmin(
+    userId: string,
+    isAdmin: boolean,
+    adminUserId: string,
+    reason: string,
+  ): Promise<User> {
     const user = await this.users.findOne({ where: { id: userId } });
     if (!user) throw new NotFoundException('Foydalanuvchi topilmadi');
     user.isAdmin = isAdmin;
     await this.computeRoles(user); // re-derive + persist roles
-    return this.users.save(user);
+    const saved = await this.users.save(user);
+    void this.auditLog.record({
+      adminUserId,
+      action: isAdmin ? AuditAction.UserPromoted : AuditAction.UserDemoted,
+      targetType: 'user',
+      targetId: userId,
+      reason,
+    });
+    return saved;
   }
 
   /** Admin: paginated order history for one user (5.3 "Buyurtma tarixini ko'rish"). */

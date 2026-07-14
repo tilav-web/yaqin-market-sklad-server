@@ -3,6 +3,8 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, LessThan, Repository } from 'typeorm';
 
+import { AuditLogService } from '../audit-log/audit-log.service';
+import { AuditAction } from '../audit-log/entities/admin-audit-log.entity';
 import { ComplaintsService } from '../complaints/complaints.service';
 import { PushService } from '../push/push.service';
 import { Shop } from '../shops/entities/shop.entity';
@@ -25,6 +27,7 @@ export class PaymentsService {
     private readonly dataSource: DataSource,
     private readonly push: PushService,
     private readonly complaints: ComplaintsService,
+    private readonly auditLog: AuditLogService,
   ) {}
 
   /** Ensure a SellerBalance record exists for this seller (idempotent). */
@@ -382,7 +385,12 @@ export class PaymentsService {
   }
 
   /** Admin: manual balance adjustment */
-  async adminAdjust(sellerId: string, amount: number, description: string): Promise<SellerBalance> {
+  async adminAdjust(
+    sellerId: string,
+    amount: number,
+    description: string,
+    adminUserId: string,
+  ): Promise<SellerBalance> {
     if (!Number.isFinite(amount)) {
       throw new BadRequestException('Noto\'g\'ri miqdor');
     }
@@ -408,6 +416,14 @@ export class PaymentsService {
         status: 'settled',
         description,
       }));
+    });
+    void this.auditLog.record({
+      adminUserId,
+      action: AuditAction.BalanceAdjusted,
+      targetType: 'seller_balance',
+      targetId: sellerId,
+      reason: description,
+      metadata: { amount },
     });
     return this.ensureBalance(sellerId);
   }
@@ -564,6 +580,12 @@ export class PaymentsService {
     });
 
     await this.autoRepayDebt(sellerId);
+    void this.auditLog.record({
+      adminUserId: adminId,
+      action: AuditAction.TransactionForceSettled,
+      targetType: 'seller_transaction',
+      targetId: txId,
+    });
     return this.txs.findOneOrFail({ where: { id: txId } });
   }
 
@@ -606,6 +628,12 @@ export class PaymentsService {
       }));
     });
 
+    void this.auditLog.record({
+      adminUserId: adminId,
+      action: AuditAction.TransactionForceRefunded,
+      targetType: 'seller_transaction',
+      targetId: txId,
+    });
     return this.txs.findOneOrFail({ where: { id: txId } });
   }
 
@@ -623,7 +651,7 @@ export class PaymentsService {
 
   /** Admin: forgive a seller's entire debt (write it off). */
   async adminForgiveDebt(sellerId: string, adminId: string, reason: string): Promise<SellerBalance> {
-    return this.dataSource.transaction(async (em) => {
+    const result = await this.dataSource.transaction(async (em) => {
       const b = await em.findOne(SellerBalance, {
         where: { sellerId },
         lock: { mode: 'pessimistic_write' },
@@ -647,11 +675,19 @@ export class PaymentsService {
       );
       return b;
     });
+    void this.auditLog.record({
+      adminUserId: adminId,
+      action: AuditAction.DebtForgiven,
+      targetType: 'seller_balance',
+      targetId: sellerId,
+      reason,
+    });
+    return result;
   }
 
   /** Admin: extend the debt due date by N days. */
-  async adminExtendDebtDue(sellerId: string, days: number): Promise<SellerBalance> {
-    return this.dataSource.transaction(async (em) => {
+  async adminExtendDebtDue(sellerId: string, days: number, adminUserId: string): Promise<SellerBalance> {
+    const result = await this.dataSource.transaction(async (em) => {
       const b = await em.findOne(SellerBalance, {
         where: { sellerId },
         lock: { mode: 'pessimistic_write' },
@@ -667,5 +703,13 @@ export class PaymentsService {
       });
       return em.save(SellerBalance, b);
     });
+    void this.auditLog.record({
+      adminUserId,
+      action: AuditAction.DebtExtended,
+      targetType: 'seller_balance',
+      targetId: sellerId,
+      metadata: { days },
+    });
+    return result;
   }
 }

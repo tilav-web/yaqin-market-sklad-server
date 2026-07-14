@@ -253,8 +253,12 @@ export class AdminShopsController {
   }
 
   @Patch(':id/active')
-  setActive(@Param('id', ParseUUIDPipe) id: string, @Body() dto: AdminSetActiveDto) {
-    return this.shops.adminSetActive(id, dto.isActive);
+  setActive(
+    @CurrentUser() admin: JwtPayload,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: AdminSetActiveDto,
+  ) {
+    return this.shops.adminSetActive(id, dto.isActive, admin.sub, dto.reason);
   }
 
   /** Shop-detail "shikoyatlarni ko'rish" (SPEC.md §5.3). */

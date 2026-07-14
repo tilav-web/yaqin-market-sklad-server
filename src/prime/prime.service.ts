@@ -1,11 +1,14 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Between, LessThan, MoreThanOrEqual, Repository } from 'typeorm';
+import { Between, In, LessThan, MoreThanOrEqual, Repository } from 'typeorm';
 
+import { AuditLogService } from '../audit-log/audit-log.service';
+import { AuditAction } from '../audit-log/entities/admin-audit-log.entity';
 import { SellerBalance } from '../payments/entities/seller-balance.entity';
 import { SellerTransaction, SellerTxType } from '../payments/entities/seller-transaction.entity';
 import { PushService } from '../push/push.service';
+import { User } from '../users/entities/user.entity';
 import { PrimePlan } from './entities/prime-plan.entity';
 import { SellerSubscription } from './entities/seller-subscription.entity';
 
@@ -16,7 +19,9 @@ export class PrimeService {
     @InjectRepository(SellerSubscription) private readonly subs: Repository<SellerSubscription>,
     @InjectRepository(SellerBalance)      private readonly balances: Repository<SellerBalance>,
     @InjectRepository(SellerTransaction)  private readonly txs: Repository<SellerTransaction>,
+    @InjectRepository(User)               private readonly users: Repository<User>,
     private readonly push: PushService,
+    private readonly auditLog: AuditLogService,
   ) {}
 
   /* ─── Plans (admin) ─── */
@@ -142,17 +147,37 @@ export class PrimeService {
 
   /* ─── Admin ─── */
 
-  listAllSubscriptions(): Promise<SellerSubscription[]> {
-    return this.subs.find({ where: { isActive: true }, relations: { plan: true }, order: { createdAt: 'DESC' } });
+  async listAllSubscriptions(): Promise<
+    (SellerSubscription & { seller: { id: string; name: string | null; phone: string } | null })[]
+  > {
+    const subs = await this.subs.find({
+      where: { isActive: true },
+      relations: { plan: true },
+      order: { createdAt: 'DESC' },
+    });
+    const sellerIds = [...new Set(subs.map((s) => s.sellerId))];
+    const sellers = sellerIds.length
+      ? await this.users.find({ where: { id: In(sellerIds) }, select: { id: true, name: true, phone: true } })
+      : [];
+    const byId = new Map(sellers.map((s) => [s.id, s]));
+    return subs.map((s) => ({ ...s, seller: byId.get(s.sellerId) ?? null }));
   }
 
-  async adminExtend(subId: string, days: number): Promise<SellerSubscription> {
+  async adminExtend(subId: string, days: number, adminUserId: string): Promise<SellerSubscription> {
     const sub = await this.subs.findOne({ where: { id: subId } });
     if (!sub) throw new NotFoundException();
     const end = new Date(sub.endDate);
     end.setDate(end.getDate() + days);
     sub.endDate = end.toISOString().split('T')[0];
-    return this.subs.save(sub);
+    const saved = await this.subs.save(sub);
+    void this.auditLog.record({
+      adminUserId,
+      action: AuditAction.PrimeSubscriptionExtended,
+      targetType: 'seller_subscription',
+      targetId: subId,
+      metadata: { days, sellerId: sub.sellerId },
+    });
+    return saved;
   }
 
   /* ─── Cron: expire subscriptions ─── */

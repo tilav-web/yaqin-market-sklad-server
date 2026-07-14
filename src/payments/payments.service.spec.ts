@@ -3,6 +3,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 
+import { AuditLogService } from '../audit-log/audit-log.service';
 import { ComplaintsService } from '../complaints/complaints.service';
 import { PushService } from '../push/push.service';
 import { SETTING_KEYS } from '../settings/entities/global-setting.entity';
@@ -86,6 +87,7 @@ describe('PaymentsService', () => {
   let dataSource: { transaction: jest.Mock };
   let push: { sendToUser: jest.Mock };
   let complaints: { openComplaintOrderIds: jest.Mock };
+  let auditLog: { record: jest.Mock };
 
   const buildRepoMock = () => ({
     findOne: jest.fn(),
@@ -107,6 +109,7 @@ describe('PaymentsService', () => {
     dataSource = { transaction: jest.fn() };
     push = { sendToUser: jest.fn() };
     complaints = { openComplaintOrderIds: jest.fn().mockResolvedValue(new Set()) };
+    auditLog = { record: jest.fn().mockResolvedValue(undefined) };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -119,6 +122,7 @@ describe('PaymentsService', () => {
         { provide: DataSource, useValue: dataSource },
         { provide: PushService, useValue: push },
         { provide: ComplaintsService, useValue: complaints },
+        { provide: AuditLogService, useValue: auditLog },
       ],
     }).compile();
 

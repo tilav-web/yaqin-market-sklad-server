@@ -8,6 +8,7 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  Matches,
   Max,
   MaxLength,
   Min,
@@ -15,7 +16,7 @@ import {
 } from 'class-validator';
 
 
-import { OrderStatus, PaymentMethod } from '../entities/order.entity';
+import { OrderChannel, OrderStatus, PaymentMethod, PaymentStatus } from '../entities/order.entity';
 
 export class OrderItemDto {
   @ApiProperty()
@@ -140,4 +141,64 @@ export class PartialReturnDto {
   @IsOptional()
   @IsString()
   reason?: string;
+}
+
+export class AdminListOrdersQuery {
+  @ApiPropertyOptional({ description: 'Buyurtma raqami, mijoz ismi/telefoni yoki do\'kon nomi' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  search?: string;
+
+  @ApiPropertyOptional({ enum: OrderStatus })
+  @IsOptional()
+  @IsEnum(OrderStatus)
+  status?: OrderStatus;
+
+  @ApiPropertyOptional({ enum: OrderChannel })
+  @IsOptional()
+  @IsEnum(OrderChannel)
+  channel?: OrderChannel;
+
+  @ApiPropertyOptional({ enum: PaymentMethod })
+  @IsOptional()
+  @IsEnum(PaymentMethod)
+  paymentMethod?: PaymentMethod;
+
+  @ApiPropertyOptional({ enum: PaymentStatus })
+  @IsOptional()
+  @IsEnum(PaymentStatus)
+  paymentStatus?: PaymentStatus;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
+  shopId?: string;
+
+  @ApiPropertyOptional({ example: '2026-01-01' })
+  @IsOptional()
+  @IsString()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  dateFrom?: string;
+
+  @ApiPropertyOptional({ example: '2026-01-31' })
+  @IsOptional()
+  @IsString()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  dateTo?: string;
+
+  @ApiPropertyOptional({ default: 30 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number;
+
+  @ApiPropertyOptional({ default: 0 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  offset?: number;
 }

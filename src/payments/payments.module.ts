@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
+import { AuditLogModule } from '../audit-log/audit-log.module';
 import { ComplaintsModule } from '../complaints/complaints.module';
 import { PushModule } from '../push/push.module';
 import { Shop } from '../shops/entities/shop.entity';
@@ -17,6 +18,7 @@ import { PaymentsService } from './payments.service';
     SettingsModule,
     PushModule,
     ComplaintsModule,
+    AuditLogModule,
   ],
   controllers: [AdminBalanceController, SellerBalanceController],
   providers: [PaymentsService],

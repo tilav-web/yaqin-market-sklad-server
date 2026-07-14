@@ -10,6 +10,8 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Between, DataSource, In, Repository } from 'typeorm';
 
+import { AuditLogService } from '../audit-log/audit-log.service';
+import { AuditAction } from '../audit-log/entities/admin-audit-log.entity';
 import { Order } from '../orders/entities/order.entity';
 import { GlobalProduct } from '../products/entities/global-product.entity';
 import { ProductVariant } from '../products/entities/product-variant.entity';
@@ -64,6 +66,7 @@ export class ShopsService {
     @InjectRepository(GlobalProduct)
     private readonly globalProducts: Repository<GlobalProduct>,
     private readonly dataSource: DataSource,
+    private readonly auditLog: AuditLogService,
   ) {}
 
   findOne(id: string): Promise<Shop | null> {
@@ -597,11 +600,24 @@ export class ShopsService {
     return { items, total };
   }
 
-  async adminSetActive(shopId: string, isActive: boolean): Promise<Shop> {
+  async adminSetActive(
+    shopId: string,
+    isActive: boolean,
+    adminUserId: string,
+    reason?: string,
+  ): Promise<Shop> {
     const shop = await this.shops.findOne({ where: { id: shopId } });
     if (!shop) throw new NotFoundException('Do\'kon topilmadi');
     shop.isActive = isActive;
-    return this.shops.save(shop);
+    const saved = await this.shops.save(shop);
+    void this.auditLog.record({
+      adminUserId,
+      action: isActive ? AuditAction.ShopActivated : AuditAction.ShopDeactivated,
+      targetType: 'shop',
+      targetId: shopId,
+      reason,
+    });
+    return saved;
   }
 
   // ─── Do'kon profil to'liqligi ─────────────────────────────────────────────

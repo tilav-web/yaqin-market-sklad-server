@@ -326,6 +326,11 @@ export class AdminGlobalCatalogController {
     });
   }
 
+  @Get('stats')
+  catalogStats() {
+    return this.products.adminGetCatalogStats();
+  }
+
   @Post()
   create(@Body() dto: AdminCreateGlobalProductDto) {
     return this.products.adminCreateGlobalProduct(dto);

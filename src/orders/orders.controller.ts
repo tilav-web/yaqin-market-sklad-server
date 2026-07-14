@@ -12,8 +12,11 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { JwtPayload } from '../auth/decorators/current-user.decorator';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { Role } from '../auth/role.enum';
 import { RedisService } from '../redis/redis.service';
 import {
+  AdminListOrdersQuery,
   AssignOrderDto,
   CreateOrderDto,
   CreateReviewsDto,
@@ -157,5 +160,24 @@ export class SellerOrdersController {
     @Param('shopId', ParseUUIDPipe) shopId: string,
   ) {
     return this.orders.getDeliveryRoute(user.sub, shopId);
+  }
+}
+
+/** Platform-wide order browser — support/moderation, not tied to one user or shop. */
+@ApiBearerAuth()
+@ApiTags('admin-orders')
+@Roles(Role.Admin)
+@Controller('admin/orders')
+export class AdminOrdersController {
+  constructor(private readonly orders: OrdersService) {}
+
+  @Get()
+  list(@Query() query: AdminListOrdersQuery) {
+    return this.orders.adminListOrders(query);
+  }
+
+  @Get(':id')
+  getOne(@Param('id', ParseUUIDPipe) id: string) {
+    return this.orders.adminGetOrder(id);
   }
 }
