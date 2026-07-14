@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 
 import { PaymentsService } from '../payments/payments.service';
 import { User } from '../users/entities/user.entity';
@@ -17,6 +17,7 @@ export class SellersService {
     @InjectRepository(SellerProfile)
     private readonly profiles: Repository<SellerProfile>,
     private readonly payments: PaymentsService,
+    private readonly dataSource: DataSource,
   ) {}
 
   async submitApplication(
@@ -73,39 +74,58 @@ export class SellersService {
       'contractDate' | 'adminNotes'
     >>,
   ): Promise<{ application: SellerApplication }> {
-    const app = await this.getApplication(id);
-    if (app.status !== SellerApplicationStatus.Pending) {
-      throw new BadRequestException('Ariza allaqachon ko\'rib chiqilgan');
-    }
+    // Re-fetch under a write lock and re-check status INSIDE the
+    // transaction — two concurrent approve/reject calls on the same
+    // application must not both pass the "still pending" check (that would
+    // grant seller status/balance and then have the reject overwrite the
+    // status on top, with no way to undo the grant).
+    const app = await this.dataSource.transaction(async (manager) => {
+      const locked = await manager.findOne(SellerApplication, {
+        where: { id },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!locked) throw new NotFoundException('Ariza topilmadi');
+      if (locked.status !== SellerApplicationStatus.Pending) {
+        throw new BadRequestException('Ariza allaqachon ko\'rib chiqilgan');
+      }
 
-    let profile = await this.profiles.findOne({ where: { userId: app.userId } });
-    if (!profile) profile = this.profiles.create({ userId: app.userId });
-    Object.assign(profile, profileDto);
-    profile.verifiedAt = new Date();
-    profile.verifiedByAdminId = adminUserId;
-    await this.profiles.save(profile);
+      let profile = await manager.findOne(SellerProfile, { where: { userId: locked.userId } });
+      if (!profile) profile = manager.create(SellerProfile, { userId: locked.userId });
+      Object.assign(profile, profileDto);
+      profile.verifiedAt = new Date();
+      profile.verifiedByAdminId = adminUserId;
+      await manager.save(profile);
 
-    app.status = SellerApplicationStatus.Approved;
-    app.reviewedByUserId = adminUserId;
-    app.reviewedAt = new Date();
-    await this.apps.save(app);
+      locked.status = SellerApplicationStatus.Approved;
+      locked.reviewedByUserId = adminUserId;
+      locked.reviewedAt = new Date();
+      await manager.save(locked);
 
-    await this.users.update(app.userId, { isSellerApproved: true });
+      await manager.update(User, locked.userId, { isSellerApproved: true });
+      return locked;
+    });
+
     await this.payments.ensureBalance(app.userId);
 
     return { application: app };
   }
 
   async reject(id: string, adminUserId: string, reason: string): Promise<SellerApplication> {
-    const app = await this.getApplication(id);
-    if (app.status !== SellerApplicationStatus.Pending) {
-      throw new BadRequestException('Ariza allaqachon ko\'rib chiqilgan');
-    }
-    app.status = SellerApplicationStatus.Rejected;
-    app.rejectionReason = reason;
-    app.reviewedByUserId = adminUserId;
-    app.reviewedAt = new Date();
-    return this.apps.save(app);
+    return this.dataSource.transaction(async (manager) => {
+      const locked = await manager.findOne(SellerApplication, {
+        where: { id },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!locked) throw new NotFoundException('Ariza topilmadi');
+      if (locked.status !== SellerApplicationStatus.Pending) {
+        throw new BadRequestException('Ariza allaqachon ko\'rib chiqilgan');
+      }
+      locked.status = SellerApplicationStatus.Rejected;
+      locked.rejectionReason = reason;
+      locked.reviewedByUserId = adminUserId;
+      locked.reviewedAt = new Date();
+      return manager.save(locked);
+    });
   }
 
   /* ─── Seller Profile (admin fills) ─── */

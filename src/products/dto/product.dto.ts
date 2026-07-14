@@ -6,6 +6,7 @@ import {
   IsEnum,
   IsIn,
   IsInt,
+  IsNotEmpty,
   IsNumber,
   IsOptional,
   IsPositive,
@@ -227,6 +228,7 @@ export class BrakStockDto {
   @ApiPropertyOptional({ description: 'Majburiy — reasonCode "other" bo\'lganda' })
   @ValidateIf((o) => o.reasonCode === BrakReasonCode.Other)
   @IsString()
+  @IsNotEmpty({ message: '"Boshqa" sababda izoh yozish shart' })
   @MaxLength(1000)
   note?: string;
 }

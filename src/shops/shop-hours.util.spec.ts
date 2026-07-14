@@ -42,8 +42,17 @@ function slotAround(dayOfWeek: number, hhmm: string, overrides: Partial<WorkingH
     const wrapped = ((mins % (24 * 60)) + 24 * 60) % (24 * 60);
     return `${String(Math.floor(wrapped / 60)).padStart(2, '0')}:${String(wrapped % 60).padStart(2, '0')}`;
   };
+  // A slot is labelled by the day it OPENS on (matches isShopOpenNow's
+  // semantics). If subtracting 60 minutes wrapped past midnight, the slot
+  // actually opened YESTERDAY (relative to `dayOfWeek`, which is `now`'s own
+  // day) — e.g. at 00:30 "now ± 60min" is yesterday 23:30 to today 01:30, a
+  // slot that belongs to yesterday's dayOfWeek, not today's. Only applies to
+  // the auto-computed window though — if the caller overrides openTime, they
+  // own the window and this heuristic no longer means anything.
+  const dayOffset = overrides.openTime === undefined ? Math.floor(openMinutes / (24 * 60)) : 0;
+  const slotDay = (((dayOfWeek + dayOffset) % 7) + 7) % 7;
   return {
-    dayOfWeek: dayOfWeek as WorkingHourSlot['dayOfWeek'],
+    dayOfWeek: slotDay as WorkingHourSlot['dayOfWeek'],
     openTime: fmt(openMinutes),
     closeTime: fmt(closeMinutes),
     isOpen: true,

@@ -1,4 +1,4 @@
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import { BadRequestException, Injectable, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
@@ -55,6 +55,21 @@ export class SettingsService implements OnModuleInit {
   }
 
   async set(key: string, value: string): Promise<GlobalSetting> {
+    // Every current setting is a plain number (percent/days/hours) that
+    // getNumber() parses with parseFloat — an unparseable value (e.g. a
+    // comma-decimal "12,00", or accidental text) previously saved silently
+    // and getNumber() would then silently fall back to 0 forever with no
+    // indication anything was wrong (e.g. commission dropping to 0%).
+    // Number('') is 0, not NaN — reject blank explicitly first, or an
+    // emptied field would read as a "valid" zero (e.g. commission -> 0%).
+    const n = Number(value);
+    if (value.trim() === '' || !Number.isFinite(n) || n < 0) {
+      throw new BadRequestException("Qiymat manfiy bo'lmagan raqam bo'lishi kerak");
+    }
+    if (key === SETTING_KEYS.COMMISSION_RATE_DEFAULT && n > 100) {
+      throw new BadRequestException("Komissiya foizi 100 dan katta bo'la olmaydi");
+    }
+
     let setting = await this.repo.findOne({ where: { key } });
     if (!setting) {
       setting = this.repo.create({ key, value, description: null });

@@ -13,6 +13,14 @@ async function bootstrap() {
   const configService = app.get(ConfigService<EnvironmentVariables, true>);
   const isProd = configService.get('NODE_ENV', { infer: true }) === 'production';
 
+  // Prod sits behind exactly one reverse-proxy hop (Nginx, per DEPLOY.md).
+  // Without this, Express's req.ip is always Nginx's own address, so every
+  // IP-keyed rate limit (global ThrottlerGuard, the contact-form limiter)
+  // collapses into a single shared counter across every real visitor. Only
+  // trust it in prod — locally there's no proxy, so trusting X-Forwarded-For
+  // would let a direct client simply lie about its own IP.
+  if (isProd) app.getHttpAdapter().getInstance().set('trust proxy', 1);
+
   // Socket.IO over Redis pub/sub, so realtime events (order/chat) reach
   // connected clients no matter which server process their socket landed on.
   const redisIoAdapter = new RedisIoAdapter(app);

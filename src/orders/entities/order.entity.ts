@@ -149,6 +149,15 @@ export class Order {
   @Column({ type: 'timestamptz', nullable: true })
   reviewReminderSentAt!: Date | null;
 
+  /**
+   * Set once the "you have a paid order still unaccepted" urgent nudge has
+   * been sent to the shop. A paid online order is never auto-cancelled (no
+   * automated refund path exists) — this alert is the fallback so it
+   * doesn't just sit there unnoticed instead.
+   */
+  @Column({ type: 'timestamptz', nullable: true })
+  paidUnacceptedAlertSentAt!: Date | null;
+
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt!: Date;
 

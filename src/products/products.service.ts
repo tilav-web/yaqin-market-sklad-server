@@ -382,8 +382,19 @@ export class ProductsService {
       await manager.save(existing);
       return existing.id;
     }
-    const created = await manager.save(
-      manager.create(GlobalProduct, {
+    // INSERT ... ON CONFLICT (barcode) DO NOTHING — if a concurrent scan of
+    // the same new barcode wins the race and creates it first, this is a
+    // silent no-op, NOT a thrown error. That matters: a caught unique-
+    // violation here would otherwise poison the whole transaction (Postgres
+    // marks it "aborted" after any failed statement, so even the fallback
+    // SELECT that used to run in the catch block would itself fail with
+    // "current transaction is aborted" — the previous try/catch version of
+    // this fallback never actually worked).
+    await manager
+      .createQueryBuilder()
+      .insert()
+      .into(GlobalProduct)
+      .values({
         barcode: data.barcode,
         name: data.name,
         brand: data.brand,
@@ -397,9 +408,14 @@ export class ProductsService {
         isActive: true,
         isVerified: false,
         ownerShopId: null,
-      }),
-    );
-    return created.id;
+      })
+      .orIgnore()
+      .execute();
+
+    // Whether we just inserted it or a concurrent request won the race, a
+    // row for this barcode is now guaranteed to exist.
+    const row = await manager.findOneOrFail(GlobalProduct, { where: { barcode: data.barcode } });
+    return row.id;
   }
 
   /** Public lookup: scan a barcode → shared catalogue entry (or null). */
@@ -656,7 +672,7 @@ export class ProductsService {
 
   async countStock(userId: string, variantId: string, actualQty: number): Promise<VariantWithGlobal> {
     const variant = await this.getVariant(variantId);
-    await this.ensureShopAccess(userId, variant.shopId, 'inventory.receive');
+    await this.ensureShopAccess(userId, variant.shopId, 'inventory.count');
     return this.dataSource.transaction(async (manager) => {
       const locked = await manager.findOne(ProductVariant, {
         where: { id: variantId },
@@ -1195,16 +1211,50 @@ export class ProductsService {
     if (targets.length === 0) return { updated: 0 };
 
     const sign = dto.direction === 'increase' ? 1 : -1;
-    const updated = targets.map((v) => {
-      const delta =
-        dto.adjustType === 'percent'
-          ? Math.round(v.price * (dto.adjustValue / 100))
-          : dto.adjustValue;
-      return { ...v, price: Math.max(1, v.price + sign * delta) };
+    // Fixed (id-ascending) lock order — avoids deadlocking against another
+    // concurrent price/stock change locking the same variants (see the
+    // matching comment in orders.service.ts's create()).
+    const sortedIds = [...targets.map((v) => v.id)].sort((a, b) => a.localeCompare(b));
+
+    const updatedCount = await this.dataSource.transaction(async (manager) => {
+      let count = 0;
+      for (const id of sortedIds) {
+        // Re-read under lock — a concurrent edit (e.g. the seller manually
+        // repricing one item mid-bulk-update) must not be silently
+        // overwritten by a stale in-memory price read before the transaction.
+        const v = await manager.findOne(ProductVariant, { where: { id }, lock: { mode: 'pessimistic_write' } });
+        if (!v) continue;
+        const delta =
+          dto.adjustType === 'percent'
+            ? Math.round(v.price * (dto.adjustValue / 100))
+            : dto.adjustValue;
+        const beforePrice = v.price;
+        const afterPrice = Math.max(1, v.price + sign * delta);
+        if (afterPrice === beforePrice) continue;
+
+        v.price = afterPrice;
+        await manager.save(v);
+        // Every price change is logged (SPEC §24.2) so it shows up in
+        // /movements and the inventory-history Excel export.
+        await manager.save(
+          manager.create(InventoryMovement, {
+            productVariantId: v.id,
+            type: MovementType.PriceChanged,
+            quantity: 0,
+            beforeStock: v.stock,
+            afterStock: v.stock,
+            beforePrice,
+            afterPrice,
+            reason: 'Ommaviy narx yangilash',
+            performedByUserId: userId,
+          }),
+        );
+        count += 1;
+      }
+      return count;
     });
 
-    await this.variants.save(updated);
-    return { updated: updated.length };
+    return { updated: updatedCount };
   }
 
   // ─── Muddati o'tayotganlar ────────────────────────────────────────────────

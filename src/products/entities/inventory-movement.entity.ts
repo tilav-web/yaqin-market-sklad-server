@@ -17,6 +17,8 @@ export enum MovementType {
   Expired = 'expired',
   Adjusted = 'adjusted',
   Damaged = 'damaged',
+  /** Bulk/manual price edit — SPEC.md §24.2. Carries beforePrice/afterPrice, not stock. */
+  PriceChanged = 'price_changed',
 }
 
 /** Mandatory reason for a "brak" (write-off) — SPEC.md §26.3. */
@@ -45,14 +47,24 @@ export class InventoryMovement {
   @Column({ type: 'enum', enum: MovementType })
   type!: MovementType;
 
+  /** Not meaningful for `PriceChanged` (stock is untouched) — 0 in that case. */
   @Column({ type: 'int' })
   quantity!: number;
 
+  /** Not meaningful for `PriceChanged` — same as afterStock in that case. */
   @Column({ type: 'int' })
   beforeStock!: number;
 
   @Column({ type: 'int' })
   afterStock!: number;
+
+  /** Set only for `PriceChanged` movements. */
+  @Column({ type: 'int', nullable: true })
+  beforePrice!: number | null;
+
+  /** Set only for `PriceChanged` movements. */
+  @Column({ type: 'int', nullable: true })
+  afterPrice!: number | null;
 
   @Column({ type: 'varchar', length: 256, nullable: true })
   reason!: string | null;

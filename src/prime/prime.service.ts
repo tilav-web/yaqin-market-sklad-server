@@ -42,6 +42,16 @@ export class PrimeService {
   }
 
   async deletePlan(id: string): Promise<void> {
+    // SellerSubscription.planId has no cascade/set-null, so the DB would
+    // reject this with a raw foreign-key-violation 500 anyway (any
+    // subscription ever tied to this plan, active or not, references it) —
+    // check first so the admin gets a clear reason instead.
+    const subCount = await this.subs.count({ where: { planId: id } });
+    if (subCount > 0) {
+      throw new BadRequestException(
+        'Bu tarifga bog\'liq obunalar mavjud — o\'chirib bo\'lmaydi. Kerak bo\'lsa uni faolsizlantiring.',
+      );
+    }
     await this.plans.delete(id);
   }
 

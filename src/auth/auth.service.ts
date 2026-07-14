@@ -29,6 +29,8 @@ const REQUEST_RATE_LIMIT_PER_HOUR = 5;
 const REVOKED_REFRESH_PREFIX = 'revoked_refresh:';
 const REVOKE_TTL_SEC = 31 * 24 * 60 * 60; // ≥ refresh token lifetime
 
+const otpAttemptsKey = (phone: string): string => `otp:attempts:${phone}`;
+
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
@@ -67,6 +69,10 @@ export class AuthService {
     const record: OtpRecord = { code, createdAt: Date.now() };
     await this.redis.client.setex(`otp:${phone}`, OTP_TTL_SEC, JSON.stringify(record));
     await this.redis.client.setex(cooldownKey, RESEND_COOLDOWN_SEC, '1');
+    // A fresh code means a fresh 5-attempt budget — otherwise the old
+    // attempts counter (and its shorter, now-stale TTL) carries over and the
+    // new code effectively gets FEWER than 5 real attempts.
+    await this.redis.client.del(otpAttemptsKey(phone));
 
     if (!fixed) {
       await this.sms.sendOtp(phone, code);
@@ -86,7 +92,7 @@ export class AuthService {
     // embedding the counter in the JSON blob (read → increment in JS → write
     // back) let concurrent verify calls all read the same stale count and
     // all pass the <=5 check, so parallel guesses could exceed the cap.
-    const attemptsKey = `otp:attempts:${phone}`;
+    const attemptsKey = otpAttemptsKey(phone);
     const attempts = await this.redis.client.incr(attemptsKey);
     if (attempts === 1) {
       const ttlMs = await this.redis.client.pttl(key);

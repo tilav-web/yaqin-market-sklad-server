@@ -1,3 +1,5 @@
+import { createHash } from 'crypto';
+
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Between, In, Repository } from 'typeorm';
@@ -5,6 +7,7 @@ import { Workbook } from 'exceljs';
 
 import { Category } from '../../categories/entities/category.entity';
 import { Order, OrderStatus } from '../../orders/entities/order.entity';
+import { RedisService } from '../../redis/redis.service';
 import { Shop } from '../../shops/entities/shop.entity';
 import { ShopStaff, StaffPermission } from '../../shops/entities/shop-staff.entity';
 import { assertShopPermission } from '../../shops/shop-access.util';
@@ -13,6 +16,9 @@ import { InventoryMovement, MovementType } from '../entities/inventory-movement.
 import { ProductVariant } from '../entities/product-variant.entity';
 import { ProductsService } from '../products.service';
 import type { ImportRowDto } from './dto/excel.dto';
+
+/** How long a confirmImport result is cached under its content fingerprint (see confirmImport). */
+const IMPORT_IDEMPOTENCY_TTL_SEC = 5 * 60;
 
 const XLSX_CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
@@ -32,6 +38,7 @@ const MOVEMENT_LABEL: Record<MovementType, string> = {
   [MovementType.Expired]: 'Brak (muddati o\'tgan)',
   [MovementType.Adjusted]: "Qo'lda tuzatish",
   [MovementType.Damaged]: 'Brak (shikastlangan/boshqa)',
+  [MovementType.PriceChanged]: 'Narx o\'zgartirildi',
 };
 
 const UNIT_LABEL_TO_TYPE: Record<string, UnitType> = {
@@ -99,6 +106,7 @@ export class ExcelService {
     @InjectRepository(ShopStaff)
     private readonly staff: Repository<ShopStaff>,
     private readonly products: ProductsService,
+    private readonly redis: RedisService,
   ) {}
 
   private ensureAccess(userId: string, shopId: string, permission: StaffPermission) {
@@ -211,16 +219,24 @@ export class ExcelService {
       { header: 'Miqdor', key: 'quantity', width: 10 },
       { header: 'Oldingi qoldiq', key: 'before', width: 14 },
       { header: 'Keyingi qoldiq', key: 'after', width: 14 },
+      { header: 'Oldingi narx', key: 'beforePrice', width: 14 },
+      { header: 'Keyingi narx', key: 'afterPrice', width: 14 },
       { header: 'Sabab', key: 'reason', width: 30 },
     ];
     for (const m of rows) {
+      // PriceChanged rows don't move stock — quantity/before/after there are
+      // just placeholders (0, same value), so blank them out rather than
+      // showing a misleading "0 units, stock unchanged" for a price edit.
+      const isPriceChange = m.type === MovementType.PriceChanged;
       ws.addRow({
         date: formatDateTime(m.createdAt),
         name: m.productVariant?.globalProduct?.name ?? '',
         type: MOVEMENT_LABEL[m.type] ?? m.type,
-        quantity: m.quantity,
-        before: m.beforeStock,
-        after: m.afterStock,
+        quantity: isPriceChange ? '' : m.quantity,
+        before: isPriceChange ? '' : m.beforeStock,
+        after: isPriceChange ? '' : m.afterStock,
+        beforePrice: m.beforePrice ?? '',
+        afterPrice: m.afterPrice ?? '',
         reason: m.reason ?? '',
       });
     }
@@ -409,6 +425,19 @@ export class ExcelService {
   ): Promise<{ created: number; failed: ImportError[] }> {
     await this.ensureAccess(userId, shopId, 'inventory.product.create');
 
+    // A barcoded row is already protected from a lost-response retry
+    // re-creating it (the DB's unique (shopId, globalProductId) constraint
+    // rejects the second attempt — caught below into `failed`). A
+    // barcode-less row has no such constraint — re-submitting the exact
+    // same batch (network retry, accidental double-tap on "Tasdiqlash")
+    // would silently create every one of them twice. Cache the result under
+    // a fingerprint of the exact row content so a retry within a few
+    // minutes replays the same outcome instead of re-importing.
+    const fingerprint = createHash('sha256').update(JSON.stringify(rows)).digest('hex');
+    const idempotencyKey = `excel-import:${shopId}:${fingerprint}`;
+    const cached = await this.redis.client.get(idempotencyKey);
+    if (cached) return JSON.parse(cached) as { created: number; failed: ImportError[] };
+
     let created = 0;
     const failed: ImportError[] = [];
     for (const row of rows) {
@@ -443,7 +472,9 @@ export class ExcelService {
         failed.push({ row: row.rowNumber, message: e instanceof Error ? e.message : 'Xatolik yuz berdi' });
       }
     }
-    return { created, failed };
+    const result = { created, failed };
+    await this.redis.client.setex(idempotencyKey, IMPORT_IDEMPOTENCY_TTL_SEC, JSON.stringify(result));
+    return result;
   }
 }
 

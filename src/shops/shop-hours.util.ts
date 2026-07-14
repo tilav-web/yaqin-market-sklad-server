@@ -1,4 +1,4 @@
-import { Shop } from './entities/shop.entity';
+import { Shop, WorkingHourSlot } from './entities/shop.entity';
 
 /**
  * All shops currently operate in Uzbekistan, so opening-hours checks must be
@@ -56,6 +56,15 @@ function tzNow(now: Date): TzNow {
   };
 }
 
+/** Whether `time` (HH:MM) falls inside a slot, correctly handling a slot that crosses midnight (e.g. 22:00-02:00). */
+function timeWithinSameDay(time: string, slot: WorkingHourSlot): boolean {
+  if (slot.closeTime >= slot.openTime) return time >= slot.openTime && time <= slot.closeTime;
+  // Overnight slot: "today" only covers openTime through end of day — the
+  // midnight-to-closeTime tail belongs to the NEXT calendar day (handled by
+  // the yesterday-slot check in isShopOpenNow).
+  return time >= slot.openTime;
+}
+
 /**
  * Whether a shop is open right now, combining the manual switch with the weekly
  * schedule and holidays:
@@ -63,7 +72,9 @@ function tzNow(now: Date): TzNow {
  *   - no working hours set   → closed (seller hasn't configured a schedule yet;
  *     an unconfigured shop must not read as "always open").
  *   - today is a holiday     → closed.
- *   - otherwise open only inside today's slot's open/close time.
+ *   - otherwise open inside today's slot, or inside the overnight tail of
+ *     yesterday's slot if it crosses midnight (e.g. yesterday 22:00-02:00
+ *     still means open until 02:00 today).
  * Always evaluated in Asia/Tashkent, independent of the server process's `TZ`.
  */
 export function isShopOpenNow(
@@ -74,9 +85,21 @@ export function isShopOpenNow(
   const hours = shop.workingHours ?? [];
   if (hours.length === 0) return false;
 
+  const holidays = shop.holidays ?? [];
   const { date, time, dayOfWeek } = tzNow(now);
-  if ((shop.holidays ?? []).some((h) => h.date === date)) return false;
-  const slot = hours.find((h) => h.dayOfWeek === dayOfWeek);
-  if (!slot || !slot.isOpen) return false;
-  return time >= slot.openTime && time <= slot.closeTime;
+  if (holidays.some((h) => h.date === date)) return false;
+
+  const todaySlot = hours.find((h) => h.dayOfWeek === dayOfWeek);
+  if (todaySlot?.isOpen && timeWithinSameDay(time, todaySlot)) return true;
+
+  // Tashkent has no DST, so a flat 24h subtraction reliably lands on
+  // yesterday's calendar date/weekday.
+  const yesterday = tzNow(new Date(now.getTime() - 24 * 60 * 60 * 1000));
+  if (holidays.some((h) => h.date === yesterday.date)) return false;
+  const yesterdaySlot = hours.find((h) => h.dayOfWeek === yesterday.dayOfWeek);
+  if (yesterdaySlot?.isOpen && yesterdaySlot.closeTime < yesterdaySlot.openTime && time <= yesterdaySlot.closeTime) {
+    return true;
+  }
+
+  return false;
 }

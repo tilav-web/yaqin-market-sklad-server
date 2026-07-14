@@ -8,7 +8,7 @@ import {
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { customAlphabet } from 'nanoid';
-import { Between, DataSource, In, IsNull, LessThan, Repository } from 'typeorm';
+import { Between, DataSource, In, IsNull, LessThan, Not, Repository } from 'typeorm';
 
 import { ComplaintsService } from '../complaints/complaints.service';
 import { calcDeliveryFee, haversineKm, pointInPolygon } from '../geo/geo.util';
@@ -298,7 +298,13 @@ export class OrdersService {
       });
       const savedOrder = await manager.save(order);
 
-      for (const li of lineItems) {
+      // Lock variants in a fixed (id-ascending) order, not cart order — two
+      // orders sharing the same products but submitted with items in a
+      // different sequence could otherwise each hold one lock while waiting
+      // on the other's, deadlocking. A consistent global lock order rules
+      // that out regardless of how any given cart was assembled.
+      const sortedLineItems = [...lineItems].sort((a, b) => a.variant.id.localeCompare(b.variant.id));
+      for (const li of sortedLineItems) {
         // Re-read the row WITH a write lock inside the transaction and re-check
         // stock — this serialises concurrent orders and prevents overselling
         // (the earlier check was outside the transaction).
@@ -642,6 +648,15 @@ export class OrdersService {
         if (!customerCancellableFrom.includes(order.status)) {
           throw new BadRequestException('Yetkazib berish boshlangandan keyin buyurtmani bekor qilib bo\'lmaydi');
         }
+        // An already-paid online order can't be self-service cancelled —
+        // there's no automated refund path, so silently cancelling here
+        // would capture the customer's money with no way back. Route them
+        // to support instead of losing it silently.
+        if (order.paymentMethod === PaymentMethod.ClickOnline && order.paymentStatus === PaymentStatus.Paid) {
+          throw new BadRequestException(
+            'Buyurtma allaqachon to\'langan — bekor qilish uchun qo\'llab-quvvatlash xizmatiga murojaat qiling',
+          );
+        }
       } else {
         await this.assertShopCanManage(actorUserId, order, 'orders.cancel');
       }
@@ -729,14 +744,20 @@ export class OrdersService {
    * Business rule #5: a `new` order the shop hasn't accepted within 5 minutes is
    * auto-cancelled — stock is returned and the customer is notified. Runs every
    * minute.
+   *
+   * EXCEPTION: an order already paid via Click is never auto-cancelled here.
+   * The customer's money has already been captured and there's no automated
+   * refund path — silently cancelling would leave it stuck with no way back.
+   * These get an urgent one-time nudge to the shop instead (see below).
    */
   @Cron(CronExpression.EVERY_MINUTE)
   async autoCancelStaleNewOrders(): Promise<void> {
     const cutoff = new Date(Date.now() - AUTO_CANCEL_MS);
     const stale = await this.orders.find({
-      where: { status: OrderStatus.New, createdAt: LessThan(cutoff) },
+      where: { status: OrderStatus.New, createdAt: LessThan(cutoff), paymentStatus: Not(PaymentStatus.Paid) },
       take: 50,
     });
+    await this.alertStalePaidOrders(cutoff);
     for (const order of stale) {
       // Only emit/notify if the cancel actually happened (it may be skipped if
       // the order was accepted between the scan and the lock).
@@ -770,10 +791,43 @@ export class OrdersService {
     if (stale.length > 0) this.logger.log(`Auto-cancelled ${stale.length} stale order(s)`);
   }
 
+  /** One-time urgent nudge to the shop for a paid order stuck unaccepted past the 5-min window (see autoCancelStaleNewOrders). */
+  private async alertStalePaidOrders(cutoff: Date): Promise<void> {
+    const stalePaid = await this.orders.find({
+      where: {
+        status: OrderStatus.New,
+        createdAt: LessThan(cutoff),
+        paymentStatus: PaymentStatus.Paid,
+        paidUnacceptedAlertSentAt: IsNull(),
+      },
+      relations: { shop: true },
+      take: 50,
+    });
+    if (stalePaid.length === 0) return;
+
+    for (const order of stalePaid) {
+      const staff = await this.staff.find({ where: { shopId: order.shopId, isActive: true } });
+      const recipients = [...new Set([order.shop.ownerId, ...staff.map((s) => s.userId)])];
+      void this.push.sendToUsers(recipients, {
+        title: '⚠️ To\'langan buyurtma kutmoqda',
+        body: `#${order.orderNumber} — mijoz to'lagan, lekin hali qabul qilinmagan. Zudlik bilan javob bering!`,
+        data: { orderId: order.id, kind: 'order:paid_unaccepted', shopId: order.shopId, forSeller: true },
+      });
+    }
+    await this.orders.update(
+      { id: In(stalePaid.map((o) => o.id)) },
+      { paidUnacceptedAlertSentAt: new Date() },
+    );
+    this.logger.warn(`${stalePaid.length} paid order(s) stuck unaccepted past the 5-min window — shop notified`);
+  }
+
   private async restockOrder(manager: import('typeorm').EntityManager, orderId: string) {
     const items = await manager.find(OrderItem, { where: { orderId } });
     if (items.length === 0) return;
-    for (const item of items) {
+    // Fixed (id-ascending) lock order — see the matching comment in create()
+    // for why (avoids a deadlock between two orders sharing variants).
+    const sortedItems = [...items].sort((a, b) => a.productVariantId.localeCompare(b.productVariantId));
+    for (const item of sortedItems) {
       // Locked individually (FindManyOptions has no `lock`) so this can't
       // lost-update against another concurrent stock change on the same variant.
       const variant = await manager.findOne(ProductVariant, {
@@ -825,10 +879,19 @@ export class OrdersService {
       }
       const items = await manager.find(OrderItem, { where: { orderId } });
 
-      let totalReturnAmount = 0;
-      for (const r of returns) {
+      // Resolve + validate every return line first, then lock variants in a
+      // FIXED (id-ascending) order — not the caller-submitted order — so
+      // this can't deadlock against another transaction locking the same
+      // variants in a different sequence (same reasoning as create()/restockOrder).
+      const resolved = returns.map((r) => {
         const item = items.find((i) => i.id === r.orderItemId);
         if (!item) throw new NotFoundException('Buyurtma elementi topilmadi');
+        return { r, item };
+      });
+      resolved.sort((a, b) => a.item.productVariantId.localeCompare(b.item.productVariantId));
+
+      let totalReturnAmount = 0;
+      for (const { r, item } of resolved) {
         const remaining = item.quantity - item.returnedQuantity;
         if (r.quantity > remaining) {
           throw new BadRequestException(`"${item.productName}" da faqat ${remaining} ta qaytarish mumkin`);
@@ -871,7 +934,7 @@ export class OrdersService {
       await manager.save(order);
     });
 
-    const result = await this.orders.findOneOrFail({ where: { id: orderId }, relations: { items: true } });
+    const result = await this.orders.findOneOrFail({ where: { id: orderId }, relations: { items: true, shop: true } });
     this.emitOrderEvent('order:updated', result);
     // Remind the customer to (optionally) add a return reason.
     if (result.userId) void this.push.sendToUser(result.userId, {

@@ -1,7 +1,7 @@
 import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, In, Repository } from 'typeorm';
 
 import { ComplaintsService } from '../complaints/complaints.service';
 import { SellerTransaction } from '../payments/entities/seller-transaction.entity';
@@ -18,7 +18,7 @@ import { ShopStaff } from '../shops/entities/shop-staff.entity';
 import { UserAddress } from '../users/entities/user-address.entity';
 import { ChatMessage } from './entities/chat-message.entity';
 import { OrderItem } from './entities/order-item.entity';
-import { Order, OrderStatus, PaymentMethod } from './entities/order.entity';
+import { Order, OrderStatus, PaymentMethod, PaymentStatus } from './entities/order.entity';
 import { Review } from './entities/review.entity';
 import { OrdersService } from './orders.service';
 
@@ -426,6 +426,18 @@ describe('OrdersService', () => {
       ).rejects.toThrow('boshlangandan keyin buyurtmani bekor qilib bo\'lmaydi');
     });
 
+    it('mijoz Click orqali to\'langan buyurtmani o\'zi bekor qila olmaydi', async () => {
+      orders.findOne.mockResolvedValue(makeOrder({
+        status: OrderStatus.New,
+        paymentMethod: PaymentMethod.ClickOnline,
+        paymentStatus: PaymentStatus.Paid,
+      }));
+      await expect(
+        service.updateStatus(USER_ID, 'order-1', OrderStatus.Cancelled),
+      ).rejects.toThrow('allaqachon to\'langan');
+      expect(dataSource.transaction).not.toHaveBeenCalled();
+    });
+
     it.each([OrderStatus.New, OrderStatus.Accepted, OrderStatus.Preparing])(
       'mijoz %s holatida hali bekor qila oladi',
       async (status) => {
@@ -497,7 +509,9 @@ describe('OrdersService', () => {
         status: OrderStatus.New,
         timeline: [],
       } as unknown as Order;
-      orders.find.mockResolvedValue([stale]);
+      // First call: stale non-paid orders to auto-cancel. Second call (inside
+      // alertStalePaidOrders): stale PAID orders to nudge — none here.
+      orders.find.mockResolvedValueOnce([stale]).mockResolvedValue([]);
       const em = mockEntityManager({});
       // The cron re-reads the order under lock — return a fresh "still new" copy.
       em.findOne.mockImplementation(async (Entity: unknown) => {
@@ -523,7 +537,7 @@ describe('OrdersService', () => {
         orderNumber: 'ABC1',
         status: OrderStatus.New,
       } as Order;
-      orders.find.mockResolvedValue([stale]);
+      orders.find.mockResolvedValueOnce([stale]).mockResolvedValue([]);
       const em = mockEntityManager({});
       // Between the scan and the lock, the shop accepted it.
       em.findOne.mockImplementation(async (Entity: unknown) => {
@@ -535,6 +549,35 @@ describe('OrdersService', () => {
       await service.autoCancelStaleNewOrders();
 
       expect(push.sendToUser).not.toHaveBeenCalled();
+    });
+
+    it('to\'langan (Click) buyurtmani avtomatik bekor qilmaydi — do\'konga ogohlantirish yuboradi', async () => {
+      const stalePaid = {
+        id: 'order-2',
+        userId: USER_ID,
+        shopId: SHOP_ID,
+        shop: makeShop(),
+        orderNumber: 'PAID1',
+        status: OrderStatus.New,
+        orderId: 'order-2',
+        paymentMethod: PaymentMethod.ClickOnline,
+        paymentStatus: PaymentStatus.Paid,
+      } as unknown as Order;
+      // First call: non-paid stale orders — none. Second call: stale PAID orders.
+      orders.find.mockResolvedValueOnce([]).mockResolvedValueOnce([stalePaid]);
+      staff.find.mockResolvedValue([]);
+
+      await service.autoCancelStaleNewOrders();
+
+      expect(dataSource.transaction).not.toHaveBeenCalled();
+      expect(push.sendToUsers).toHaveBeenCalledWith(
+        [OWNER_ID],
+        expect.objectContaining({ data: expect.objectContaining({ kind: 'order:paid_unaccepted' }) }),
+      );
+      expect(orders.update).toHaveBeenCalledWith(
+        { id: In(['order-2']) },
+        expect.objectContaining({ paidUnacceptedAlertSentAt: expect.any(Date) }),
+      );
     });
   });
 

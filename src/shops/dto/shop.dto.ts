@@ -18,8 +18,40 @@ import {
   Max,
   MaxLength,
   Min,
+  Validate,
   ValidateNested,
+  ValidatorConstraint,
+  ValidatorConstraintInterface,
 } from 'class-validator';
+
+/**
+ * A valid GeoJSON Polygon needs every ring to have >=4 [lng, lat] points
+ * (closed: first === last) with coordinates in range. Without this, a
+ * malformed polygon (e.g. 1-2 points) saves successfully but pointInPolygon
+ * then treats it as containing nothing — every delivery-zone check silently
+ * rejects every order for that shop with no error surfaced anywhere.
+ */
+@ValidatorConstraint({ name: 'geoJsonPolygonCoordinates', async: false })
+class GeoJsonPolygonCoordinatesConstraint implements ValidatorConstraintInterface {
+  validate(coordinates: unknown): boolean {
+    if (!Array.isArray(coordinates) || coordinates.length === 0) return false;
+    return coordinates.every((ring: unknown) => {
+      if (!Array.isArray(ring) || ring.length < 4) return false;
+      return ring.every((point: unknown) => {
+        if (!Array.isArray(point) || point.length !== 2) return false;
+        const [lng, lat] = point as [unknown, unknown];
+        return (
+          typeof lng === 'number' && lng >= -180 && lng <= 180 &&
+          typeof lat === 'number' && lat >= -90 && lat <= 90
+        );
+      });
+    });
+  }
+
+  defaultMessage(): string {
+    return 'coordinates har bir halqasi kamida 4 ta [lng, lat] nuqtadan iborat bo\'lishi va diapazonda bo\'lishi kerak';
+  }
+}
 
 export class ToggleOpenDto {
   @ApiProperty()
@@ -236,6 +268,7 @@ export class GeoJsonPolygonDto {
   @ApiProperty()
   @IsArray()
   @ArrayMinSize(1)
+  @Validate(GeoJsonPolygonCoordinatesConstraint)
   coordinates!: [number, number][][];
 }
 
