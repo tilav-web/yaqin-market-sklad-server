@@ -1,8 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { Cron } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, IsNull, Repository } from 'typeorm';
 
 import { Notification } from '../notifications/entities/notification.entity';
+import { RedisService } from '../redis/redis.service';
 import { DeviceToken } from './entities/device-token.entity';
 
 export interface PushPayload {
@@ -14,6 +16,9 @@ export interface PushPayload {
 }
 
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
+const EXPO_RECEIPTS_URL = 'https://exp.host/--/api/v2/push/getReceipts';
+/** Redis list of `{id, token}` JSON entries awaiting a receipt check (see {@link checkReceipts}). */
+const PENDING_RECEIPTS_KEY = 'push:pending-receipts';
 
 /**
  * Stores device push tokens and delivers notifications through the Expo Push
@@ -31,6 +36,7 @@ export class PushService {
     private readonly tokens: Repository<DeviceToken>,
     @InjectRepository(Notification)
     private readonly notifications: Repository<Notification>,
+    private readonly redis: RedisService,
   ) {}
 
   /**
@@ -139,20 +145,96 @@ export class PushService {
           this.logger.warn(`Expo push HTTP ${res.status}: ${await res.text()}`);
           continue;
         }
-        await this.pruneDeadTokens(chunkTokens, await res.json());
+        await this.handleTickets(chunkTokens, await res.json());
       } catch (err) {
         this.logger.warn(`Expo push failed: ${(err as Error).message}`);
       }
     }
   }
 
-  /** Drop tokens Expo reports as permanently unregistered so we stop wasting sends on them. */
-  private async pruneDeadTokens(chunkTokens: string[], body: unknown): Promise<void> {
-    const tickets = (body as { data?: { details?: { error?: string } }[] } | null)?.data;
+  /**
+   * Per-message result of the send call ("ticket"). Drops tokens Expo already
+   * knows are dead; queues everything else so {@link checkReceipts} can later
+   * ask Expo whether delivery actually succeeded — most `DeviceNotRegistered`
+   * failures only surface at that point, not in this immediate response.
+   */
+  private async handleTickets(chunkTokens: string[], body: unknown): Promise<void> {
+    const tickets = (body as { data?: { status?: string; id?: string; details?: { error?: string } }[] } | null)?.data;
     if (!Array.isArray(tickets)) return;
-    const dead = tickets
-      .map((t, idx) => (t?.details?.error === 'DeviceNotRegistered' ? chunkTokens[idx] : null))
-      .filter((t): t is string => t !== null);
+
+    const dead: string[] = [];
+    const pending: string[] = [];
+    tickets.forEach((t, idx) => {
+      const token = chunkTokens[idx];
+      if (!token) return;
+      if (t?.details?.error === 'DeviceNotRegistered') dead.push(token);
+      else if (t?.status === 'ok' && t.id) pending.push(JSON.stringify({ id: t.id, token }));
+    });
+
     if (dead.length > 0) await this.tokens.delete({ token: In(dead) });
+    if (pending.length > 0) await this.redis.client.rpush(PENDING_RECEIPTS_KEY, ...pending);
+  }
+
+  /**
+   * Reconciles queued send tickets against Expo's delivery receipts and prunes
+   * tokens it reports as permanently unregistered. Runs every 30 minutes
+   * (Expo recommends waiting at least 15 min before checking); each pass
+   * drains up to 5,000 pending tickets (50 batches of 100).
+   */
+  @Cron('*/30 * * * *')
+  async checkReceipts(): Promise<void> {
+    let prunedTotal = 0;
+    let batch = 0;
+    for (; batch < 50; batch++) {
+      const entries = await this.drainPendingReceipts(100);
+      if (entries.length === 0) break;
+
+      const idToToken = new Map(entries.map((e) => [e.id, e.token]));
+      try {
+        const res = await fetch(EXPO_RECEIPTS_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids: [...idToToken.keys()] }),
+        });
+        if (!res.ok) {
+          this.logger.warn(`Expo receipts HTTP ${res.status}: ${await res.text()}`);
+          continue;
+        }
+        const json = (await res.json()) as {
+          data?: Record<string, { status?: string; details?: { error?: string } }>;
+        };
+        const dead = Object.entries(json.data ?? {})
+          .filter(([, r]) => r?.details?.error === 'DeviceNotRegistered')
+          .map(([id]) => idToToken.get(id))
+          .filter((t): t is string => !!t);
+        if (dead.length > 0) {
+          await this.tokens.delete({ token: In(dead) });
+          prunedTotal += dead.length;
+        }
+      } catch (err) {
+        this.logger.warn(`Expo receipts check failed: ${(err as Error).message}`);
+      }
+    }
+    if (prunedTotal > 0) this.logger.log(`Pruned ${prunedTotal} dead push token(s) via receipts`);
+    if (batch === 50) this.logger.warn('Receipt queue backlog exceeds one pass (5000) — will continue next run');
+  }
+
+  /** Atomically pop up to `count` pending `{id, token}` entries queued by {@link handleTickets}. */
+  private async drainPendingReceipts(count: number): Promise<{ id: string; token: string }[]> {
+    const results = await this.redis.client
+      .multi()
+      .lrange(PENDING_RECEIPTS_KEY, 0, count - 1)
+      .ltrim(PENDING_RECEIPTS_KEY, count, -1)
+      .exec();
+    const raw = (results?.[0]?.[1] as string[] | undefined) ?? [];
+    return raw
+      .map((s) => {
+        try {
+          return JSON.parse(s) as { id: string; token: string };
+        } catch {
+          return null;
+        }
+      })
+      .filter((e): e is { id: string; token: string } => e !== null);
   }
 }

@@ -98,9 +98,14 @@ export class NotificationsService {
     if (input.audience === 'all') {
       for (const t of await this.push.anonymousTokens()) tokens.add(t);
     }
-    await this.push.pushToTokens([...tokens], payload);
+    const tokenList = [...tokens];
+    // The inbox rows above are a single bulk insert — fast even for a large
+    // audience. Sending to Expo is chunked at 100 HTTP calls each, which for a
+    // large broadcast can take many seconds; run it in the background so the
+    // admin's request doesn't hang waiting for it (pushToTokens never throws).
+    void this.push.pushToTokens(tokenList, payload);
 
-    return { registered: userIds.length, pushedTokens: tokens.size };
+    return { registered: userIds.length, pushedTokens: tokenList.length };
   }
 
   // ---- Templates ----------------------------------------------------------

@@ -2,14 +2,35 @@ import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { Redis } from 'ioredis';
 
 import { AppModule } from './app.module';
 import { EnvironmentVariables } from './config/configuration';
+import { RedisIoAdapter } from './realtime/redis-io.adapter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
   const configService = app.get(ConfigService<EnvironmentVariables, true>);
   const isProd = configService.get('NODE_ENV', { infer: true }) === 'production';
+
+  // Socket.IO over Redis pub/sub, so realtime events (order/chat) reach
+  // connected clients no matter which server process their socket landed on.
+  const redisIoAdapter = new RedisIoAdapter(app);
+  const pubClient = new Redis({
+    host: configService.get('REDIS_HOST', { infer: true }),
+    port: configService.get('REDIS_PORT', { infer: true }),
+  });
+  const subClient = pubClient.duplicate();
+  // ioredis throws (crashing the process) on an unhandled 'error' event —
+  // a Redis blip must not take the whole API down with it.
+  for (const client of [pubClient, subClient]) {
+    client.on('error', (err) => {
+      // eslint-disable-next-line no-console
+      console.error(`Redis (socket.io adapter) error: ${err.message}`);
+    });
+  }
+  redisIoAdapter.connectToRedis(pubClient, subClient);
+  app.useWebSocketAdapter(redisIoAdapter);
 
   // CORS: in production restrict to the configured origins; in dev reflect any
   // (Expo dev client / localhost). Comma-separated CORS_ORIGINS env var.
