@@ -110,14 +110,14 @@ export class PromotionsService {
    * Returns the discount amount in so'm for ONE unit (caller multiplies by
    * quantity), clamped so it never exceeds unitPrice.
    */
-  async findActiveForProduct(
-    shopId: string,
-    productVariantId: string,
-    categoryId: string | null,
-    unitPrice: number,
-  ): Promise<{ discountAmount: number; promotionId: string | null }> {
+  /**
+   * Active product/category discount promos for a shop. Fetch ONCE per
+   * order (not per cart line) and pass the result to {@link bestDiscountFor}
+   * — the query itself doesn't depend on which product/item is being priced.
+   */
+  async findActivePromosForShop(shopId: string): Promise<Promotion[]> {
     const now = new Date();
-    const promos = await this.repo
+    return this.repo
       .createQueryBuilder('p')
       .where('p.shopId = :shopId', { shopId })
       .andWhere('p.isActive = true')
@@ -125,7 +125,15 @@ export class PromotionsService {
       .andWhere('p.startAt <= :now', { now })
       .andWhere('(p.endAt IS NULL OR p.endAt >= :now)', { now })
       .getMany();
+  }
 
+  /** Pick the best-discount promo (largest actual so'm off) applicable to one line item. */
+  bestDiscountFor(
+    promos: Promotion[],
+    productVariantId: string,
+    categoryId: string | null,
+    unitPrice: number,
+  ): { discountAmount: number; promotionId: string | null } {
     let bestDiscount = 0;
     let bestId: string | null = null;
 

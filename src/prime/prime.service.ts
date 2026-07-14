@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Between, LessThan, Repository } from 'typeorm';
+import { Between, LessThan, MoreThanOrEqual, Repository } from 'typeorm';
 
 import { SellerBalance } from '../payments/entities/seller-balance.entity';
 import { SellerTransaction, SellerTxType } from '../payments/entities/seller-transaction.entity';
@@ -47,11 +47,17 @@ export class PrimeService {
 
   /* ─── Subscriptions ─── */
 
-  /** Get the seller's active subscription (if any) */
+  /**
+   * Get the seller's active subscription (if any). Checks `endDate` directly
+   * rather than trusting only the `isActive` flag — that flag is refreshed
+   * by a once-daily cron (`expireSubscriptions`, 1 AM), so relying on it
+   * alone lets an already-expired plan's commission rate keep applying for
+   * up to ~24h after it lapsed.
+   */
   getActiveSub(sellerId: string): Promise<SellerSubscription | null> {
     const today = new Date().toISOString().split('T')[0];
     return this.subs.findOne({
-      where: { sellerId, isActive: true },
+      where: { sellerId, isActive: true, endDate: MoreThanOrEqual(today) },
       relations: { plan: true },
     });
   }

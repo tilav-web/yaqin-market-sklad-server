@@ -142,11 +142,12 @@ describe('OrdersService', () => {
   let payments: { recordCashOrderDelivery: jest.Mock; recordOnlineOrderDelivery: jest.Mock };
   let prime: { getCommissionRate: jest.Mock };
   let settings: { getNumber: jest.Mock };
-  let promotions: { findActiveForProduct: jest.Mock; findFreeDeliveryPromotion: jest.Mock };
+  let promotions: { findActivePromosForShop: jest.Mock; bestDiscountFor: jest.Mock; findFreeDeliveryPromotion: jest.Mock };
   let complaints: { getForOrder: jest.Mock; openComplaintOrderIds: jest.Mock };
 
   const buildRepoMock = () => ({
     findOne: jest.fn(),
+    findOneOrFail: jest.fn(),
     find: jest.fn().mockResolvedValue([]),
     findBy: jest.fn().mockResolvedValue([]),
     save: jest.fn(),
@@ -171,7 +172,8 @@ describe('OrdersService', () => {
     prime = { getCommissionRate: jest.fn().mockResolvedValue(12) };
     settings = { getNumber: jest.fn().mockReturnValue(12) };
     promotions = {
-      findActiveForProduct: jest.fn().mockResolvedValue({ discountAmount: 0, promotionId: null }),
+      findActivePromosForShop: jest.fn().mockResolvedValue([]),
+      bestDiscountFor: jest.fn().mockReturnValue({ discountAmount: 0, promotionId: null }),
       findFreeDeliveryPromotion: jest.fn().mockResolvedValue({ free: false, promotionId: null }),
     };
     complaints = { getForOrder: jest.fn(), openComplaintOrderIds: jest.fn() };
@@ -372,14 +374,14 @@ describe('OrdersService', () => {
       expect(created.deliveryFee).toBe(0);
     });
 
-    it('promotions.findActiveForProduct dan qaytgan chegirmani birlik narxiga qo\'llaydi', async () => {
+    it('promotions.bestDiscountFor dan qaytgan chegirmani birlik narxiga qo\'llaydi', async () => {
       const shop = makeShop();
       const address = makeAddress();
       const variant = makeVariant({ price: 10_000 });
       shops.findOne.mockResolvedValue(shop);
       addresses.findOne.mockResolvedValue(address);
       variants.find.mockResolvedValue([variant]);
-      promotions.findActiveForProduct.mockResolvedValue({ discountAmount: 2000, promotionId: 'promo-1' });
+      promotions.bestDiscountFor.mockReturnValue({ discountAmount: 2000, promotionId: 'promo-1' });
       const em = mockEntityManager({ [variant.id]: variant });
       dataSource.transaction.mockImplementation((cb) => cb(em));
 
@@ -430,6 +432,8 @@ describe('OrdersService', () => {
         const order = makeOrder({ status });
         orders.findOne.mockResolvedValue(order);
         const em = mockEntityManager({});
+        // updateStatus re-reads the order under lock inside the transaction.
+        em.findOne.mockImplementation(async (Entity: unknown) => (Entity === Order ? order : null));
         dataSource.transaction.mockImplementation((cb) => cb(em));
 
         const result = await service.updateStatus(USER_ID, 'order-1', OrderStatus.Cancelled);
@@ -442,6 +446,7 @@ describe('OrdersService', () => {
       const order = makeOrder({ status: OrderStatus.Delivering });
       orders.findOne.mockResolvedValue(order);
       const em = mockEntityManager({});
+      em.findOne.mockImplementation(async (Entity: unknown) => (Entity === Order ? order : null));
       dataSource.transaction.mockImplementation((cb) => cb(em));
 
       const result = await service.updateStatus(OWNER_ID, 'order-1', OrderStatus.Cancelled);
@@ -463,6 +468,7 @@ describe('OrdersService', () => {
       const order = makeOrder({ status: OrderStatus.Delivering, paymentMethod: PaymentMethod.Cash });
       orders.findOne.mockResolvedValue(order);
       const em = mockEntityManager({});
+      em.findOne.mockImplementation(async (Entity: unknown) => (Entity === Order ? order : null));
       dataSource.transaction.mockImplementation((cb) => cb(em));
 
       await service.updateStatus(USER_ID, 'order-1', OrderStatus.Delivered);
@@ -564,7 +570,12 @@ describe('OrdersService', () => {
     }
 
     it('faqat "delivering" holatida qaytarish mumkin', async () => {
-      orders.findOne.mockResolvedValue(makeDeliveringOrder({ status: OrderStatus.Delivered }));
+      const order = makeDeliveringOrder({ status: OrderStatus.Delivered });
+      orders.findOne.mockResolvedValue(order);
+      const em = mockEntityManager({});
+      // The status check runs on the fresh, locked read inside the transaction.
+      em.findOne.mockImplementation(async (Entity: unknown) => (Entity === Order ? order : null));
+      dataSource.transaction.mockImplementation((cb) => cb(em));
       await expect(
         service.partialReturn(OWNER_ID, 'order-1', [{ orderItemId: 'item-1', quantity: 1 }]),
       ).rejects.toThrow('Faqat yetkazib berilayotganda');
@@ -579,8 +590,12 @@ describe('OrdersService', () => {
     });
 
     it('qolganidan ko\'p miqdorni qaytarishga urinishni rad etadi', async () => {
-      orders.findOne.mockResolvedValue(makeDeliveringOrder());
+      const order = makeDeliveringOrder();
+      orders.findOne.mockResolvedValue(order);
       const em = mockEntityManager({});
+      // partialReturn re-reads the order under lock and its items inside the transaction.
+      em.findOne.mockImplementation(async (Entity: unknown) => (Entity === Order ? order : null));
+      em.find.mockImplementation(async (Entity: unknown) => (Entity === OrderItem ? order.items : []));
       dataSource.transaction.mockImplementation((cb) => cb(em));
       await expect(
         service.partialReturn(OWNER_ID, 'order-1', [{ orderItemId: 'item-1', quantity: 5 }]),
@@ -590,12 +605,15 @@ describe('OrdersService', () => {
     it('qisman qaytarishda order.total/subTotal va item holatini to\'g\'ri qayta hisoblaydi', async () => {
       const order = makeDeliveringOrder();
       orders.findOne.mockResolvedValue(order);
+      orders.findOneOrFail.mockResolvedValue(order);
       const variant = makeVariant();
       const em = mockEntityManager({ [variant.id]: variant });
-      em.findOne.mockImplementation(async (Entity: unknown, opts: { where: { id?: string } }) => {
+      em.findOne.mockImplementation(async (Entity: unknown) => {
+        if (Entity === Order) return order;
         if (Entity === ProductVariant) return variant;
         return null;
       });
+      em.find.mockImplementation(async (Entity: unknown) => (Entity === OrderItem ? order.items : []));
       dataSource.transaction.mockImplementation((cb) => cb(em));
 
       const result = await service.partialReturn(OWNER_ID, 'order-1', [{ orderItemId: 'item-1', quantity: 1 }], 'Nosoz');
@@ -612,9 +630,15 @@ describe('OrdersService', () => {
     it('barcha qoldiqni qaytarganda umumiy summa 0 dan pastga tushmaydi', async () => {
       const order = makeDeliveringOrder();
       orders.findOne.mockResolvedValue(order);
+      orders.findOneOrFail.mockResolvedValue(order);
       const variant = makeVariant();
       const em = mockEntityManager({ [variant.id]: variant });
-      em.findOne.mockImplementation(async (Entity: unknown) => (Entity === ProductVariant ? variant : null));
+      em.findOne.mockImplementation(async (Entity: unknown) => {
+        if (Entity === Order) return order;
+        if (Entity === ProductVariant) return variant;
+        return null;
+      });
+      em.find.mockImplementation(async (Entity: unknown) => (Entity === OrderItem ? order.items : []));
       dataSource.transaction.mockImplementation((cb) => cb(em));
 
       const result = await service.partialReturn(OWNER_ID, 'order-1', [{ orderItemId: 'item-1', quantity: 2 }]);

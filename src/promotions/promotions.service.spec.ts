@@ -94,11 +94,24 @@ describe('PromotionsService', () => {
 
   afterEach(() => jest.clearAllMocks());
 
+  /** findActiveForProduct was split into a fetch + a pure picker (avoids
+   * re-querying the shop's promos once per cart line) — this helper chains
+   * them back together so the existing test cases need no other changes. */
+  async function findActiveForProduct(
+    shopId: string,
+    productVariantId: string,
+    categoryId: string | null,
+    unitPrice: number,
+  ) {
+    const promos = await service.findActivePromosForShop(shopId);
+    return service.bestDiscountFor(promos, productVariantId, categoryId, unitPrice);
+  }
+
   describe('findActiveForProduct — discount math', () => {
     it('foiz (percent) chegirmani to\'g\'ri hisoblaydi', async () => {
       mockGetMany([makePromo({ discountType: 'percent', discountValue: 20, targetProductId: 'variant-1' })]);
 
-      const result = await service.findActiveForProduct('shop-1', 'variant-1', null, 10_000);
+      const result = await findActiveForProduct('shop-1', 'variant-1', null, 10_000);
 
       expect(result.discountAmount).toBe(2000); // 20% of 10000
       expect(result.promotionId).toBe('promo-1');
@@ -107,7 +120,7 @@ describe('PromotionsService', () => {
     it('qat\'iy (fixed) chegirmani to\'g\'ridan-to\'g\'ri qo\'llaydi', async () => {
       mockGetMany([makePromo({ discountType: 'fixed', discountValue: 1500, targetProductId: 'variant-1' })]);
 
-      const result = await service.findActiveForProduct('shop-1', 'variant-1', null, 10_000);
+      const result = await findActiveForProduct('shop-1', 'variant-1', null, 10_000);
 
       expect(result.discountAmount).toBe(1500);
     });
@@ -115,7 +128,7 @@ describe('PromotionsService', () => {
     it('fixed chegirma unitPrice dan oshsa, unitPrice bilan cheklanadi', async () => {
       mockGetMany([makePromo({ discountType: 'fixed', discountValue: 1500, targetProductId: 'variant-1' })]);
 
-      const result = await service.findActiveForProduct('shop-1', 'variant-1', null, 1000);
+      const result = await findActiveForProduct('shop-1', 'variant-1', null, 1000);
 
       expect(result.discountAmount).toBe(1000); // clamped, never exceeds the price
     });
@@ -125,7 +138,7 @@ describe('PromotionsService', () => {
       // clamp must hold regardless of how the row got into the DB.
       mockGetMany([makePromo({ discountType: 'percent', discountValue: 150, targetProductId: 'variant-1' })]);
 
-      const result = await service.findActiveForProduct('shop-1', 'variant-1', null, 1000);
+      const result = await findActiveForProduct('shop-1', 'variant-1', null, 1000);
 
       expect(result.discountAmount).toBe(1000);
     });
@@ -133,7 +146,7 @@ describe('PromotionsService', () => {
     it('discountType yoki discountValue bo\'lmasa aksiyani e\'tiborsiz qoldiradi', async () => {
       mockGetMany([makePromo({ discountType: null, discountValue: null, targetProductId: 'variant-1' })]);
 
-      const result = await service.findActiveForProduct('shop-1', 'variant-1', null, 10_000);
+      const result = await findActiveForProduct('shop-1', 'variant-1', null, 10_000);
 
       expect(result).toEqual({ discountAmount: 0, promotionId: null });
     });
@@ -149,14 +162,14 @@ describe('PromotionsService', () => {
         }),
       ]);
 
-      const result = await service.findActiveForProduct('shop-1', 'variant-1', 'cat-y', 10_000);
+      const result = await findActiveForProduct('shop-1', 'variant-1', 'cat-y', 10_000);
 
       expect(result).toEqual({ discountAmount: 0, promotionId: null });
     });
 
     it('hech qanday mos aksiya bo\'lmasa nol qaytaradi', async () => {
       mockGetMany([]);
-      const result = await service.findActiveForProduct('shop-1', 'variant-1', null, 10_000);
+      const result = await findActiveForProduct('shop-1', 'variant-1', null, 10_000);
       expect(result).toEqual({ discountAmount: 0, promotionId: null });
     });
   });
@@ -168,7 +181,7 @@ describe('PromotionsService', () => {
         makePromo({ id: 'promo-percent-big', discountType: 'percent', discountValue: 10, targetProductId: 'variant-1' }),
       ]);
 
-      const result = await service.findActiveForProduct('shop-1', 'variant-1', null, 10_000);
+      const result = await findActiveForProduct('shop-1', 'variant-1', null, 10_000);
 
       // 10% of 10000 = 1000 > 800 fixed — must win even though it's listed last.
       expect(result.discountAmount).toBe(1000);
@@ -181,7 +194,7 @@ describe('PromotionsService', () => {
         makePromo({ id: 'promo-fixed-small', discountType: 'fixed', discountValue: 800, targetProductId: 'variant-1' }),
       ]);
 
-      const result = await service.findActiveForProduct('shop-1', 'variant-1', null, 10_000);
+      const result = await findActiveForProduct('shop-1', 'variant-1', null, 10_000);
 
       expect(result.discountAmount).toBe(1000);
       expect(result.promotionId).toBe('promo-percent-big');
@@ -193,7 +206,7 @@ describe('PromotionsService', () => {
         makePromo({ id: 'promo-product', type: 'product_discount', targetProductId: 'variant-1', discountType: 'fixed', discountValue: 2000 }),
       ]);
 
-      const result = await service.findActiveForProduct('shop-1', 'variant-1', 'cat-1', 10_000);
+      const result = await findActiveForProduct('shop-1', 'variant-1', 'cat-1', 10_000);
 
       expect(result.discountAmount).toBe(2000);
       expect(result.promotionId).toBe('promo-product');

@@ -19,7 +19,6 @@ const nano6 = customAlphabet('0123456789', 6);
 
 interface OtpRecord {
   code: string;
-  attempts: number;
   createdAt: number;
 }
 
@@ -65,7 +64,7 @@ export class AuthService {
     const fixed = this.config.get('FIXED_OTP_CODE', { infer: true });
     const code = fixed ? fixed : nano6();
 
-    const record: OtpRecord = { code, attempts: 0, createdAt: Date.now() };
+    const record: OtpRecord = { code, createdAt: Date.now() };
     await this.redis.client.setex(`otp:${phone}`, OTP_TTL_SEC, JSON.stringify(record));
     await this.redis.client.setex(cooldownKey, RESEND_COOLDOWN_SEC, '1');
 
@@ -83,24 +82,30 @@ export class AuthService {
       throw new BadRequestException("Tasdiq kodi muddati o'tdi yoki yaratilmagan");
     }
 
-    const record = JSON.parse(raw) as OtpRecord;
-    record.attempts += 1;
+    // Attempts live in their OWN key and are incremented via atomic INCR —
+    // embedding the counter in the JSON blob (read → increment in JS → write
+    // back) let concurrent verify calls all read the same stale count and
+    // all pass the <=5 check, so parallel guesses could exceed the cap.
+    const attemptsKey = `otp:attempts:${phone}`;
+    const attempts = await this.redis.client.incr(attemptsKey);
+    if (attempts === 1) {
+      const ttlMs = await this.redis.client.pttl(key);
+      if (ttlMs > 0) await this.redis.client.pexpire(attemptsKey, ttlMs);
+    }
 
-    if (record.attempts > MAX_VERIFY_ATTEMPTS) {
+    if (attempts > MAX_VERIFY_ATTEMPTS) {
       await this.redis.client.del(key);
+      await this.redis.client.del(attemptsKey);
       throw new BadRequestException("Juda ko'p urinishlar. Yangi kod so'rang");
     }
 
+    const record = JSON.parse(raw) as OtpRecord;
     if (record.code !== code) {
-      // Persist the incremented attempt count WITHOUT extending the code's
-      // lifetime — keep the original expiry instead of restarting it.
-      const ttlMs = await this.redis.client.pttl(key);
-      if (ttlMs > 0) await this.redis.client.set(key, JSON.stringify(record), 'PX', ttlMs);
-      else await this.redis.client.del(key);
       throw new BadRequestException("Tasdiq kodi noto'g'ri");
     }
 
     await this.redis.client.del(key);
+    await this.redis.client.del(attemptsKey);
 
     const user = await this.users.upsertByPhone(phone);
     const roles = await this.users.computeRoles(user);

@@ -51,12 +51,22 @@ function pendingTx(overrides: Partial<SellerTransaction> = {}): SellerTransactio
   };
 }
 
-function mockEntityManager(balances: Record<string, SellerBalance>) {
+function mockEntityManager(
+  balances: Record<string, SellerBalance>,
+  txById: Record<string, SellerTransaction> = {},
+  withdrawalById: Record<string, WithdrawalRequest> = {},
+) {
   return {
-    findOne: jest.fn(async (Entity: unknown, opts: { where: { sellerId?: string } }) => {
+    findOne: jest.fn(async (Entity: unknown, opts: { where: { sellerId?: string; id?: string } }) => {
       if (Entity === SellerBalance) {
         const sellerId = opts.where.sellerId as string;
         return balances[sellerId] ?? null;
+      }
+      if (Entity === SellerTransaction) {
+        return txById[opts.where.id as string] ?? null;
+      }
+      if (Entity === WithdrawalRequest) {
+        return withdrawalById[opts.where.id as string] ?? null;
       }
       return null;
     }),
@@ -336,25 +346,23 @@ describe('PaymentsService', () => {
 
   describe('adminForceSettle', () => {
     it('tranzaksiya topilmasa NotFoundException', async () => {
-      txs.findOne.mockResolvedValue(null);
+      const em = mockEntityManager({});
+      dataSource.transaction.mockImplementation((cb) => cb(em));
       await expect(service.adminForceSettle('tx-1', 'admin-1')).rejects.toThrow(NotFoundException);
     });
 
     it('pending online bo\'lmagan tranzaksiyani rad etadi', async () => {
-      txs.findOne.mockResolvedValue({
-        id: 'tx-1',
-        type: SellerTxType.DebtRepaid,
-        status: 'settled',
-      } as SellerTransaction);
+      const tx = { id: 'tx-1', type: SellerTxType.DebtRepaid, status: 'settled' } as SellerTransaction;
+      const em = mockEntityManager({}, { 'tx-1': tx });
+      dataSource.transaction.mockImplementation((cb) => cb(em));
       await expect(service.adminForceSettle('tx-1', 'admin-1')).rejects.toThrow(BadRequestException);
     });
 
     it('pending online tranzaksiyani muvaffaqiyatli chiqaradi', async () => {
       const tx = pendingTx({ id: 'tx-1', sellerId: 'seller-1', amount: '5000' });
-      txs.findOne.mockResolvedValue(tx);
       const bal = makeBalance({ sellerId: 'seller-1', pendingBalance: '5000', availableBalance: '0' });
       balances.findOne.mockResolvedValue(bal); // used by autoRepayDebt's precheck (debt=0 → exits early)
-      const em = mockEntityManager({ 'seller-1': bal });
+      const em = mockEntityManager({ 'seller-1': bal }, { 'tx-1': tx });
       dataSource.transaction.mockImplementation((cb) => cb(em));
       txs.findOneOrFail.mockResolvedValue({ ...tx, status: 'settled' });
 
@@ -369,15 +377,15 @@ describe('PaymentsService', () => {
 
   describe('adminForceRefund', () => {
     it('tranzaksiya topilmasa NotFoundException', async () => {
-      txs.findOne.mockResolvedValue(null);
+      const em = mockEntityManager({});
+      dataSource.transaction.mockImplementation((cb) => cb(em));
       await expect(service.adminForceRefund('tx-1', 'admin-1')).rejects.toThrow(NotFoundException);
     });
 
     it('pending online tranzaksiyani muvaffaqiyatli qaytaradi (available ga tegmaydi)', async () => {
       const tx = pendingTx({ id: 'tx-1', sellerId: 'seller-1', amount: '5000' });
-      txs.findOne.mockResolvedValue(tx);
       const bal = makeBalance({ sellerId: 'seller-1', pendingBalance: '5000', availableBalance: '1000' });
-      const em = mockEntityManager({ 'seller-1': bal });
+      const em = mockEntityManager({ 'seller-1': bal }, { 'tx-1': tx });
       dataSource.transaction.mockImplementation((cb) => cb(em));
       txs.findOneOrFail.mockResolvedValue({ ...tx, status: 'cancelled' });
 

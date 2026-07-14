@@ -136,6 +136,19 @@ export class Order {
   @Column({ type: 'text', nullable: true })
   returnReason!: string | null;
 
+  /**
+   * Commission % captured at order-creation time (seller's Prime rate or the
+   * then-current global default). Settlement uses THIS value, never whatever
+   * rate happens to be active later — a rate change must only affect new
+   * orders, not ones already placed (SPEC §10.1).
+   */
+  @Column({ type: 'double precision', nullable: true })
+  commissionRateSnapshot!: number | null;
+
+  /** Set once the "please rate your order" reminder push has been sent (avoids repeat spam). */
+  @Column({ type: 'timestamptz', nullable: true })
+  reviewReminderSentAt!: Date | null;
+
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt!: Date;
 

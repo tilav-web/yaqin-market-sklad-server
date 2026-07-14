@@ -8,7 +8,7 @@ import {
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { customAlphabet } from 'nanoid';
-import { Between, DataSource, In, LessThan, Repository } from 'typeorm';
+import { Between, DataSource, In, IsNull, LessThan, Repository } from 'typeorm';
 
 import { ComplaintsService } from '../complaints/complaints.service';
 import { calcDeliveryFee, haversineKm, pointInPolygon } from '../geo/geo.util';
@@ -134,10 +134,21 @@ export class OrdersService {
   }
 
   /**
+   * A staff member (not the owner) may only view an order if they hold
+   * `orders.view_all`, or `orders.view_assigned` AND this order is assigned
+   * to them specifically (e.g. the courier delivering it) — merely being an
+   * active staff member of the shop (e.g. a warehouse-only "sklad" hire) is
+   * not enough, even though they can act on it in other ways.
+   */
+  private staffCanViewOrder(staff: Pick<ShopStaff, 'id' | 'permissions'>, order: Pick<Order, 'assignedStaffId'>): boolean {
+    if (staff.permissions.includes('orders.view_all')) return true;
+    return staff.permissions.includes('orders.view_assigned') && order.assignedStaffId === staff.id;
+  }
+
+  /**
    * Authorize read access to an order for realtime/tracking endpoints: the
-   * customer who placed it, the shop owner, or any active staff member of
-   * that shop (e.g. the assigned courier) may view it. Mirrors the isParty
-   * check in {@link getOne}.
+   * customer who placed it, the shop owner, or a staff member with the
+   * matching view permission may view it. Mirrors the isParty check in {@link getOne}.
    */
   async assertOrderParty(userId: string, orderId: string): Promise<Order> {
     const order = await this.orders.findOne({ where: { id: orderId }, relations: { shop: true } });
@@ -147,7 +158,7 @@ export class OrdersService {
       const staff = await this.staff.findOne({
         where: { shopId: order.shopId, userId, isActive: true },
       });
-      if (!staff) throw new ForbiddenException();
+      if (!staff || !this.staffCanViewOrder(staff, order)) throw new ForbiddenException();
     }
     return order;
   }
@@ -198,6 +209,9 @@ export class OrdersService {
     const variantMap = new Map(variants.map((v) => [v.id, v]));
     const nameMap = await this.variantNameMap(variants);
     const categoryMap = await this.variantCategoryMap(variants);
+    // Fetch the shop's active promos ONCE — every cart line was re-querying
+    // the same shop-wide promo list before (N+1 for an N-item cart).
+    const shopPromos = await this.promotions.findActivePromosForShop(shop.id);
     let subTotal = 0;
     const lineItems: {
       variant: ProductVariant;
@@ -216,8 +230,8 @@ export class OrdersService {
       const basePrice = v.discountPrice ?? v.price;
       // Promotions are computed dynamically at order time (never mutate
       // ProductVariant.discountPrice) and snapshotted onto the OrderItem.
-      const promo = await this.promotions.findActiveForProduct(
-        shop.id,
+      const promo = this.promotions.bestDiscountFor(
+        shopPromos,
         v.id,
         categoryMap.get(v.id) ?? null,
         basePrice,
@@ -257,6 +271,12 @@ export class OrdersService {
     const freeDelivery = await this.promotions.findFreeDeliveryPromotion(shop.id, subTotal);
     if (freeDelivery.free) deliveryFee = 0;
 
+    // Snapshot the commission rate NOW (seller's active Prime rate, or the
+    // current global default) — settlement must use this, not whatever rate
+    // happens to be active on delivery day (SPEC §10.1: not retroactive).
+    const defaultCommissionRate = this.settings.getNumber(SETTING_KEYS.COMMISSION_RATE_DEFAULT);
+    const commissionRateSnapshot = await this.prime.getCommissionRate(shop.ownerId, defaultCommissionRate);
+
     const lowAlerts: { name: string; stock: number }[] = [];
     const created = await this.dataSource.transaction(async (manager) => {
       const order = manager.create(Order, {
@@ -273,6 +293,7 @@ export class OrdersService {
         paymentStatus: (dto.paymentMethod ?? PaymentMethod.Cash) === PaymentMethod.ClickOnline
           ? PaymentStatus.Pending
           : PaymentStatus.NotRequired,
+        commissionRateSnapshot,
         timeline: [{ status: OrderStatus.New, at: new Date().toISOString(), byUserId: userId }],
       });
       const savedOrder = await manager.save(order);
@@ -538,11 +559,12 @@ export class OrdersService {
     if (!order) throw new NotFoundException('Buyurtma topilmadi');
     const isParty = order.userId === userId || order.shop.ownerId === userId;
     if (!isParty) {
-      // Active staff of the shop may also view the order (e.g. courier).
+      // Staff need the matching view permission — not just active membership
+      // (e.g. a warehouse-only hire has no business reading customer PII).
       const staff = await this.staff.findOne({
         where: { shopId: order.shopId, userId, isActive: true },
       });
-      if (!staff) throw new ForbiddenException();
+      if (!staff || !this.staffCanViewOrder(staff, order)) throw new ForbiddenException();
     }
     const myReviews = order.userId
       ? await this.reviews.find({
@@ -626,19 +648,33 @@ export class OrdersService {
     }
 
     const saved = await this.dataSource.transaction(async (manager) => {
-      order.status = nextStatus;
+      // Re-read WITH a write lock and re-check the transition — the check
+      // above ran against a possibly-stale read. Without this, two
+      // concurrent calls (double-tap, retry, or racing the 5-min auto-cancel
+      // cron) could both pass the earlier check and both cancel/restock the
+      // same order.
+      const locked = await manager.findOne(Order, {
+        where: { id: orderId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!locked) throw new NotFoundException('Buyurtma topilmadi');
+      if (!allowedTransitions[locked.status].includes(nextStatus)) {
+        throw new BadRequestException(`Status ${locked.status} -> ${nextStatus} mumkin emas`);
+      }
+
+      locked.status = nextStatus;
       const event: OrderTimelineEvent = {
         status: nextStatus,
         at: new Date().toISOString(),
         byUserId: actorUserId,
         note,
       };
-      order.timeline = [...order.timeline, event];
+      locked.timeline = [...locked.timeline, event];
       if (nextStatus === OrderStatus.Cancelled) {
-        order.cancellationReason = note ?? null;
-        await this.restockOrder(manager, order.id);
+        locked.cancellationReason = note ?? null;
+        await this.restockOrder(manager, locked.id);
       }
-      return manager.save(order);
+      return manager.save(locked);
     });
 
     // Hook financial settlement when order is delivered
@@ -668,10 +704,19 @@ export class OrdersService {
     return saved;
   }
 
-  private async settleDeliveredOrder(order: Pick<Order, 'id' | 'shop' | 'total' | 'paymentMethod'>): Promise<void> {
+  private async settleDeliveredOrder(
+    order: Pick<Order, 'id' | 'shop' | 'total' | 'paymentMethod' | 'commissionRateSnapshot'>,
+  ): Promise<void> {
     const sellerId = order.shop.ownerId;
-    const defaultRate = this.settings.getNumber(SETTING_KEYS.COMMISSION_RATE_DEFAULT);
-    const commissionRate = await this.prime.getCommissionRate(sellerId, defaultRate);
+    // Use the rate captured at order-creation time — never recompute from
+    // whatever's active now (SPEC §10.1: rate changes aren't retroactive).
+    // Falls back to the current rate only for orders placed before this
+    // snapshot column existed.
+    let commissionRate = order.commissionRateSnapshot;
+    if (commissionRate == null) {
+      const defaultRate = this.settings.getNumber(SETTING_KEYS.COMMISSION_RATE_DEFAULT);
+      commissionRate = await this.prime.getCommissionRate(sellerId, defaultRate);
+    }
 
     if (order.paymentMethod === PaymentMethod.Cash) {
       await this.payments.recordCashOrderDelivery({ sellerId, orderId: order.id, orderTotal: order.total, commissionRate });
@@ -728,13 +773,13 @@ export class OrdersService {
   private async restockOrder(manager: import('typeorm').EntityManager, orderId: string) {
     const items = await manager.find(OrderItem, { where: { orderId } });
     if (items.length === 0) return;
-    // Load every variant in one query instead of one findOne per item (N+1).
-    const variants = await manager.find(ProductVariant, {
-      where: { id: In(items.map((i) => i.productVariantId)) },
-    });
-    const variantMap = new Map(variants.map((v) => [v.id, v]));
     for (const item of items) {
-      const variant = variantMap.get(item.productVariantId);
+      // Locked individually (FindManyOptions has no `lock`) so this can't
+      // lost-update against another concurrent stock change on the same variant.
+      const variant = await manager.findOne(ProductVariant, {
+        where: { id: item.productVariantId },
+        lock: { mode: 'pessimistic_write' },
+      });
       if (!variant) continue;
       const restockQty = item.quantity - item.returnedQuantity;
       if (restockQty <= 0) continue;
@@ -760,19 +805,29 @@ export class OrdersService {
     returns: { orderItemId: string; quantity: number }[],
     reason?: string,
   ): Promise<Order> {
-    const order = await this.orders.findOne({ where: { id: orderId }, relations: { items: true, shop: true } });
-    if (!order) throw new NotFoundException('Buyurtma topilmadi');
+    const preCheck = await this.orders.findOne({ where: { id: orderId }, relations: { shop: true } });
+    if (!preCheck) throw new NotFoundException('Buyurtma topilmadi');
     // Returns are marked by the shop side (seller/courier) at hand-off, before
     // the customer pays cash — not by the customer.
-    await this.assertShopCanManage(userId, order, 'orders.update_status');
-    if (order.status !== OrderStatus.Delivering) {
-      throw new BadRequestException('Faqat yetkazib berilayotganda qaytarish mumkin');
-    }
+    await this.assertShopCanManage(userId, preCheck, 'orders.update_status');
 
-    const result = await this.dataSource.transaction(async (manager) => {
+    await this.dataSource.transaction(async (manager) => {
+      // Re-read WITH a write lock and re-check status inside the transaction
+      // — two concurrent partialReturn calls (or one racing a cancel) must
+      // not both act on the same stale item quantities.
+      const order = await manager.findOne(Order, {
+        where: { id: orderId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!order) throw new NotFoundException('Buyurtma topilmadi');
+      if (order.status !== OrderStatus.Delivering) {
+        throw new BadRequestException('Faqat yetkazib berilayotganda qaytarish mumkin');
+      }
+      const items = await manager.find(OrderItem, { where: { orderId } });
+
       let totalReturnAmount = 0;
       for (const r of returns) {
-        const item = order.items.find((i) => i.id === r.orderItemId);
+        const item = items.find((i) => i.id === r.orderItemId);
         if (!item) throw new NotFoundException('Buyurtma elementi topilmadi');
         const remaining = item.quantity - item.returnedQuantity;
         if (r.quantity > remaining) {
@@ -785,7 +840,12 @@ export class OrdersService {
         item.costOfGoods = Math.max(0, item.costOfGoods - unitCost * r.quantity);
         await manager.save(item);
 
-        const variant = await manager.findOne(ProductVariant, { where: { id: item.productVariantId } });
+        // Locked so this can't lost-update against another concurrent stock
+        // change on the same variant (same reasoning as restockOrder).
+        const variant = await manager.findOne(ProductVariant, {
+          where: { id: item.productVariantId },
+          lock: { mode: 'pessimistic_write' },
+        });
         if (variant) {
           await restockReturn(manager, {
             variant,
@@ -808,8 +868,10 @@ export class OrdersService {
         note: `Qaytarish: ${reason ?? ''}`.trim(),
       };
       order.timeline = [...order.timeline, event];
-      return manager.save(order);
+      await manager.save(order);
     });
+
+    const result = await this.orders.findOneOrFail({ where: { id: orderId }, relations: { items: true } });
     this.emitOrderEvent('order:updated', result);
     // Remind the customer to (optionally) add a return reason.
     if (result.userId) void this.push.sendToUser(result.userId, {
@@ -1008,7 +1070,7 @@ export class OrdersService {
     const to = new Date(now - 4 * 60 * 60 * 1000);
 
     const delivered = await this.orders.find({
-      where: { status: OrderStatus.Delivered, updatedAt: Between(from, to) },
+      where: { status: OrderStatus.Delivered, updatedAt: Between(from, to), reviewReminderSentAt: IsNull() },
       relations: { items: true },
       take: 200,
     });
@@ -1020,14 +1082,18 @@ export class OrdersService {
     const reviewedPairs = new Set(existingReviews.map((r) => `${r.orderId}:${r.productVariantId}`));
 
     const reminded = new Set<string>();
+    const remindedOrderIds: string[] = [];
     for (const order of delivered) {
       if (!order.userId) continue;
       const hasUnreviewed = order.items.some(
         (it) => !reviewedPairs.has(`${order.id}:${it.productVariantId}`),
       );
       if (!hasUnreviewed) continue;
+      // At most one reminder push per user per run — other eligible orders
+      // for the same user get picked up (and marked sent) on a later run.
       if (reminded.has(order.userId)) continue;
       reminded.add(order.userId);
+      remindedOrderIds.push(order.id);
 
       void this.push.sendToUser(order.userId, {
         title: 'Buyurtmangizni baholang',
@@ -1035,7 +1101,13 @@ export class OrdersService {
         data: { kind: 'review_reminder', orderId: order.id },
       });
     }
-    if (reminded.size > 0) this.logger.log(`Sent review reminders to ${reminded.size} user(s)`);
+    if (remindedOrderIds.length > 0) {
+      // Persist so this same order never triggers a repeat reminder — the
+      // previous version had no persisted flag and re-sent the same "please
+      // rate your order" push every 4h for up to ~44h (≈11 times).
+      await this.orders.update({ id: In(remindedOrderIds) }, { reviewReminderSentAt: new Date() });
+      this.logger.log(`Sent review reminders to ${reminded.size} user(s)`);
+    }
   }
 
   // ─── Yetkazib berish marshruti (SPEC.md §27) ──────────────────────────────

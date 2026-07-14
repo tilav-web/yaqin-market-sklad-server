@@ -22,6 +22,7 @@ const mockRedisClient = () => ({
   get: jest.fn(),
   del: jest.fn(),
   pttl: jest.fn(),
+  pexpire: jest.fn(),
   set: jest.fn(),
 });
 
@@ -179,39 +180,38 @@ describe('AuthService', () => {
     });
 
     it('5 martadan ko\'p noto\'g\'ri urinishdan keyin kodni o\'chirib rad etadi', async () => {
-      redis.get.mockResolvedValue(JSON.stringify({ code: '111111', attempts: 5, createdAt: Date.now() }));
+      redis.get.mockResolvedValue(JSON.stringify({ code: '111111', createdAt: Date.now() }));
+      redis.incr.mockResolvedValue(6); // atomic counter already past the cap
 
       await expect(service.verifyOtp(PHONE, '000000')).rejects.toThrow("Juda ko'p urinishlar");
       expect(redis.del).toHaveBeenCalledWith(`otp:${PHONE}`);
+      expect(redis.del).toHaveBeenCalledWith(`otp:attempts:${PHONE}`);
     });
 
-    it('noto\'g\'ri kod: urinish sonini oshiradi, lekin muddatni qayta boshlamaydi', async () => {
-      redis.get.mockResolvedValue(JSON.stringify({ code: '111111', attempts: 0, createdAt: Date.now() }));
+    it('birinchi noto\'g\'ri urinishda attempts kaliti otp bilan bir xil muddatga o\'rnatiladi', async () => {
+      redis.get.mockResolvedValue(JSON.stringify({ code: '111111', createdAt: Date.now() }));
+      redis.incr.mockResolvedValue(1); // first attempt via atomic INCR
       redis.pttl.mockResolvedValue(120_000);
 
       await expect(service.verifyOtp(PHONE, '000000')).rejects.toThrow("Tasdiq kodi noto'g'ri");
 
-      expect(redis.set).toHaveBeenCalledWith(
-        `otp:${PHONE}`,
-        expect.stringContaining('"attempts":1'),
-        'PX',
-        120_000,
-      );
+      expect(redis.pexpire).toHaveBeenCalledWith(`otp:attempts:${PHONE}`, 120_000);
       expect(redis.del).not.toHaveBeenCalled();
     });
 
-    it('noto\'g\'ri kod va TTL tugagan bo\'lsa kalitni o\'chiradi (qayta yozmaydi)', async () => {
-      redis.get.mockResolvedValue(JSON.stringify({ code: '111111', attempts: 0, createdAt: Date.now() }));
-      redis.pttl.mockResolvedValue(-2); // key does not exist / expired
+    it('keyingi noto\'g\'ri urinishlarda attempts muddatini qayta o\'rnatmaydi', async () => {
+      redis.get.mockResolvedValue(JSON.stringify({ code: '111111', createdAt: Date.now() }));
+      redis.incr.mockResolvedValue(2); // not the first attempt
 
       await expect(service.verifyOtp(PHONE, '000000')).rejects.toThrow("Tasdiq kodi noto'g'ri");
 
-      expect(redis.set).not.toHaveBeenCalled();
-      expect(redis.del).toHaveBeenCalledWith(`otp:${PHONE}`);
+      expect(redis.pexpire).not.toHaveBeenCalled();
+      expect(redis.del).not.toHaveBeenCalled();
     });
 
     it('to\'g\'ri kod bilan token juftligini qaytaradi', async () => {
-      redis.get.mockResolvedValue(JSON.stringify({ code: '111111', attempts: 0, createdAt: Date.now() }));
+      redis.get.mockResolvedValue(JSON.stringify({ code: '111111', createdAt: Date.now() }));
+      redis.incr.mockResolvedValue(1);
       const user = { id: 'user-1', phone: PHONE, name: null, avatarUrl: null };
       users.upsertByPhone.mockResolvedValue(user);
       users.computeRoles.mockResolvedValue([Role.Customer]);

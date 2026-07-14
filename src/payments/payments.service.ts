@@ -302,63 +302,72 @@ export class PaymentsService {
     });
   }
 
-  /** Admin: approve/reject withdrawal */
+  /**
+   * Admin: approve/reject withdrawal. The status check and the balance
+   * mutation happen under the SAME row lock inside one transaction — two
+   * concurrent calls for the same request (double-click, retry) must not
+   * both pass the "still pending" check and both move money.
+   */
   async adminProcessWithdrawal(id: string, adminId: string, approve: boolean, note?: string): Promise<WithdrawalRequest> {
-    const req = await this.withdrawals.findOne({ where: { id } });
-    if (!req) throw new NotFoundException('So\'rov topilmadi');
-    if (req.status !== WithdrawalStatus.Pending && req.status !== WithdrawalStatus.Processing) {
-      throw new BadRequestException('So\'rov allaqachon yakunlangan');
-    }
+    const req = await this.dataSource.transaction(async (em) => {
+      const locked = await em.findOne(WithdrawalRequest, {
+        where: { id },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!locked) throw new NotFoundException('So\'rov topilmadi');
+      if (locked.status !== WithdrawalStatus.Pending && locked.status !== WithdrawalStatus.Processing) {
+        throw new BadRequestException('So\'rov allaqachon yakunlangan');
+      }
 
-    req.status = approve ? WithdrawalStatus.Completed : WithdrawalStatus.Rejected;
-    req.processedAt = new Date();
-    req.processedByAdminId = adminId;
-    req.adminNote = note ?? null;
+      locked.status = approve ? WithdrawalStatus.Completed : WithdrawalStatus.Rejected;
+      locked.processedAt = new Date();
+      locked.processedByAdminId = adminId;
+      locked.adminNote = note ?? null;
 
-    if (!approve) {
-      // Return money to seller balance
-      await this.dataSource.transaction(async (em) => {
+      if (!approve) {
+        // Return money to seller balance
         const b = await em.findOne(SellerBalance, {
-          where: { sellerId: req.sellerId },
+          where: { sellerId: locked.sellerId },
           lock: { mode: 'pessimistic_write' },
         });
         if (b) {
-          b.availableBalance = String(parseFloat(b.availableBalance) + parseFloat(req.amount));
+          b.availableBalance = String(parseFloat(b.availableBalance) + parseFloat(locked.amount));
           await em.save(SellerBalance, b);
         }
-        await em.save(WithdrawalRequest, req);
+        await em.save(WithdrawalRequest, locked);
         await em.save(SellerTransaction, em.create(SellerTransaction, {
-          sellerId: req.sellerId,
+          sellerId: locked.sellerId,
           type: SellerTxType.AdminAdjustment,
-          amount: req.amount,
+          amount: locked.amount,
           status: 'settled',
           description: `Yechib olish rad etildi, balansga qaytarildi. Sabab: ${note ?? ''}`,
         }));
-      });
+      } else {
+        await em.save(WithdrawalRequest, locked);
+        await em.save(SellerTransaction, em.create(SellerTransaction, {
+          sellerId: locked.sellerId,
+          type: SellerTxType.WithdrawalCompleted,
+          amount: String(-parseFloat(locked.amount)),
+          status: 'settled',
+          description: `Yechib olish bajarildi: ${parseFloat(locked.amount).toLocaleString()} so'm`,
+        }));
+      }
+      return locked;
+    });
+
+    if (!approve) {
       void this.push.sendToUser(req.sellerId, {
         title: 'Yechib olish rad etildi',
         body: note ? `Sabab: ${note}` : `${parseFloat(req.amount).toLocaleString()} so'm balansga qaytarildi`,
         data: { kind: 'withdrawal:rejected' },
       });
-      return req;
+    } else {
+      void this.push.sendToUser(req.sellerId, {
+        title: 'Mablag\' yechildi',
+        body: `${parseFloat(req.amount).toLocaleString()} so'm kartangizga o'tkazildi`,
+        data: { kind: 'withdrawal:completed' },
+      });
     }
-
-    // Mark completed
-    await this.dataSource.transaction(async (em) => {
-      await em.save(WithdrawalRequest, req);
-      await em.save(SellerTransaction, em.create(SellerTransaction, {
-        sellerId: req.sellerId,
-        type: SellerTxType.WithdrawalCompleted,
-        amount: String(-parseFloat(req.amount)),
-        status: 'settled',
-        description: `Yechib olish bajarildi: ${parseFloat(req.amount).toLocaleString()} so'm`,
-      }));
-    });
-    void this.push.sendToUser(req.sellerId, {
-      title: 'Mablag\' yechildi',
-      body: `${parseFloat(req.amount).toLocaleString()} so'm kartangizga o'tkazildi`,
-      data: { kind: 'withdrawal:completed' },
-    });
     return req;
   }
 
@@ -513,15 +522,22 @@ export class PaymentsService {
     if (debtors.length > 0) this.log.log(`Sent debt reminders to ${debtors.length} seller(s)`);
   }
 
-  /** Admin: immediately settle a pending online-order transaction (skip 24h wait). */
+  /**
+   * Admin: immediately settle a pending online-order transaction (skip 24h
+   * wait). The tx row is locked and re-checked inside the transaction so two
+   * concurrent calls can't both settle the same transaction twice.
+   */
   async adminForceSettle(txId: string, adminId: string): Promise<SellerTransaction> {
-    const tx = await this.txs.findOne({ where: { id: txId } });
-    if (!tx) throw new NotFoundException('Tranzaksiya topilmadi');
-    if (tx.type !== SellerTxType.OnlineOrderPending || tx.status !== 'pending') {
-      throw new BadRequestException('Faqat pending online tranzaksiyani force settle qilish mumkin');
-    }
+    const sellerId = await this.dataSource.transaction(async (em) => {
+      const tx = await em.findOne(SellerTransaction, {
+        where: { id: txId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!tx) throw new NotFoundException('Tranzaksiya topilmadi');
+      if (tx.type !== SellerTxType.OnlineOrderPending || tx.status !== 'pending') {
+        throw new BadRequestException('Faqat pending online tranzaksiyani force settle qilish mumkin');
+      }
 
-    await this.dataSource.transaction(async (em) => {
       const b = await em.findOne(SellerBalance, {
         where: { sellerId: tx.sellerId },
         lock: { mode: 'pessimistic_write' },
@@ -544,21 +560,29 @@ export class PaymentsService {
         status: 'settled',
         description: `Admin force settle (admin: ${adminId})`,
       }));
+      return tx.sellerId;
     });
 
-    await this.autoRepayDebt(tx.sellerId);
+    await this.autoRepayDebt(sellerId);
     return this.txs.findOneOrFail({ where: { id: txId } });
   }
 
-  /** Admin: refund a pending online-order transaction (returns money to platform). */
+  /**
+   * Admin: refund a pending online-order transaction (returns money to
+   * platform). Same lock-and-recheck-inside-the-transaction pattern as
+   * {@link adminForceSettle}, so it can't double-refund.
+   */
   async adminForceRefund(txId: string, adminId: string): Promise<SellerTransaction> {
-    const tx = await this.txs.findOne({ where: { id: txId } });
-    if (!tx) throw new NotFoundException('Tranzaksiya topilmadi');
-    if (tx.type !== SellerTxType.OnlineOrderPending || tx.status !== 'pending') {
-      throw new BadRequestException('Faqat pending online tranzaksiyani force refund qilish mumkin');
-    }
-
     await this.dataSource.transaction(async (em) => {
+      const tx = await em.findOne(SellerTransaction, {
+        where: { id: txId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!tx) throw new NotFoundException('Tranzaksiya topilmadi');
+      if (tx.type !== SellerTxType.OnlineOrderPending || tx.status !== 'pending') {
+        throw new BadRequestException('Faqat pending online tranzaksiyani force refund qilish mumkin');
+      }
+
       const b = await em.findOne(SellerBalance, {
         where: { sellerId: tx.sellerId },
         lock: { mode: 'pessimistic_write' },
