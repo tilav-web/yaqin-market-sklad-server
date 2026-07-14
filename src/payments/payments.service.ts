@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, LessThan, Repository } from 'typeorm';
+import { DataSource, In, LessThan, Repository } from 'typeorm';
 
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { AuditAction } from '../audit-log/entities/admin-audit-log.entity';
@@ -10,6 +10,7 @@ import { PushService } from '../push/push.service';
 import { Shop } from '../shops/entities/shop.entity';
 import { SettingsService } from '../settings/settings.service';
 import { SETTING_KEYS } from '../settings/entities/global-setting.entity';
+import { User } from '../users/entities/user.entity';
 import { SellerBalance } from './entities/seller-balance.entity';
 import { SellerTransaction, SellerTxType } from './entities/seller-transaction.entity';
 import { WithdrawalRequest, WithdrawalStatus } from './entities/withdrawal-request.entity';
@@ -23,6 +24,7 @@ export class PaymentsService {
     @InjectRepository(SellerTransaction) private readonly txs: Repository<SellerTransaction>,
     @InjectRepository(WithdrawalRequest) private readonly withdrawals: Repository<WithdrawalRequest>,
     @InjectRepository(Shop)            private readonly shops: Repository<Shop>,
+    @InjectRepository(User)           private readonly users: Repository<User>,
     private readonly settings: SettingsService,
     private readonly dataSource: DataSource,
     private readonly push: PushService,
@@ -298,11 +300,26 @@ export class PaymentsService {
   }
 
   /** Admin: list all pending withdrawals */
-  async adminListWithdrawals(status?: WithdrawalStatus): Promise<WithdrawalRequest[]> {
-    return this.withdrawals.find({
-      where: status ? { status } : {},
+  async adminListWithdrawals(opts: {
+    status?: WithdrawalStatus;
+    limit?: number;
+    offset?: number;
+  }): Promise<{
+    items: (WithdrawalRequest & { seller: { id: string; name: string | null; phone: string } | null })[];
+    total: number;
+  }> {
+    const [rows, total] = await this.withdrawals.findAndCount({
+      where: opts.status ? { status: opts.status } : {},
       order: { requestedAt: 'DESC' },
+      take: Math.min(opts.limit ?? 30, 100),
+      skip: Math.max(opts.offset ?? 0, 0),
     });
+    const sellerIds = [...new Set(rows.map((w) => w.sellerId))];
+    const sellers = sellerIds.length
+      ? await this.users.find({ where: { id: In(sellerIds) }, select: { id: true, name: true, phone: true } })
+      : [];
+    const byId = new Map(sellers.map((s) => [s.id, s]));
+    return { items: rows.map((w) => ({ ...w, seller: byId.get(w.sellerId) ?? null })), total };
   }
 
   /**

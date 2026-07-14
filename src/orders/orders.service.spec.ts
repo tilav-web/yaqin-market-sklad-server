@@ -3,6 +3,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
 
+import { AuditLogService } from '../audit-log/audit-log.service';
 import { ComplaintsService } from '../complaints/complaints.service';
 import { SellerTransaction } from '../payments/entities/seller-transaction.entity';
 import { PaymentsService } from '../payments/payments.service';
@@ -144,6 +145,7 @@ describe('OrdersService', () => {
   let settings: { getNumber: jest.Mock };
   let promotions: { findActivePromosForShop: jest.Mock; bestDiscountFor: jest.Mock; findFreeDeliveryPromotion: jest.Mock };
   let complaints: { getForOrder: jest.Mock; openComplaintOrderIds: jest.Mock };
+  let auditLog: { record: jest.Mock };
 
   const buildRepoMock = () => ({
     findOne: jest.fn(),
@@ -177,6 +179,7 @@ describe('OrdersService', () => {
       findFreeDeliveryPromotion: jest.fn().mockResolvedValue({ free: false, promotionId: null }),
     };
     complaints = { getForOrder: jest.fn(), openComplaintOrderIds: jest.fn() };
+    auditLog = { record: jest.fn().mockResolvedValue(undefined) };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -199,6 +202,7 @@ describe('OrdersService', () => {
         { provide: SettingsService, useValue: settings },
         { provide: PromotionsService, useValue: promotions },
         { provide: ComplaintsService, useValue: complaints },
+        { provide: AuditLogService, useValue: auditLog },
       ],
     }).compile();
 

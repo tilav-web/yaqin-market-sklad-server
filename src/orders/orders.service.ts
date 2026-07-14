@@ -10,6 +10,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { customAlphabet } from 'nanoid';
 import { Between, DataSource, In, IsNull, LessThan, Not, Repository } from 'typeorm';
 
+import { AuditLogService } from '../audit-log/audit-log.service';
+import { AuditAction } from '../audit-log/entities/admin-audit-log.entity';
 import { ComplaintsService } from '../complaints/complaints.service';
 import { calcDeliveryFee, haversineKm, pointInPolygon } from '../geo/geo.util';
 import { SellerTransaction, SellerTxType } from '../payments/entities/seller-transaction.entity';
@@ -72,6 +74,7 @@ export class OrdersService {
     private readonly settings: SettingsService,
     private readonly promotions: PromotionsService,
     private readonly complaints: ComplaintsService,
+    private readonly auditLog: AuditLogService,
   ) {}
 
   private static readonly STATUS_LABEL: Record<OrderStatus, string> = {
@@ -720,7 +723,7 @@ export class OrdersService {
   }
 
   private async settleDeliveredOrder(
-    order: Pick<Order, 'id' | 'shop' | 'total' | 'paymentMethod' | 'commissionRateSnapshot'>,
+    order: Pick<Order, 'id' | 'shop' | 'total' | 'paymentMethod' | 'commissionRateSnapshot' | 'commissionExempt'>,
   ): Promise<void> {
     const sellerId = order.shop.ownerId;
     // Use the rate captured at order-creation time — never recompute from
@@ -732,6 +735,9 @@ export class OrdersService {
       const defaultRate = this.settings.getNumber(SETTING_KEYS.COMMISSION_RATE_DEFAULT);
       commissionRate = await this.prime.getCommissionRate(sellerId, defaultRate);
     }
+    // Admin `exempt` flag overrides everything else — 0% regardless of
+    // whatever rate was snapshotted (SPEC §10.3).
+    if (order.commissionExempt) commissionRate = 0;
 
     if (order.paymentMethod === PaymentMethod.Cash) {
       await this.payments.recordCashOrderDelivery({ sellerId, orderId: order.id, orderTotal: order.total, commissionRate });
@@ -1292,5 +1298,33 @@ export class OrdersService {
     });
     if (!order) throw new NotFoundException('Buyurtma topilmadi');
     return order;
+  }
+
+  /**
+   * Admin: mark/unmark a 0%-commission order (SPEC §10.3). Only meaningful
+   * before the order reaches `Delivered` — settlement runs once, at that
+   * transition (see settleDeliveredOrder), so toggling this after delivery
+   * can't retroactively undo commission already recorded.
+   */
+  async adminSetCommissionExempt(id: string, exempt: boolean, adminUserId: string): Promise<Order> {
+    const order = await this.orders.findOne({ where: { id } });
+    if (!order) throw new NotFoundException('Buyurtma topilmadi');
+    if (order.status === OrderStatus.Delivered) {
+      throw new BadRequestException(
+        'Buyurtma allaqachon yetkazilgan — komissiya hisoblab bo\'lingan, endi bu belgi ta\'sir qilmaydi',
+      );
+    }
+    // Update only this one column — updateStatus() re-reads the full entity
+    // under a pessimistic_write lock and saves it back wholesale, so a
+    // concurrent findOne-mutate-save here would risk clobbering whatever
+    // status/timeline change that transaction just committed.
+    await this.orders.update(id, { commissionExempt: exempt });
+    void this.auditLog.record({
+      adminUserId,
+      action: exempt ? AuditAction.OrderCommissionExempted : AuditAction.OrderCommissionExemptRemoved,
+      targetType: 'order',
+      targetId: id,
+    });
+    return this.orders.findOneOrFail({ where: { id } });
   }
 }

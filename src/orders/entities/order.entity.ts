@@ -145,6 +145,16 @@ export class Order {
   @Column({ type: 'double precision', nullable: true })
   commissionRateSnapshot!: number | null;
 
+  /**
+   * Admin-set flag — this order is charged 0% commission regardless of
+   * `commissionRateSnapshot` (SPEC §10.3, e.g. an admin test order or an
+   * order cancelled due to a platform bug). Only takes effect if set BEFORE
+   * the order reaches `Delivered` — settlement runs once, at that
+   * transition, and is not retroactively reversible after the fact.
+   */
+  @Column({ type: 'boolean', default: false })
+  commissionExempt!: boolean;
+
   /** Set once the "please rate your order" reminder push has been sent (avoids repeat spam). */
   @Column({ type: 'timestamptz', nullable: true })
   reviewReminderSentAt!: Date | null;

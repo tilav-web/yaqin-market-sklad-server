@@ -24,6 +24,7 @@ import {
   PartialReturnDto,
   ReturnReasonDto,
   SendMessageDto,
+  SetCommissionExemptDto,
   UpdateOrderStatusDto,
 } from './dto/order.dto';
 import { OrderStatus } from './entities/order.entity';
@@ -179,5 +180,14 @@ export class AdminOrdersController {
   @Get(':id')
   getOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.orders.adminGetOrder(id);
+  }
+
+  @Patch(':id/exempt')
+  setExempt(
+    @CurrentUser() admin: JwtPayload,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: SetCommissionExemptDto,
+  ) {
+    return this.orders.adminSetCommissionExempt(id, dto.exempt, admin.sub);
   }
 }

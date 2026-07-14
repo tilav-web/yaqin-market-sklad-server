@@ -4,12 +4,12 @@ import { Role } from '../auth/role.enum';
 import { Roles } from '../auth/decorators/roles.decorator';
 import {
   AdjustBalanceDto,
+  AdminListWithdrawalsQuery,
   ExtendDebtDto,
   ForgiveDebtDto,
   ProcessWithdrawalDto,
   RequestWithdrawalDto,
 } from './dto/payment.dto';
-import { WithdrawalStatus } from './entities/withdrawal-request.entity';
 import { PaymentsService } from './payments.service';
 
 /* ─── Seller endpoints ─── */
@@ -48,8 +48,8 @@ export class AdminBalanceController {
   constructor(private readonly svc: PaymentsService) {}
 
   @Get('withdrawals')
-  listWithdrawals(@Query('status') status?: WithdrawalStatus) {
-    return this.svc.adminListWithdrawals(status);
+  listWithdrawals(@Query() query: AdminListWithdrawalsQuery) {
+    return this.svc.adminListWithdrawals(query);
   }
 
   @Put('withdrawals/:id/process')

@@ -9,6 +9,7 @@ import { SettingsModule } from '../settings/settings.module';
 import { Shop } from '../shops/entities/shop.entity';
 import { ShopStaff } from '../shops/entities/shop-staff.entity';
 import { User } from '../users/entities/user.entity';
+import { AdminCatalogImportService } from './excel/admin-catalog-import.service';
 import { ExcelController } from './excel/excel.controller';
 import { ExcelService } from './excel/excel.service';
 import { GlobalProduct } from './entities/global-product.entity';
@@ -51,7 +52,7 @@ import { ProductsService } from './products.service';
     AdminGlobalCatalogController,
     ExcelController,
   ],
-  providers: [ProductsService, ExcelService],
+  providers: [ProductsService, ExcelService, AdminCatalogImportService],
   exports: [ProductsService],
 })
 export class ProductsModule {}

@@ -1,6 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
 import {
   IsBoolean,
+  IsEnum,
   IsInt,
   IsNumber,
   IsOptional,
@@ -11,6 +13,8 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
+
+import { WithdrawalStatus } from '../entities/withdrawal-request.entity';
 
 export class RequestWithdrawalDto {
   @ApiProperty({ example: 500000, description: 'Yechib olinadigan miqdor (so\'m)' })
@@ -65,4 +69,26 @@ export class ExtendDebtDto {
   @Min(1)
   @Max(365)
   days!: number;
+}
+
+export class AdminListWithdrawalsQuery {
+  @ApiPropertyOptional({ enum: WithdrawalStatus })
+  @IsOptional()
+  @IsEnum(WithdrawalStatus)
+  status?: WithdrawalStatus;
+
+  @ApiPropertyOptional({ default: 30 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number;
+
+  @ApiPropertyOptional({ default: 0 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  offset?: number;
 }

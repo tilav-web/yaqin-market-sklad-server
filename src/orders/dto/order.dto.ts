@@ -3,6 +3,7 @@ import { Type } from 'class-transformer';
 import {
   ArrayMinSize,
   IsArray,
+  IsBoolean,
   IsEnum,
   IsInt,
   IsOptional,
@@ -201,4 +202,10 @@ export class AdminListOrdersQuery {
   @IsInt()
   @Min(0)
   offset?: number;
+}
+
+export class SetCommissionExemptDto {
+  @ApiProperty()
+  @IsBoolean()
+  exempt!: boolean;
 }

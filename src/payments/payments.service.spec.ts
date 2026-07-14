@@ -6,6 +6,7 @@ import { DataSource, Repository } from 'typeorm';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { ComplaintsService } from '../complaints/complaints.service';
 import { PushService } from '../push/push.service';
+import { User } from '../users/entities/user.entity';
 import { SETTING_KEYS } from '../settings/entities/global-setting.entity';
 import { SettingsService } from '../settings/settings.service';
 import { Shop } from '../shops/entities/shop.entity';
@@ -91,7 +92,8 @@ describe('PaymentsService', () => {
 
   const buildRepoMock = () => ({
     findOne: jest.fn(),
-    find: jest.fn(),
+    find: jest.fn().mockResolvedValue([]),
+    findAndCount: jest.fn().mockResolvedValue([[], 0]),
     save: jest.fn(),
     create: jest.fn((data: unknown) => data),
     update: jest.fn(),
@@ -118,6 +120,7 @@ describe('PaymentsService', () => {
         { provide: getRepositoryToken(SellerTransaction), useFactory: buildRepoMock },
         { provide: getRepositoryToken(WithdrawalRequest), useFactory: buildRepoMock },
         { provide: getRepositoryToken(Shop), useFactory: buildRepoMock },
+        { provide: getRepositoryToken(User), useFactory: buildRepoMock },
         { provide: SettingsService, useValue: settings },
         { provide: DataSource, useValue: dataSource },
         { provide: PushService, useValue: push },

@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -12,14 +13,21 @@ import {
   Patch,
   Post,
   Query,
+  Res,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import type { Response } from 'express';
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { JwtPayload } from '../auth/decorators/current-user.decorator';
 import { Public } from '../auth/decorators/public.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '../auth/role.enum';
+import { AdminCatalogImportService } from './excel/admin-catalog-import.service';
+import { ConfirmAdminCatalogImportDto } from './excel/dto/admin-catalog-import.dto';
 import { FeedQueryDto } from './dto/feed-query.dto';
 import {
   AdjustStockDto,
@@ -34,6 +42,9 @@ import {
   UpdateProductVariantDto,
 } from './dto/product.dto';
 import { ProductsService } from './products.service';
+
+const MAX_IMPORT_BYTES = 5 * 1024 * 1024; // 5 MB
+const XLSX_CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
 @ApiBearerAuth()
 @ApiTags('seller-products')
@@ -307,7 +318,10 @@ export class SellerProductsExtraController {
 @Controller('admin/catalog')
 @Roles(Role.Admin)
 export class AdminGlobalCatalogController {
-  constructor(private readonly products: ProductsService) {}
+  constructor(
+    private readonly products: ProductsService,
+    private readonly catalogImport: AdminCatalogImportService,
+  ) {}
 
   @Get()
   list(
@@ -329,6 +343,28 @@ export class AdminGlobalCatalogController {
   @Get('stats')
   catalogStats() {
     return this.products.adminGetCatalogStats();
+  }
+
+  @Get('import/template')
+  async importTemplate(@Res() res: Response) {
+    const buf = await this.catalogImport.downloadTemplate();
+    res.setHeader('Content-Type', XLSX_CONTENT_TYPE);
+    res.setHeader('Content-Disposition', 'attachment; filename="katalog-shabloni.xlsx"');
+    res.send(buf);
+  }
+
+  /** Upload a filled-in `.xlsx` for validation — does NOT create anything yet. */
+  @Post('import/preview')
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: MAX_IMPORT_BYTES } }))
+  async previewImport(@UploadedFile() file: Express.Multer.File | undefined) {
+    if (!file) throw new BadRequestException('Fayl yuborilmadi');
+    return this.catalogImport.previewImport(file.buffer);
+  }
+
+  /** Commit the (optionally admin-edited) rows returned by preview. */
+  @Post('import/confirm')
+  confirmImport(@Body() dto: ConfirmAdminCatalogImportDto) {
+    return this.catalogImport.confirmImport(dto.rows);
   }
 
   @Post()
