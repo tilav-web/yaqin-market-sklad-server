@@ -10,13 +10,16 @@ import {
   Patch,
   Post,
   Query,
+  Res,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import type { Response } from 'express';
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { JwtPayload } from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '../auth/role.enum';
+import { sendXlsx } from '../common/xlsx.util';
 import {
   AdminListUsersQuery,
   AdminSetAdminDto,
@@ -117,6 +120,12 @@ export class AdminUsersController {
   @Get()
   list(@Query() query: AdminListUsersQuery) {
     return this.users.adminListUsers(query);
+  }
+
+  @Get('export')
+  async export(@Query() query: AdminListUsersQuery, @Res() res: Response) {
+    const buf = await this.users.adminExportUsers(query);
+    sendXlsx(res, buf, 'foydalanuvchilar.xlsx');
   }
 
   @Patch(':id/status')

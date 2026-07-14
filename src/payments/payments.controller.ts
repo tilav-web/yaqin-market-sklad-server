@@ -1,7 +1,9 @@
-import { Body, Controller, Get, Param, Post, Put, Query, Request } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Put, Query, Request, Res } from '@nestjs/common';
+import type { Response } from 'express';
 
 import { Role } from '../auth/role.enum';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { sendXlsx } from '../common/xlsx.util';
 import {
   AdjustBalanceDto,
   AdminListWithdrawalsQuery,
@@ -50,6 +52,12 @@ export class AdminBalanceController {
   @Get('withdrawals')
   listWithdrawals(@Query() query: AdminListWithdrawalsQuery) {
     return this.svc.adminListWithdrawals(query);
+  }
+
+  @Get('withdrawals/export')
+  async exportWithdrawals(@Query() query: AdminListWithdrawalsQuery, @Res() res: Response) {
+    const buf = await this.svc.adminExportWithdrawals(query.status);
+    sendXlsx(res, buf, 'yechish-sorovlar.xlsx');
   }
 
   @Put('withdrawals/:id/process')

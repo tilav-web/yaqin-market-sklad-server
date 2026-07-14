@@ -5,6 +5,7 @@ import { DataSource, In, LessThan, Repository } from 'typeorm';
 
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { AuditAction } from '../audit-log/entities/admin-audit-log.entity';
+import { buildXlsxBuffer } from '../common/xlsx.util';
 import { ComplaintsService } from '../complaints/complaints.service';
 import { PushService } from '../push/push.service';
 import { Shop } from '../shops/entities/shop.entity';
@@ -320,6 +321,45 @@ export class PaymentsService {
       : [];
     const byId = new Map(sellers.map((s) => [s.id, s]));
     return { items: rows.map((w) => ({ ...w, seller: byId.get(w.sellerId) ?? null })), total };
+  }
+
+  async adminExportWithdrawals(status?: WithdrawalStatus): Promise<Buffer> {
+    const rows = await this.withdrawals.find({
+      where: status ? { status } : {},
+      order: { requestedAt: 'DESC' },
+      take: 5000,
+    });
+    const sellerIds = [...new Set(rows.map((w) => w.sellerId))];
+    const sellers = sellerIds.length
+      ? await this.users.find({ where: { id: In(sellerIds) }, select: { id: true, name: true, phone: true } })
+      : [];
+    const byId = new Map(sellers.map((s) => [s.id, s]));
+    return buildXlsxBuffer(
+      "Yechish so'rovlar",
+      [
+        { header: 'Sotuvchi', key: 'sellerName', width: 22 },
+        { header: 'Telefon', key: 'sellerPhone', width: 16 },
+        { header: 'Summa', key: 'amount', width: 14 },
+        { header: 'Karta raqami', key: 'bankCardNumber', width: 20 },
+        { header: 'Karta egasi', key: 'bankCardHolderName', width: 22 },
+        { header: 'Holat', key: 'status', width: 14 },
+        { header: "So'ralgan sana", key: 'requestedAt', width: 20 },
+        { header: "Ko'rib chiqilgan sana", key: 'processedAt', width: 20 },
+      ],
+      rows.map((w) => {
+        const seller = byId.get(w.sellerId) ?? null;
+        return {
+          sellerName: seller?.name ?? '',
+          sellerPhone: seller?.phone ?? '',
+          amount: Number(w.amount),
+          bankCardNumber: w.bankCardNumber,
+          bankCardHolderName: w.bankCardHolderName,
+          status: w.status,
+          requestedAt: w.requestedAt.toISOString(),
+          processedAt: w.processedAt ? w.processedAt.toISOString() : '',
+        };
+      }),
+    );
   }
 
   /**

@@ -13,6 +13,7 @@ import { Between, DataSource, In, IsNull, LessThan, Not, Repository } from 'type
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { AuditAction } from '../audit-log/entities/admin-audit-log.entity';
 import { ComplaintsService } from '../complaints/complaints.service';
+import { buildXlsxBuffer } from '../common/xlsx.util';
 import { calcDeliveryFee, haversineKm, pointInPolygon } from '../geo/geo.util';
 import { SellerTransaction, SellerTxType } from '../payments/entities/seller-transaction.entity';
 import { PaymentsService } from '../payments/payments.service';
@@ -1250,7 +1251,7 @@ export class OrdersService {
 
   // ─── Admin: platforma bo'ylab buyurtmalarni ko'rish ──────────────────────
 
-  async adminListOrders(opts: {
+  private adminOrdersFilterQuery(opts: {
     search?: string;
     status?: OrderStatus;
     channel?: OrderChannel;
@@ -1259,9 +1260,7 @@ export class OrdersService {
     shopId?: string;
     dateFrom?: string;
     dateTo?: string;
-    limit?: number;
-    offset?: number;
-  }): Promise<{ items: Order[]; total: number }> {
+  }) {
     const qb = this.orders
       .createQueryBuilder('o')
       .leftJoinAndSelect('o.shop', 'shop')
@@ -1284,11 +1283,70 @@ export class OrdersService {
         { q: `%${opts.search}%` },
       );
     }
+    return qb;
+  }
 
+  async adminListOrders(opts: {
+    search?: string;
+    status?: OrderStatus;
+    channel?: OrderChannel;
+    paymentMethod?: PaymentMethod;
+    paymentStatus?: PaymentStatus;
+    shopId?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<{ items: Order[]; total: number }> {
+    const qb = this.adminOrdersFilterQuery(opts);
     const limit = Math.min(opts.limit ?? 30, 100);
     const offset = Math.max(opts.offset ?? 0, 0);
     const [items, total] = await qb.skip(offset).take(limit).getManyAndCount();
     return { items, total };
+  }
+
+  /** Same filters as adminListOrders, but every matching row (capped) for an .xlsx export. */
+  private static readonly EXPORT_ROW_CAP = 5000;
+
+  async adminExportOrders(opts: {
+    search?: string;
+    status?: OrderStatus;
+    channel?: OrderChannel;
+    paymentMethod?: PaymentMethod;
+    paymentStatus?: PaymentStatus;
+    shopId?: string;
+    dateFrom?: string;
+    dateTo?: string;
+  }): Promise<Buffer> {
+    const qb = this.adminOrdersFilterQuery(opts);
+    const rows = await qb.take(OrdersService.EXPORT_ROW_CAP).getMany();
+    return buildXlsxBuffer(
+      'Buyurtmalar',
+      [
+        { header: 'Buyurtma raqami', key: 'orderNumber', width: 16 },
+        { header: "Do'kon", key: 'shopName', width: 24 },
+        { header: 'Mijoz', key: 'customerName', width: 20 },
+        { header: 'Telefon', key: 'customerPhone', width: 16 },
+        { header: 'Holat', key: 'status', width: 14 },
+        { header: "To'lov usuli", key: 'paymentMethod', width: 14 },
+        { header: "To'lov holati", key: 'paymentStatus', width: 14 },
+        { header: 'Summa', key: 'total', width: 12 },
+        { header: 'Komissiyasiz', key: 'commissionExempt', width: 12 },
+        { header: 'Sana', key: 'createdAt', width: 20 },
+      ],
+      rows.map((o) => ({
+        orderNumber: o.orderNumber,
+        shopName: o.shop?.name ?? '',
+        customerName: o.user?.name ?? '',
+        customerPhone: o.user?.phone ?? '',
+        status: o.status,
+        paymentMethod: o.paymentMethod,
+        paymentStatus: o.paymentStatus,
+        total: o.total,
+        commissionExempt: o.commissionExempt ? 'ha' : "yo'q",
+        createdAt: o.createdAt.toISOString(),
+      })),
+    );
   }
 
   async adminGetOrder(id: string): Promise<Order> {

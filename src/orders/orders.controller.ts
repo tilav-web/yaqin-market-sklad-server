@@ -7,13 +7,16 @@ import {
   Patch,
   Post,
   Query,
+  Res,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import type { Response } from 'express';
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { JwtPayload } from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '../auth/role.enum';
+import { sendXlsx } from '../common/xlsx.util';
 import { RedisService } from '../redis/redis.service';
 import {
   AdminListOrdersQuery,
@@ -175,6 +178,14 @@ export class AdminOrdersController {
   @Get()
   list(@Query() query: AdminListOrdersQuery) {
     return this.orders.adminListOrders(query);
+  }
+
+  // Must come before ':id' — otherwise "export" would be captured by the
+  // :id param and rejected by ParseUUIDPipe as an invalid UUID.
+  @Get('export')
+  async export(@Query() query: AdminListOrdersQuery, @Res() res: Response) {
+    const buf = await this.orders.adminExportOrders(query);
+    sendXlsx(res, buf, 'buyurtmalar.xlsx');
   }
 
   @Get(':id')

@@ -5,6 +5,7 @@ import { Repository } from 'typeorm';
 import { Role } from '../auth/role.enum';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { AuditAction } from '../audit-log/entities/admin-audit-log.entity';
+import { buildXlsxBuffer } from '../common/xlsx.util';
 import { Order } from '../orders/entities/order.entity';
 import { ShopStaff } from '../shops/entities/shop-staff.entity';
 import { UserAddress } from './entities/user-address.entity';
@@ -134,7 +135,7 @@ export class UsersService {
 
   // ---- Admin ---------------------------------------------------------------
 
-  async adminListUsers(opts: { search?: string; limit?: number; offset?: number; sellerOnly?: boolean; customerOnly?: boolean; adminOnly?: boolean }) {
+  private adminUsersFilterQuery(opts: { search?: string; sellerOnly?: boolean; customerOnly?: boolean; adminOnly?: boolean }) {
     const qb = this.users
       .createQueryBuilder('u')
       .select([
@@ -147,16 +148,46 @@ export class UsersService {
         'u.roles',
         'u.createdAt',
       ])
-      .orderBy('u.createdAt', 'DESC')
-      .take(Math.min(opts.limit ?? 50, 100))
-      .skip(Math.max(opts.offset ?? 0, 0));
+      .orderBy('u.createdAt', 'DESC');
     const s = opts.search?.trim();
     if (s) qb.where('(u.phone ILIKE :q OR u.name ILIKE :q)', { q: `%${s}%` });
     if (opts.sellerOnly) qb.andWhere('u.isSellerApproved = true');
     if (opts.customerOnly) qb.andWhere('u.isSellerApproved = false AND u.isAdmin = false');
     if (opts.adminOnly) qb.andWhere('u.isAdmin = true');
+    return qb;
+  }
+
+  async adminListUsers(opts: { search?: string; limit?: number; offset?: number; sellerOnly?: boolean; customerOnly?: boolean; adminOnly?: boolean }) {
+    const qb = this.adminUsersFilterQuery(opts)
+      .take(Math.min(opts.limit ?? 50, 100))
+      .skip(Math.max(opts.offset ?? 0, 0));
     const [items, total] = await qb.getManyAndCount();
     return { items, total };
+  }
+
+  private static readonly EXPORT_ROW_CAP = 5000;
+
+  async adminExportUsers(opts: { search?: string; sellerOnly?: boolean; customerOnly?: boolean; adminOnly?: boolean }): Promise<Buffer> {
+    const rows = await this.adminUsersFilterQuery(opts).take(UsersService.EXPORT_ROW_CAP).getMany();
+    return buildXlsxBuffer(
+      'Foydalanuvchilar',
+      [
+        { header: 'Telefon', key: 'phone', width: 16 },
+        { header: 'Ismi', key: 'name', width: 22 },
+        { header: 'Holat', key: 'status', width: 14 },
+        { header: 'Sotuvchi', key: 'isSellerApproved', width: 12 },
+        { header: 'Admin', key: 'isAdmin', width: 10 },
+        { header: "Ro'yxatdan o'tgan", key: 'createdAt', width: 20 },
+      ],
+      rows.map((u) => ({
+        phone: u.phone,
+        name: u.name ?? '',
+        status: u.status,
+        isSellerApproved: u.isSellerApproved ? 'ha' : "yo'q",
+        isAdmin: u.isAdmin ? 'ha' : "yo'q",
+        createdAt: u.createdAt.toISOString(),
+      })),
+    );
   }
 
   async adminSetStatus(
