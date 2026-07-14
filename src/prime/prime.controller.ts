@@ -66,6 +66,11 @@ export class AdminPrimeController {
     return this.svc.listAllSubscriptions();
   }
 
+  @Get('revenue-stats')
+  revenueStats() {
+    return this.svc.adminRevenueStats();
+  }
+
   @Put('subscriptions/:id/extend')
   extend(@Param('id') id: string, @Request() req: any, @Body() dto: ExtendPrimeSubDto) {
     return this.svc.adminExtend(id, dto.days, req.user.sub);

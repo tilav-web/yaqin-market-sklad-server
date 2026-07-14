@@ -180,6 +180,52 @@ export class PrimeService {
     return saved;
   }
 
+  /** Admin: overall Prime revenue statistics (SPEC.md §11.5 "Umumiy prime daromad statistikasi"). */
+  async adminRevenueStats(): Promise<{
+    totalRevenue: number;
+    revenue30d: number;
+    activeSubscriptions: number;
+    byPlan: { planId: string; planName: string; activeCount: number; monthlyRecurringValue: number }[];
+  }> {
+    const since30d = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const [totalRow, row30d] = await Promise.all([
+      this.txs
+        .createQueryBuilder('t')
+        .select('COALESCE(SUM(-t.amount), 0)', 'total')
+        .where('t.type = :type', { type: SellerTxType.PrimePayment })
+        .andWhere("t.status = 'settled'")
+        .getRawOne<{ total: string }>(),
+      this.txs
+        .createQueryBuilder('t')
+        .select('COALESCE(SUM(-t.amount), 0)', 'total')
+        .where('t.type = :type', { type: SellerTxType.PrimePayment })
+        .andWhere("t.status = 'settled'")
+        .andWhere('t.createdAt >= :since', { since: since30d })
+        .getRawOne<{ total: string }>(),
+    ]);
+
+    const activeSubs = await this.subs.find({ where: { isActive: true }, relations: { plan: true } });
+    const byPlanMap = new Map<string, { planId: string; planName: string; activeCount: number; monthlyRecurringValue: number }>();
+    for (const s of activeSubs) {
+      const entry = byPlanMap.get(s.planId) ?? {
+        planId: s.planId,
+        planName: s.plan?.name ?? '',
+        activeCount: 0,
+        monthlyRecurringValue: 0,
+      };
+      entry.activeCount += 1;
+      entry.monthlyRecurringValue += parseFloat(s.priceSnapshot);
+      byPlanMap.set(s.planId, entry);
+    }
+
+    return {
+      totalRevenue: Number(totalRow?.total ?? 0),
+      revenue30d: Number(row30d?.total ?? 0),
+      activeSubscriptions: activeSubs.length,
+      byPlan: [...byPlanMap.values()],
+    };
+  }
+
   /* ─── Cron: expire subscriptions ─── */
 
   @Cron(CronExpression.EVERY_DAY_AT_1AM)
