@@ -25,11 +25,14 @@ import {
   AdminListShopsQuery,
   AdminSetActiveDto,
   BlockUserDto,
+  CreateInvitationDto,
   CreateShopDto,
+  CreateStaffPresetDto,
   ToggleOpenDto,
   UpdateDeliveryZonesDto,
   UpdateShopDto,
   UpdateStaffDto,
+  UpdateStaffPresetDto,
 } from './dto/shop.dto';
 import { ShopsService } from './shops.service';
 
@@ -153,13 +156,52 @@ export class SellerShopsController {
 
   // ---- Staff management (owner) ----
   @Post(':id/staff/invitations')
-  createStaffInvite(@CurrentUser() user: JwtPayload, @Param('id', ParseUUIDPipe) id: string) {
-    return this.shops.createStaffInvitation(user.sub, id);
+  createStaffInvite(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CreateInvitationDto,
+  ) {
+    return this.shops.createStaffInvitation(user.sub, id, dto);
   }
 
   @Get(':id/staff')
   listStaff(@CurrentUser() user: JwtPayload, @Param('id', ParseUUIDPipe) id: string) {
     return this.shops.listStaff(user.sub, id);
+  }
+
+  // ---- Staff presets (owner's own saved, reusable permission bundles) ----
+  @Get(':id/staff-presets')
+  listStaffPresets(@CurrentUser() user: JwtPayload, @Param('id', ParseUUIDPipe) id: string) {
+    return this.shops.listStaffPresets(user.sub, id);
+  }
+
+  @Post(':id/staff-presets')
+  createStaffPreset(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CreateStaffPresetDto,
+  ) {
+    return this.shops.createStaffPreset(user.sub, id, dto);
+  }
+
+  @Patch(':id/staff-presets/:presetId')
+  updateStaffPreset(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('presetId', ParseUUIDPipe) presetId: string,
+    @Body() dto: UpdateStaffPresetDto,
+  ) {
+    return this.shops.updateStaffPreset(user.sub, id, presetId, dto);
+  }
+
+  @Delete(':id/staff-presets/:presetId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  deleteStaffPreset(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('presetId', ParseUUIDPipe) presetId: string,
+  ) {
+    return this.shops.deleteStaffPreset(user.sub, id, presetId);
   }
 
   @Patch(':id/staff/:staffId')

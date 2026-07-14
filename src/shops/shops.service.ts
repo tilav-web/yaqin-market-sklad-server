@@ -2,6 +2,7 @@ import { randomBytes } from 'crypto';
 
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -21,6 +22,7 @@ import {
   StaffPermission,
   StaffPreset,
 } from './entities/shop-staff.entity';
+import { ShopStaffPreset } from './entities/shop-staff-preset.entity';
 import { StaffInvitation, StaffInvitationStatus } from './entities/staff-invitation.entity';
 import { assertShopPermission } from './shop-access.util';
 import { isShopOpenNow } from './shop-hours.util';
@@ -51,6 +53,8 @@ export class ShopsService {
     private readonly staff: Repository<ShopStaff>,
     @InjectRepository(StaffInvitation)
     private readonly invitations: Repository<StaffInvitation>,
+    @InjectRepository(ShopStaffPreset)
+    private readonly staffPresets: Repository<ShopStaffPreset>,
     @InjectRepository(User)
     private readonly users: Repository<User>,
     @InjectRepository(Order)
@@ -147,21 +151,50 @@ export class ShopsService {
   // ---- Staff (QR onboarding) ----------------------------------------------
 
   /**
-   * Owner generates a short-lived QR invite. Whoever scans and accepts it
-   * becomes staff of this shop with NO permissions — the owner grants them
-   * afterwards.
+   * Resolves a {preset | customPresetId | permissions} selection (shared by
+   * createStaffInvitation and updateStaff) into a concrete permission set.
+   * Precedence when more than one is given: customPresetId > preset >
+   * permissions — matches the "explicit permissions always win, preset is
+   * just a bulk-fill convenience" behaviour already used by updateStaff.
+   */
+  private async resolveGrant(
+    shopId: string,
+    input: { preset?: StaffPreset; customPresetId?: string; permissions?: StaffPermission[] },
+  ): Promise<{ preset: StaffPreset; permissions: StaffPermission[]; presetName?: string } | null> {
+    if (input.customPresetId) {
+      const custom = await this.staffPresets.findOne({ where: { id: input.customPresetId, shopId } });
+      if (!custom) throw new BadRequestException('Shablon topilmadi');
+      return { preset: 'custom', permissions: [...custom.permissions], presetName: custom.name };
+    }
+    if (input.preset && input.preset !== 'custom') {
+      if (!PRESET_PERMISSIONS[input.preset]) throw new BadRequestException(`Noto'g'ri rol: ${input.preset}`);
+      return { preset: input.preset, permissions: [...PRESET_PERMISSIONS[input.preset]] };
+    }
+    if (input.permissions) {
+      return { preset: 'custom', permissions: input.permissions };
+    }
+    return null;
+  }
+
+  /**
+   * Owner generates a short-lived QR invite. A preset (system or the
+   * owner's own saved custom one) or an explicit permission list can be
+   * granted right away — if none is given, whoever accepts joins with NO
+   * permissions and the owner grants them afterwards via updateStaff.
    */
   async createStaffInvitation(
     userId: string,
     shopId: string,
+    dto: { preset?: StaffPreset; customPresetId?: string; permissions?: StaffPermission[]; customRoleName?: string } = {},
   ): Promise<{ token: string; expiresAt: Date; shopName: string }> {
     const shop = await this.getOwned(userId, shopId);
+    const grant = await this.resolveGrant(shopId, dto);
     const invite = this.invitations.create({
       shopId: shop.id,
       invitedByUserId: userId,
-      customRoleName: 'Xodim',
-      preset: 'custom',
-      permissions: [],
+      customRoleName: dto.customRoleName ?? grant?.presetName ?? 'Xodim',
+      preset: grant?.preset ?? 'custom',
+      permissions: grant?.permissions ?? [],
       qrToken: randomBytes(24).toString('base64url'),
       status: StaffInvitationStatus.Pending,
       expiresAt: new Date(Date.now() + INVITE_TTL_MS),
@@ -266,6 +299,7 @@ export class ShopsService {
     dto: {
       permissions?: StaffPermission[];
       preset?: StaffPreset;
+      customPresetId?: string;
       customRoleName?: string;
       isActive?: boolean;
     },
@@ -273,9 +307,16 @@ export class ShopsService {
     await this.getOwned(userId, shopId);
     const staff = await this.staff.findOne({ where: { id: staffId, shopId }, relations: { user: true } });
     if (!staff) throw new NotFoundException('Xodim topilmadi');
-    // Selecting a non-custom preset applies that preset's permission set;
-    // toggling an individual permission switches the role to "custom".
-    if (dto.preset !== undefined) {
+    // Selecting a preset (system or the owner's own saved custom one)
+    // bulk-applies its permission set; explicitly passing `permissions`
+    // always wins and switches the role label to "custom".
+    if (dto.customPresetId !== undefined) {
+      const custom = await this.staffPresets.findOne({ where: { id: dto.customPresetId, shopId } });
+      if (!custom) throw new BadRequestException('Shablon topilmadi');
+      staff.preset = 'custom';
+      staff.permissions = [...custom.permissions];
+      if (dto.customRoleName === undefined) staff.customRoleName = custom.name;
+    } else if (dto.preset !== undefined) {
       // Defensive: the DTO already validates `preset` against known values,
       // but never let an unrecognised one reach the PRESET_PERMISSIONS
       // lookup (which would throw an uncaught TypeError / 500).
@@ -302,6 +343,54 @@ export class ShopsService {
       permissions: saved.permissions ?? [],
       isActive: saved.isActive,
     };
+  }
+
+  // ---- Staff presets (seller-defined, reusable permission bundles) -------
+
+  async listStaffPresets(userId: string, shopId: string): Promise<ShopStaffPreset[]> {
+    await this.getOwned(userId, shopId);
+    return this.staffPresets.find({ where: { shopId }, order: { name: 'ASC' } });
+  }
+
+  async createStaffPreset(
+    userId: string,
+    shopId: string,
+    dto: { name: string; permissions: StaffPermission[] },
+  ): Promise<ShopStaffPreset> {
+    await this.getOwned(userId, shopId);
+    try {
+      return await this.staffPresets.save(
+        this.staffPresets.create({ shopId, name: dto.name.trim(), permissions: dto.permissions }),
+      );
+    } catch (e: any) {
+      if (e?.code === '23505') throw new ConflictException('Shu nomli shablon allaqachon mavjud');
+      throw e;
+    }
+  }
+
+  async updateStaffPreset(
+    userId: string,
+    shopId: string,
+    presetId: string,
+    dto: { name?: string; permissions?: StaffPermission[] },
+  ): Promise<ShopStaffPreset> {
+    await this.getOwned(userId, shopId);
+    const preset = await this.staffPresets.findOne({ where: { id: presetId, shopId } });
+    if (!preset) throw new NotFoundException('Shablon topilmadi');
+    if (dto.name !== undefined) preset.name = dto.name.trim();
+    if (dto.permissions !== undefined) preset.permissions = dto.permissions;
+    try {
+      return await this.staffPresets.save(preset);
+    } catch (e: any) {
+      if (e?.code === '23505') throw new ConflictException('Shu nomli shablon allaqachon mavjud');
+      throw e;
+    }
+  }
+
+  /** Deleting a preset never affects staff already granted from it — permissions were copied, not linked. */
+  async deleteStaffPreset(userId: string, shopId: string, presetId: string): Promise<void> {
+    await this.getOwned(userId, shopId);
+    await this.staffPresets.delete({ id: presetId, shopId });
   }
 
   async removeStaff(userId: string, shopId: string, staffId: string): Promise<void> {

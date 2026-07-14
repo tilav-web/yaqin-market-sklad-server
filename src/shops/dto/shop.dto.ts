@@ -285,6 +285,12 @@ export class UpdateStaffDto {
   @IsIn(STAFF_PRESETS)
   preset?: StaffPreset;
 
+  /** Apply a seller-saved custom preset's permissions (see ShopStaffPreset) instead of a system preset. */
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
+  customPresetId?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
@@ -295,6 +301,60 @@ export class UpdateStaffDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+}
+
+export class CreateInvitationDto {
+  @ApiPropertyOptional({ enum: STAFF_PRESETS, description: 'System preset to grant at invite time' })
+  @IsOptional()
+  @IsIn(STAFF_PRESETS)
+  preset?: StaffPreset;
+
+  /** A seller-saved custom preset's permissions (see ShopStaffPreset) — alternative to `preset`. */
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
+  customPresetId?: string;
+
+  @ApiPropertyOptional({ enum: ALL_STAFF_PERMISSIONS, description: 'Explicit permission list — alternative to preset/customPresetId' })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(ALL_STAFF_PERMISSIONS.length)
+  @IsIn(ALL_STAFF_PERMISSIONS, { each: true })
+  permissions?: StaffPermission[];
+
+  @ApiPropertyOptional({ example: 'Kechki kassir' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  customRoleName?: string;
+}
+
+export class CreateStaffPresetDto {
+  @ApiProperty({ example: 'Kechki kassir' })
+  @IsString()
+  @MaxLength(64)
+  name!: string;
+
+  @ApiProperty({ enum: ALL_STAFF_PERMISSIONS })
+  @IsArray()
+  @ArrayMaxSize(ALL_STAFF_PERMISSIONS.length)
+  @IsIn(ALL_STAFF_PERMISSIONS, { each: true })
+  permissions!: StaffPermission[];
+}
+
+export class UpdateStaffPresetDto {
+  @ApiPropertyOptional({ example: 'Kechki kassir' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  name?: string;
+
+  @ApiPropertyOptional({ enum: ALL_STAFF_PERMISSIONS })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(ALL_STAFF_PERMISSIONS.length)
+  @IsIn(ALL_STAFF_PERMISSIONS, { each: true })
+  permissions?: StaffPermission[];
 }
 
 export class UpdateDeliveryZonesDto {

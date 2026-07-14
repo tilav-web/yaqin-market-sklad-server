@@ -15,11 +15,14 @@ import {
 import { ShopsService } from './shops.service';
 import { Shop } from './entities/shop.entity';
 import { ShopStaff } from './entities/shop-staff.entity';
+import { ShopStaffPreset } from './entities/shop-staff-preset.entity';
 import { StaffInvitation } from './entities/staff-invitation.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Shop, ShopStaff, StaffInvitation, User, Order, ProductVariant, GlobalProduct]),
+    TypeOrmModule.forFeature([
+      Shop, ShopStaff, ShopStaffPreset, StaffInvitation, User, Order, ProductVariant, GlobalProduct,
+    ]),
     ComplaintsModule,
   ],
   controllers: [ShopsController, SellerShopsController, StaffController, AdminShopsController],
