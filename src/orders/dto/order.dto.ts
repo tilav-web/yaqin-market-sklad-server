@@ -6,6 +6,8 @@ import {
   IsBoolean,
   IsEnum,
   IsInt,
+  IsLatitude,
+  IsLongitude,
   IsOptional,
   IsString,
   IsUUID,
@@ -57,6 +59,16 @@ export class AssignOrderDto {
   @IsOptional()
   @IsUUID()
   staffId?: string | null;
+}
+
+export class UpdateCourierLocationDto {
+  @ApiProperty()
+  @IsLatitude()
+  lat!: number;
+
+  @ApiProperty()
+  @IsLongitude()
+  lng!: number;
 }
 
 export class InStoreSaleDto {

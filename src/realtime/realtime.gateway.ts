@@ -13,7 +13,6 @@ import { Repository } from 'typeorm';
 import type { JwtPayload } from '../auth/decorators/current-user.decorator';
 import type { EnvironmentVariables } from '../config/configuration';
 import { Order } from '../orders/entities/order.entity';
-import { RedisService } from '../redis/redis.service';
 import { Shop } from '../shops/entities/shop.entity';
 import { ShopStaff } from '../shops/entities/shop-staff.entity';
 
@@ -24,9 +23,18 @@ import { ShopStaff } from '../shops/entities/shop-staff.entity';
  * `Authorization` header). On connect we verify it and join the socket to a
  * personal room `user:{userId}`. Sellers additionally join `shop:{shopId}`
  * rooms when they emit `join:shop` (validated elsewhere by REST permissions).
+ * Customers (or anyone watching an order — see canWatchOrder) join
+ * `order:{orderId}` rooms via `join:order` to receive that order's live
+ * courier-location stream.
  *
- * Emitting is done through {@link emitToUser} / {@link emitToShop}, called by
- * domain services (e.g. OrdersService) — this gateway holds no business logic.
+ * Emitting is done through {@link emitToUser} / {@link emitToShop} /
+ * {@link emitToOrder}, called by domain services (e.g. OrdersService) — this
+ * gateway holds no business logic itself. Courier location updates in
+ * particular are POSTed over REST (`OrdersService.updateCourierLocation`),
+ * not pushed through this socket — a courier's background location task
+ * runs in a short-lived, isolated JS context that can't reliably keep a
+ * WebSocket connection alive, so a plain HTTP request is the robust path;
+ * this gateway only fans the result back out to whoever is watching.
  */
 @WebSocketGateway({ cors: { origin: '*' } })
 export class RealtimeGateway implements OnGatewayConnection {
@@ -44,7 +52,6 @@ export class RealtimeGateway implements OnGatewayConnection {
     private readonly staff: Repository<ShopStaff>,
     @InjectRepository(Order)
     private readonly orders: Repository<Order>,
-    private readonly redis: RedisService,
   ) {}
 
   /** Only the shop owner or an active staff member may watch a shop's stream. */
@@ -74,19 +81,6 @@ export class RealtimeGateway implements OnGatewayConnection {
     if (!member) return false;
     if (member.permissions.includes('orders.view_all')) return true;
     return member.permissions.includes('orders.view_assigned') && order.assignedStaffId === member.id;
-  }
-
-  /** True only if `userId` is the staff member currently assigned to deliver this order. */
-  private async isAssignedCourier(userId: string, orderId: string): Promise<boolean> {
-    const order = await this.orders.findOne({
-      where: { id: orderId },
-      select: { id: true, assignedStaffId: true },
-    });
-    if (!order?.assignedStaffId) return false;
-    const member = await this.staff.findOne({
-      where: { id: order.assignedStaffId, userId, isActive: true },
-    });
-    return !!member;
   }
 
   async handleConnection(client: Socket): Promise<void> {
@@ -127,31 +121,6 @@ export class RealtimeGateway implements OnGatewayConnection {
       client.on('leave:order', (orderId: unknown) => {
         if (typeof orderId === 'string') void client.leave(`order:${orderId}`);
       });
-
-      // Courier (staff) emits location while delivering — only the staff member
-      // actually assigned to this order may push/broadcast its GPS position.
-      client.on('courier:location', (data: unknown) => {
-        if (
-          typeof data !== 'object' || data === null ||
-          !('orderId' in data) || !('lat' in data) || !('lng' in data)
-        ) return;
-        const { orderId, lat, lng } = data as { orderId: string; lat: number; lng: number };
-        if (typeof orderId !== 'string' || typeof lat !== 'number' || typeof lng !== 'number') return;
-
-        void this.isAssignedCourier(payload.sub, orderId).then((ok) => {
-          if (!ok) return;
-          const locationPayload = { lat, lng, updatedAt: new Date().toISOString() };
-          // Cache in Redis for 60s so latecomers can GET it via REST
-          void this.redis.client.set(
-            `courier:location:${orderId}`,
-            JSON.stringify(locationPayload),
-            'EX',
-            60,
-          );
-          // Broadcast to everyone watching this order (customer, etc.)
-          this.server.to(`order:${orderId}`).emit('courier:location', locationPayload);
-        });
-      });
     } catch {
       client.disconnect(true);
     }
@@ -165,5 +134,10 @@ export class RealtimeGateway implements OnGatewayConnection {
   /** Push an event to everyone watching a shop (owner + staff devices). */
   emitToShop(shopId: string, event: string, payload: unknown): void {
     this.server?.to(`shop:${shopId}`).emit(event, payload);
+  }
+
+  /** Push an event to everyone watching an order (customer + shop devices). */
+  emitToOrder(orderId: string, event: string, payload: unknown): void {
+    this.server?.to(`order:${orderId}`).emit(event, payload);
   }
 }

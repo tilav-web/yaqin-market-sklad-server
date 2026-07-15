@@ -14,7 +14,7 @@ import { AuditLogService } from '../audit-log/audit-log.service';
 import { AuditAction } from '../audit-log/entities/admin-audit-log.entity';
 import { ComplaintsService } from '../complaints/complaints.service';
 import { buildXlsxBuffer } from '../common/xlsx.util';
-import { calcDeliveryFee, haversineKm, pointInPolygon } from '../geo/geo.util';
+import { calcDeliveryFee, estimateEtaMinutes, haversineKm, pointInPolygon } from '../geo/geo.util';
 import { SellerTransaction, SellerTxType } from '../payments/entities/seller-transaction.entity';
 import { PaymentsService } from '../payments/payments.service';
 import { GlobalProduct } from '../products/entities/global-product.entity';
@@ -25,6 +25,7 @@ import { PrimeService } from '../prime/prime.service';
 import { PromotionsService } from '../promotions/promotions.service';
 import { PushService } from '../push/push.service';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
+import { RedisService } from '../redis/redis.service';
 import { SETTING_KEYS } from '../settings/entities/global-setting.entity';
 import { SettingsService } from '../settings/settings.service';
 import { Shop } from '../shops/entities/shop.entity';
@@ -69,6 +70,7 @@ export class OrdersService {
     private readonly sellerTransactions: Repository<SellerTransaction>,
     private readonly dataSource: DataSource,
     private readonly realtime: RealtimeGateway,
+    private readonly redis: RedisService,
     private readonly push: PushService,
     private readonly payments: PaymentsService,
     private readonly prime: PrimeService,
@@ -175,6 +177,95 @@ export class OrdersService {
       where: { id: order.assignedStaffId, userId, isActive: true },
     });
     return !!staff;
+  }
+
+  /**
+   * Called by the courier's mobile app — a foreground interval while the
+   * order screen is open, or a background location task once the OS wakes
+   * it up — to report their live position while delivering. Caches it in
+   * Redis for 60s (so a REST latecomer via `GET .../courier-location` still
+   * sees something fresh) and broadcasts it to everyone watching the order.
+   */
+  async updateCourierLocation(
+    userId: string,
+    orderId: string,
+    lat: number,
+    lng: number,
+  ): Promise<{ orderId: string; lat: number; lng: number; etaMinutes: number | null; updatedAt: string }> {
+    const order = await this.orders.findOne({
+      where: { id: orderId },
+      relations: { deliveryAddress: true },
+    });
+    if (!order) throw new NotFoundException('Buyurtma topilmadi');
+    if (order.status !== OrderStatus.Delivering) {
+      throw new BadRequestException('Buyurtma hozir yetkazilmoqda holatida emas');
+    }
+    if (!(await this.isAssignedCourier(userId, orderId))) throw new ForbiddenException();
+
+    const etaMinutes = order.deliveryAddress
+      ? estimateEtaMinutes(haversineKm(lat, lng, order.deliveryAddress.latitude, order.deliveryAddress.longitude))
+      : null;
+
+    const payload = { orderId, lat, lng, etaMinutes, updatedAt: new Date().toISOString() };
+    await this.redis.client.set(`courier:location:${orderId}`, JSON.stringify(payload), 'EX', 60);
+    this.realtime.emitToOrder(orderId, 'courier:location', payload);
+    return payload;
+  }
+
+  /**
+   * All of a customer's currently-active orders (not yet delivered or
+   * cancelled), each with its shop, delivery address, and last-known
+   * courier location if one is available — powers the multi-order "live
+   * tracking" map screen (a user with 2+ simultaneous orders sees every
+   * courier at once, not just the one on the order they happen to have open).
+   */
+  async listActiveDeliveries(userId: string): Promise<
+    Array<{
+      orderId: string;
+      orderNumber: string;
+      status: OrderStatus;
+      shopId: string;
+      shopName: string;
+      shopLat: number;
+      shopLng: number;
+      deliveryAddress: { lat: number; lng: number; address: string } | null;
+      courierLocation: { lat: number; lng: number; etaMinutes: number | null; updatedAt: string } | null;
+    }>
+  > {
+    const activeStatuses = [OrderStatus.New, OrderStatus.Accepted, OrderStatus.Preparing, OrderStatus.Delivering];
+    const orders = await this.orders.find({
+      where: { userId, status: In(activeStatuses) },
+      relations: { shop: true, deliveryAddress: true },
+      order: { createdAt: 'DESC' },
+    });
+
+    return Promise.all(
+      orders.map(async (order) => {
+        const raw =
+          order.status === OrderStatus.Delivering
+            ? await this.redis.client.get(`courier:location:${order.id}`)
+            : null;
+        return {
+          orderId: order.id,
+          orderNumber: order.orderNumber,
+          status: order.status,
+          shopId: order.shopId,
+          shopName: order.shop.name,
+          shopLat: order.shop.latitude,
+          shopLng: order.shop.longitude,
+          deliveryAddress: order.deliveryAddress
+            ? {
+                lat: order.deliveryAddress.latitude,
+                lng: order.deliveryAddress.longitude,
+                address: order.deliveryAddress.address,
+              }
+            : null,
+          courierLocation: raw
+            ? (JSON.parse(raw) as { lat: number; lng: number; etaMinutes: number | null; updatedAt: string })
+            : null,
+        };
+      }),
+    );
   }
 
   async create(

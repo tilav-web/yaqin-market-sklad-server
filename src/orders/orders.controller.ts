@@ -28,6 +28,7 @@ import {
   ReturnReasonDto,
   SendMessageDto,
   SetCommissionExemptDto,
+  UpdateCourierLocationDto,
   UpdateOrderStatusDto,
 } from './dto/order.dto';
 import { OrderStatus } from './entities/order.entity';
@@ -52,7 +53,29 @@ export class OrdersController {
     await this.orders.assertOrderParty(user.sub, id);
     const raw = await this.redis.client.get(`courier:location:${id}`);
     if (!raw) return null;
-    return JSON.parse(raw) as { lat: number; lng: number; updatedAt: string };
+    return JSON.parse(raw) as { orderId: string; lat: number; lng: number; etaMinutes: number | null; updatedAt: string };
+  }
+
+  /**
+   * Courier: report live position while delivering. Called on a periodic
+   * foreground interval and — critically — from the background location
+   * task once the OS wakes the app up while the screen is locked. A plain
+   * REST call (rather than a socket emit) because a background task's JS
+   * context is too short-lived/isolated to keep a WebSocket connection alive.
+   */
+  @Post(':id/courier-location')
+  reportCourierLocation(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateCourierLocationDto,
+  ) {
+    return this.orders.updateCourierLocation(user.sub, id, dto.lat, dto.lng);
+  }
+
+  /** Customer: every currently-active order at once, for the multi-order live map. */
+  @Get('active-deliveries')
+  listActiveDeliveries(@CurrentUser() user: JwtPayload) {
+    return this.orders.listActiveDeliveries(user.sub);
   }
 
   @Post()

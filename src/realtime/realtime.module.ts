@@ -3,7 +3,6 @@ import { JwtModule } from '@nestjs/jwt';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { Order } from '../orders/entities/order.entity';
-import { RedisModule } from '../redis/redis.module';
 import { Shop } from '../shops/entities/shop.entity';
 import { ShopStaff } from '../shops/entities/shop-staff.entity';
 import { RealtimeGateway } from './realtime.gateway';
@@ -13,7 +12,7 @@ import { RealtimeGateway } from './realtime.gateway';
  * {@link RealtimeGateway} to push real-time events.
  */
 @Module({
-  imports: [JwtModule.register({}), TypeOrmModule.forFeature([Shop, ShopStaff, Order]), RedisModule],
+  imports: [JwtModule.register({}), TypeOrmModule.forFeature([Shop, ShopStaff, Order])],
   providers: [RealtimeGateway],
   exports: [RealtimeGateway],
 })

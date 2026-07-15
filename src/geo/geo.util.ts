@@ -19,6 +19,17 @@ export function haversineKm(
   return EARTH_RADIUS_KM * c;
 }
 
+// Rough average speed for a courier on foot/scooter/car within a dense
+// 1-4km delivery radius, accounting for stops and traffic. Good enough for
+// a straight-line ETA estimate — real routing (Directions API) is overkill
+// at this radius and adds an external dependency/cost.
+const AVG_COURIER_SPEED_KMH = 18;
+
+/** Straight-line ETA in whole minutes (minimum 1) from a distance in km. */
+export function estimateEtaMinutes(distanceKm: number): number {
+  return Math.max(1, Math.round((distanceKm / AVG_COURIER_SPEED_KMH) * 60));
+}
+
 export interface BoundingBox {
   latMin: number;
   latMax: number;
