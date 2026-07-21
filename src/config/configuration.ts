@@ -99,6 +99,27 @@ export class EnvironmentVariables {
   @IsOptional()
   ESKIZ_FROM = '4546';
 
+  // Click (my.click.uz) — online payment provider
+  @IsString()
+  @IsOptional()
+  CLICK_SERVICE_ID = '';
+
+  @IsString()
+  @IsOptional()
+  CLICK_MERCHANT_ID = '';
+
+  @IsString()
+  @IsOptional()
+  CLICK_MERCHANT_USER_ID = '';
+
+  @IsString()
+  @IsOptional()
+  CLICK_SECRET_KEY = '';
+
+  @IsString()
+  @IsOptional()
+  CLICK_RETURN_URL = '';
+
   // Dev helpers
   @IsString()
   @IsOptional()

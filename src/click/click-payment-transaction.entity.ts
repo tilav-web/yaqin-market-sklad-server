@@ -29,6 +29,12 @@ export class ClickPaymentTransaction {
   @Column({ type: 'varchar', nullable: true })
   clickTransId!: string | null;
 
+  // Set instead of clickTransId when the order was paid via the Merchant API
+  // card_token/payment call (saved-card flow) rather than the Shop API
+  // prepare/complete webhooks — that flow has no click_trans_id at all.
+  @Column({ type: 'varchar', nullable: true })
+  clickPaymentId!: string | null;
+
   @Column({ type: 'decimal', precision: 14, scale: 2 })
   amount!: string;
 
