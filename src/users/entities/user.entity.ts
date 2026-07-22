@@ -12,6 +12,11 @@ export enum UserStatus {
   Blocked = 'blocked',
 }
 
+export enum UserGender {
+  Male = 'male',
+  Female = 'female',
+}
+
 @Entity({ name: 'users' })
 export class User {
   @PrimaryGeneratedColumn('uuid')
@@ -21,8 +26,25 @@ export class User {
   @Column({ type: 'varchar', length: 32 })
   phone!: string;
 
+  /** Full display name — kept in sync from firstName+lastName when either is
+   * set, so existing call sites that only ever read `.name` keep working. */
   @Column({ type: 'varchar', length: 128, nullable: true })
   name!: string | null;
+
+  @Column({ type: 'varchar', length: 64, nullable: true })
+  firstName!: string | null;
+
+  @Column({ type: 'varchar', length: 64, nullable: true })
+  lastName!: string | null;
+
+  @Column({ type: 'date', nullable: true })
+  birthDate!: string | null;
+
+  @Column({ type: 'enum', enum: UserGender, nullable: true })
+  gender!: UserGender | null;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  email!: string | null;
 
   @Column({ type: 'varchar', length: 512, nullable: true })
   avatarUrl!: string | null;

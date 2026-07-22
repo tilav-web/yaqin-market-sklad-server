@@ -9,7 +9,7 @@ import { buildXlsxBuffer } from '../common/xlsx.util';
 import { Order } from '../orders/entities/order.entity';
 import { ShopStaff } from '../shops/entities/shop-staff.entity';
 import { UserAddress } from './entities/user-address.entity';
-import { User, UserStatus } from './entities/user.entity';
+import { User, UserGender, UserStatus } from './entities/user.entity';
 
 @Injectable()
 export class UsersService {
@@ -67,11 +67,35 @@ export class UsersService {
     return this.users.save(user);
   }
 
-  async updateProfile(userId: string, dto: { name?: string; avatarUrl?: string }): Promise<User> {
+  async updateProfile(
+    userId: string,
+    dto: {
+      name?: string;
+      firstName?: string;
+      lastName?: string;
+      birthDate?: string;
+      gender?: UserGender;
+      email?: string;
+      avatarUrl?: string;
+    },
+  ): Promise<User> {
     const user = await this.findById(userId);
     if (!user) throw new NotFoundException('Foydalanuvchi topilmadi');
-    if (dto.name !== undefined) user.name = dto.name;
+    if (dto.firstName !== undefined) user.firstName = dto.firstName;
+    if (dto.lastName !== undefined) user.lastName = dto.lastName;
+    if (dto.birthDate !== undefined) user.birthDate = dto.birthDate;
+    if (dto.gender !== undefined) user.gender = dto.gender;
+    if (dto.email !== undefined) user.email = dto.email;
     if (dto.avatarUrl !== undefined) user.avatarUrl = dto.avatarUrl;
+    // `name` stays a derived display cache — many existing call sites (chat,
+    // orders, avatar-initial fallback) only ever read this single field, so
+    // recompute it from firstName/lastName instead of also threading the
+    // split fields through every one of them.
+    if (dto.firstName !== undefined || dto.lastName !== undefined) {
+      user.name = [user.firstName, user.lastName].filter(Boolean).join(' ').trim() || null;
+    } else if (dto.name !== undefined) {
+      user.name = dto.name;
+    }
     return this.users.save(user);
   }
 
