@@ -140,6 +140,14 @@ export class Order {
   @Column({ type: 'text', nullable: true })
   returnReason!: string | null;
 
+  /** Snapshotted at order time — defaults to the customer's own phone but may be a different recipient. */
+  @Column({ type: 'varchar', length: 32, nullable: true })
+  recipientPhone!: string | null;
+
+  /** Free-text note to the courier, entered at checkout — not saved on the address (unlike entrance/floor/apartment/intercom on UserAddress). */
+  @Column({ type: 'text', nullable: true })
+  courierComment!: string | null;
+
   /**
    * Commission % captured at order-creation time (seller's Prime rate or the
    * then-current global default). Settlement uses THIS value, never whatever

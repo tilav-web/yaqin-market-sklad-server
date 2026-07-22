@@ -39,6 +39,18 @@ export class UserAddress {
   @Column({ type: 'varchar', length: 256, nullable: true })
   notes!: string | null;
 
+  @Column({ type: 'varchar', length: 32, nullable: true })
+  entrance!: string | null;
+
+  @Column({ type: 'varchar', length: 32, nullable: true })
+  floor!: string | null;
+
+  @Column({ type: 'varchar', length: 32, nullable: true })
+  apartment!: string | null;
+
+  @Column({ type: 'varchar', length: 32, nullable: true })
+  intercom!: string | null;
+
   @Column({ type: 'boolean', default: false })
   isDefault!: boolean;
 

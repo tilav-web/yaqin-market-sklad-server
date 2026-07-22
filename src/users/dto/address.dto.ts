@@ -33,6 +33,30 @@ export class CreateAddressDto {
   @MaxLength(256)
   notes?: string;
 
+  @ApiPropertyOptional({ example: '2' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(32)
+  entrance?: string;
+
+  @ApiPropertyOptional({ example: '5' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(32)
+  floor?: string;
+
+  @ApiPropertyOptional({ example: '45' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(32)
+  apartment?: string;
+
+  @ApiPropertyOptional({ example: '1234' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(32)
+  intercom?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsBoolean()
@@ -67,6 +91,30 @@ export class UpdateAddressDto {
   @IsString()
   @MaxLength(256)
   notes?: string;
+
+  @ApiPropertyOptional({ example: '2' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(32)
+  entrance?: string;
+
+  @ApiPropertyOptional({ example: '5' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(32)
+  floor?: string;
+
+  @ApiPropertyOptional({ example: '45' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(32)
+  apartment?: string;
+
+  @ApiPropertyOptional({ example: '1234' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(32)
+  intercom?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

@@ -88,6 +88,10 @@ export class UsersService {
       latitude: number;
       longitude: number;
       notes?: string;
+      entrance?: string;
+      floor?: string;
+      apartment?: string;
+      intercom?: string;
       isDefault?: boolean;
     },
   ): Promise<UserAddress> {
@@ -102,6 +106,10 @@ export class UsersService {
       latitude: dto.latitude,
       longitude: dto.longitude,
       notes: dto.notes ?? null,
+      entrance: dto.entrance ?? null,
+      floor: dto.floor ?? null,
+      apartment: dto.apartment ?? null,
+      intercom: dto.intercom ?? null,
       isDefault: dto.isDefault ?? existing === 0,
     });
     return this.addresses.save(address);
@@ -116,6 +124,10 @@ export class UsersService {
       latitude: number;
       longitude: number;
       notes: string;
+      entrance: string;
+      floor: string;
+      apartment: string;
+      intercom: string;
       isDefault: boolean;
     }>,
   ): Promise<UserAddress> {

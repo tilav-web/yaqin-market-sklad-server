@@ -52,6 +52,17 @@ export class CreateOrderDto {
   @IsOptional()
   @IsEnum(PaymentMethod)
   paymentMethod?: PaymentMethod;
+
+  @ApiPropertyOptional({ example: '+998901234567', description: 'Defaults to the customer\'s own phone if omitted' })
+  @IsOptional()
+  @Matches(/^\+998\d{9}$/)
+  recipientPhone?: string;
+
+  @ApiPropertyOptional({ description: 'Free-text note to the courier' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  courierComment?: string;
 }
 
 export class AssignOrderDto {

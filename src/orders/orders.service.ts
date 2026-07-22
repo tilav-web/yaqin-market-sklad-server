@@ -272,7 +272,14 @@ export class OrdersService {
 
   async create(
     userId: string,
-    dto: { shopId: string; deliveryAddressId: string; items: { productVariantId: string; quantity: number }[]; paymentMethod?: PaymentMethod },
+    dto: {
+      shopId: string;
+      deliveryAddressId: string;
+      items: { productVariantId: string; quantity: number }[];
+      paymentMethod?: PaymentMethod;
+      recipientPhone?: string;
+      courierComment?: string;
+    },
   ): Promise<Order> {
     const shop = await this.shops.findOne({ where: { id: dto.shopId, isActive: true } });
     if (!shop) throw new NotFoundException('Do\'kon topilmadi');
@@ -391,6 +398,8 @@ export class OrdersService {
           ? PaymentStatus.Pending
           : PaymentStatus.NotRequired,
         commissionRateSnapshot,
+        recipientPhone: dto.recipientPhone ?? null,
+        courierComment: dto.courierComment ?? null,
         timeline: [{ status: OrderStatus.New, at: new Date().toISOString(), byUserId: userId }],
       });
       const savedOrder = await manager.save(order);
