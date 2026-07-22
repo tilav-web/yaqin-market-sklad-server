@@ -102,6 +102,12 @@ export class UpdateOrderStatusDto {
   note?: string;
 }
 
+export class ChangePaymentMethodDto {
+  @ApiProperty({ enum: PaymentMethod })
+  @IsEnum(PaymentMethod)
+  paymentMethod!: PaymentMethod;
+}
+
 export class ReturnReasonDto {
   @ApiProperty({ example: 'Pomidor chirigan edi' })
   @IsString()

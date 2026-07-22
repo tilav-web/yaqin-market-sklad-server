@@ -43,6 +43,16 @@ const orderNumberGen = customAlphabet('ABCDEFGHJKLMNPQRSTUVWXYZ23456789', 8);
 // A new order the shop doesn't accept within this window is auto-cancelled.
 const AUTO_CANCEL_MS = 5 * 60 * 1000;
 
+// Nothing further will happen to an order in one of these — changing its
+// payment method afterwards would be meaningless (or, for a paid order,
+// impossible without an actual refund path).
+const PAYMENT_METHOD_LOCKED_STATUSES: OrderStatus[] = [
+  OrderStatus.Delivered,
+  OrderStatus.Cancelled,
+  OrderStatus.SellerNoResponse,
+  OrderStatus.SellerRejected,
+];
+
 @Injectable()
 export class OrdersService {
   private readonly logger = new Logger(OrdersService.name);
@@ -621,6 +631,9 @@ export class OrdersService {
       .createQueryBuilder(Order, 'o')
       .leftJoinAndSelect('o.items', 'items')
       .leftJoinAndSelect('items.productVariant', 'pv')
+      // Photos live on GlobalProduct, not ProductVariant — join through so
+      // the seller app can show a product image per order line.
+      .leftJoinAndSelect('pv.globalProduct', 'gp')
       .leftJoinAndSelect('o.deliveryAddress', 'addr')
       .leftJoinAndSelect('o.user', 'usr')
       .where('o.shopId = :shopId', { shopId });
@@ -666,7 +679,15 @@ export class OrdersService {
   > {
     const order = await this.orders.findOne({
       where: { id: orderId },
-      relations: { items: { productVariant: true }, shop: true, deliveryAddress: true, user: true },
+      // Photos live on GlobalProduct, not ProductVariant (each shop's variant
+      // is just price/stock) — load through to it so the app can show a
+      // product image per order line.
+      relations: {
+        items: { productVariant: { globalProduct: true } },
+        shop: true,
+        deliveryAddress: true,
+        user: true,
+      },
     });
     if (!order) throw new NotFoundException('Buyurtma topilmadi');
     const isParty = order.userId === userId || order.shop.ownerId === userId;
@@ -837,6 +858,33 @@ export class OrdersService {
       imageUrl: shopPhoto,
     });
     return saved;
+  }
+
+  /**
+   * Customer: switch how a not-yet-paid order gets paid — cash <-> card.
+   * Locked once Click confirms payment (there's no automated way to undo a
+   * captured charge, same reasoning as the paid-order-immune auto-cancel in
+   * autoCancelStaleNewOrders) or once the order is otherwise dead.
+   */
+  async changePaymentMethod(userId: string, orderId: string, method: PaymentMethod): Promise<Order> {
+    return this.dataSource.transaction(async (manager) => {
+      const order = await manager.findOne(Order, {
+        where: { id: orderId, userId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!order) throw new NotFoundException('Buyurtma topilmadi');
+      if (PAYMENT_METHOD_LOCKED_STATUSES.includes(order.status)) {
+        throw new BadRequestException("Bu buyurtma uchun to'lov turini o'zgartirib bo'lmaydi");
+      }
+      if (order.paymentStatus === PaymentStatus.Paid) {
+        throw new BadRequestException("Buyurtma allaqachon to'langan — to'lov turini o'zgartirib bo'lmaydi");
+      }
+      if (order.paymentMethod === method) return order;
+
+      order.paymentMethod = method;
+      order.paymentStatus = method === PaymentMethod.Cash ? PaymentStatus.NotRequired : PaymentStatus.Pending;
+      return manager.save(order);
+    });
   }
 
   private async settleDeliveredOrder(

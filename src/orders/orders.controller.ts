@@ -21,6 +21,7 @@ import { RedisService } from '../redis/redis.service';
 import {
   AdminListOrdersQuery,
   AssignOrderDto,
+  ChangePaymentMethodDto,
   CreateOrderDto,
   CreateReviewsDto,
   InStoreSaleDto,
@@ -100,6 +101,16 @@ export class OrdersController {
     @Body() dto: UpdateOrderStatusDto,
   ) {
     return this.orders.updateStatus(user.sub, id, dto.status, dto.note);
+  }
+
+  /** Customer: switch cash <-> card before the order is paid (locked afterwards). */
+  @Patch(':id/payment-method')
+  changePaymentMethod(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ChangePaymentMethodDto,
+  ) {
+    return this.orders.changePaymentMethod(user.sub, id, dto.paymentMethod);
   }
 
   @Post(':id/return')
