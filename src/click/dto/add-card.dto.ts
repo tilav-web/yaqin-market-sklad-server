@@ -1,5 +1,5 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsString, Length, Matches } from 'class-validator';
+import { ApiPropertyOptional, ApiProperty } from '@nestjs/swagger';
+import { IsOptional, IsString, Length, Matches, MaxLength } from 'class-validator';
 
 export class AddCardDto {
   @ApiProperty({ example: '8600123412341234', description: 'Karta raqami, bo\'shliqsiz' })
@@ -13,4 +13,10 @@ export class AddCardDto {
   @Length(4, 4)
   @Matches(/^\d{4}$/, { message: 'expire_date MMYY formatida bo\'lishi kerak' })
   expire_date!: string;
+
+  @ApiPropertyOptional({ example: 'Ish kartam', description: 'Karta uchun ixtiyoriy nom' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  label?: string;
 }

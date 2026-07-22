@@ -50,6 +50,10 @@ export class SavedCard {
   @Column({ type: 'varchar', nullable: true })
   phoneNumber!: string | null;
 
+  /** User-given nickname, e.g. "Ish kartam" — display-only, never sent to Click. */
+  @Column({ type: 'varchar', length: 40, nullable: true })
+  label!: string | null;
+
   @Column({ type: 'enum', enum: SavedCardStatus, default: SavedCardStatus.PendingVerify })
   status!: SavedCardStatus;
 

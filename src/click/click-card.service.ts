@@ -20,6 +20,7 @@ const MAX_CARDS_PER_USER = 5;
 export interface PublicSavedCard {
   id: string;
   cardNumberMasked: string | null;
+  label: string | null;
   isDefault: boolean;
   status: SavedCardStatus;
 }
@@ -60,6 +61,7 @@ export class ClickCardService {
         userId,
         cardToken,
         phoneNumber,
+        label: dto.label?.trim() || null,
         status: SavedCardStatus.PendingVerify,
       }),
     );
@@ -74,6 +76,20 @@ export class ClickCardService {
     if (!card) throw new NotFoundException("Tasdiqlanishi kutilayotgan karta topilmadi");
 
     const { cardNumberMasked } = await this.merchant.verifyToken(card.cardToken, dto.sms_code);
+
+    // Same physical card already saved — Click doesn't dedupe card_token
+    // requests for us, so without this a user could burn multiple of their
+    // MAX_CARDS_PER_USER slots re-adding the same PAN.
+    if (cardNumberMasked) {
+      const duplicate = await this.cardRepo.findOne({
+        where: { userId, status: SavedCardStatus.Active, cardNumberMasked },
+      });
+      if (duplicate) {
+        await this.merchant.deleteToken(card.cardToken);
+        await this.cardRepo.delete({ id: card.id });
+        throw new BadRequestException('Bu karta allaqachon saqlangan');
+      }
+    }
 
     card.status = SavedCardStatus.Active;
     card.cardNumberMasked = cardNumberMasked;
@@ -174,6 +190,7 @@ export class ClickCardService {
     return {
       id: card.id,
       cardNumberMasked: card.cardNumberMasked,
+      label: card.label,
       isDefault: card.isDefault,
       status: card.status,
     };
