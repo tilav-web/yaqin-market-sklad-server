@@ -7,6 +7,7 @@ import {
   HttpStatus,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
@@ -42,6 +43,11 @@ export class ClickCardController {
     @Body() dto: VerifyCardDto,
   ) {
     return this.cards.verifyCard(user.sub, id, dto);
+  }
+
+  @Patch(':id/default')
+  setDefault(@CurrentUser() user: JwtPayload, @Param('id', ParseUUIDPipe) id: string) {
+    return this.cards.setDefaultCard(user.sub, id);
   }
 
   @Delete(':id')

@@ -85,6 +85,19 @@ export class ClickCardService {
     return this.toPublic(saved);
   }
 
+  /** Switches which saved card pre-fills as the checkout default. */
+  async setDefaultCard(userId: string, cardId: string): Promise<PublicSavedCard> {
+    const card = await this.cardRepo.findOne({
+      where: { id: cardId, userId, status: SavedCardStatus.Active },
+    });
+    if (!card) throw new NotFoundException('Karta topilmadi');
+
+    await this.cardRepo.update({ userId }, { isDefault: false });
+    card.isDefault = true;
+    const saved = await this.cardRepo.save(card);
+    return this.toPublic(saved);
+  }
+
   async deleteCard(userId: string, cardId: string): Promise<void> {
     const card = await this.cardRepo.findOne({ where: { id: cardId, userId } });
     if (!card) throw new NotFoundException('Karta topilmadi');
