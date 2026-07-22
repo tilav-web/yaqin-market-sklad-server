@@ -87,6 +87,8 @@ export class OrdersService {
     [OrderStatus.Delivering]: 'Yetkazib berilmoqda',
     [OrderStatus.Delivered]: 'Yetkazildi',
     [OrderStatus.Cancelled]: 'Bekor qilindi',
+    [OrderStatus.SellerNoResponse]: "Do'kon javob bermadi",
+    [OrderStatus.SellerRejected]: "Do'kon rad etdi",
   };
 
   /** Build a variantId → productName map from a list of variants (single IN query). */
@@ -710,12 +712,14 @@ export class OrdersService {
     const isCustomer = order.userId === actorUserId;
 
     const allowedTransitions: Record<OrderStatus, OrderStatus[]> = {
-      [OrderStatus.New]: [OrderStatus.Accepted, OrderStatus.Cancelled],
+      [OrderStatus.New]: [OrderStatus.Accepted, OrderStatus.Cancelled, OrderStatus.SellerRejected],
       [OrderStatus.Accepted]: [OrderStatus.Preparing, OrderStatus.Cancelled],
       [OrderStatus.Preparing]: [OrderStatus.Delivering, OrderStatus.Cancelled],
       [OrderStatus.Delivering]: [OrderStatus.Delivered, OrderStatus.Cancelled],
       [OrderStatus.Delivered]: [],
       [OrderStatus.Cancelled]: [],
+      [OrderStatus.SellerNoResponse]: [],
+      [OrderStatus.SellerRejected]: [],
     };
 
     if (!allowedTransitions[order.status].includes(nextStatus)) {
@@ -755,6 +759,13 @@ export class OrdersService {
       } else {
         await this.assertShopCanManage(actorUserId, order, 'orders.cancel');
       }
+    } else if (nextStatus === OrderStatus.SellerRejected) {
+      // Distinct from a customer-initiated Cancelled: this is the shop
+      // explicitly declining a not-yet-accepted order, which triggers the
+      // customer-side "try another store" suggestion flow — a customer can
+      // never set this on their own order (they'd just Cancel it instead).
+      if (isCustomer) throw new ForbiddenException();
+      await this.assertShopCanManage(actorUserId, order, 'orders.cancel');
     }
 
     const saved = await this.dataSource.transaction(async (manager) => {
@@ -780,8 +791,9 @@ export class OrdersService {
         note,
       };
       locked.timeline = [...locked.timeline, event];
-      if (nextStatus === OrderStatus.Cancelled) {
-        locked.cancellationReason = note ?? null;
+      if (nextStatus === OrderStatus.Cancelled || nextStatus === OrderStatus.SellerRejected) {
+        locked.cancellationReason =
+          note ?? (nextStatus === OrderStatus.SellerRejected ? "Do'kon buyurtmani rad etdi" : null);
         await this.restockOrder(manager, locked.id);
       }
       return manager.save(locked);
@@ -801,12 +813,16 @@ export class OrdersService {
     // → notify the shop owner.
     const target = !isCustomer ? saved.userId : order.shop.ownerId;
     const shopPhoto = order.shop.photos?.[0];
+    // SellerRejected gets its own notification `kind` (rather than the
+    // generic `order:updated`) so the mobile app knows to surface the
+    // "try another store" suggestion flow when the customer taps it.
+    const kind = nextStatus === OrderStatus.SellerRejected ? 'order:seller_rejected' : 'order:updated';
     if (target) void this.push.sendToUser(target, {
       title: `Buyurtma #${saved.orderNumber}`,
       body: OrdersService.STATUS_LABEL[saved.status],
       data: {
         orderId: saved.id,
-        kind: 'order:updated',
+        kind,
         ...(!isCustomer ? { shopId: order.shopId, forSeller: false } : {}),
       },
       imageUrl: shopPhoto,
@@ -839,14 +855,18 @@ export class OrdersService {
   }
 
   /**
-   * Business rule #5: a `new` order the shop hasn't accepted within 5 minutes is
-   * auto-cancelled — stock is returned and the customer is notified. Runs every
+   * Business rule #5: a `new` order the shop hasn't accepted within 5 minutes
+   * moves to SellerNoResponse — stock is returned and the customer is
+   * notified. This is NOT the same as Cancelled: the customer didn't do
+   * anything wrong, so the notification/order screen offers "try another
+   * store" suggestions instead of just reporting a dead end. Runs every
    * minute.
    *
-   * EXCEPTION: an order already paid via Click is never auto-cancelled here.
-   * The customer's money has already been captured and there's no automated
-   * refund path — silently cancelling would leave it stuck with no way back.
-   * These get an urgent one-time nudge to the shop instead (see below).
+   * EXCEPTION: an order already paid via Click is never auto-transitioned
+   * here. The customer's money has already been captured and there's no
+   * automated refund path — silently moving it would leave it stuck with no
+   * way back. These get an urgent one-time nudge to the shop instead (see
+   * below).
    */
   @Cron(CronExpression.EVERY_MINUTE)
   async autoCancelStaleNewOrders(): Promise<void> {
@@ -857,36 +877,36 @@ export class OrdersService {
     });
     await this.alertStalePaidOrders(cutoff);
     for (const order of stale) {
-      // Only emit/notify if the cancel actually happened (it may be skipped if
-      // the order was accepted between the scan and the lock).
-      const cancelled = await this.dataSource.transaction(async (manager) => {
+      // Only emit/notify if the transition actually happened (it may be
+      // skipped if the order was accepted between the scan and the lock).
+      const transitioned = await this.dataSource.transaction(async (manager) => {
         const fresh = await manager.findOne(Order, {
           where: { id: order.id },
           lock: { mode: 'pessimistic_write' },
         });
         if (!fresh || fresh.status !== OrderStatus.New) return false;
         await this.restockOrder(manager, fresh.id);
-        fresh.status = OrderStatus.Cancelled;
-        fresh.cancellationReason = 'Do\'kon 5 daqiqada qabul qilmadi — avtomatik bekor qilindi';
+        fresh.status = OrderStatus.SellerNoResponse;
+        fresh.cancellationReason = 'Do\'kon 5 daqiqada javob bermadi';
         fresh.timeline = [
           ...fresh.timeline,
-          { status: OrderStatus.Cancelled, at: new Date().toISOString(), byUserId: null, note: 'auto-cancel' },
+          { status: OrderStatus.SellerNoResponse, at: new Date().toISOString(), byUserId: null, note: 'auto-reject-timeout' },
         ];
         await manager.save(fresh);
         return true;
       });
-      if (!cancelled) continue;
-      order.status = OrderStatus.Cancelled;
+      if (!transitioned) continue;
+      order.status = OrderStatus.SellerNoResponse;
       this.emitOrderEvent('order:updated', order);
       if (order.userId) {
         void this.push.sendToUser(order.userId, {
           title: `Buyurtma #${order.orderNumber}`,
-          body: 'Do\'kon 5 daqiqada qabul qilmadi — buyurtma bekor qilindi',
-          data: { orderId: order.id, kind: 'order:auto_cancelled' },
+          body: 'Do\'kon 5 daqiqada javob bermadi — boshqa do\'konlardan taklif bor',
+          data: { orderId: order.id, kind: 'order:seller_no_response' },
         });
       }
     }
-    if (stale.length > 0) this.logger.log(`Auto-cancelled ${stale.length} stale order(s)`);
+    if (stale.length > 0) this.logger.log(`${stale.length} stale order(s) moved to SellerNoResponse`);
   }
 
   /** One-time urgent nudge to the shop for a paid order stuck unaccepted past the 5-min window (see autoCancelStaleNewOrders). */

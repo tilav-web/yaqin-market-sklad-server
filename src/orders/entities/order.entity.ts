@@ -22,6 +22,10 @@ export enum OrderStatus {
   Delivering = 'delivering',
   Delivered = 'delivered',
   Cancelled = 'cancelled',
+  /** Shop never accepted it within the 5-minute window (see autoCancelStaleNewOrders). */
+  SellerNoResponse = 'seller_no_response',
+  /** Shop explicitly declined a `New` order before accepting it. */
+  SellerRejected = 'seller_rejected',
 }
 
 export enum PaymentMethod {

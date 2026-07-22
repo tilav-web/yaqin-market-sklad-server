@@ -29,6 +29,8 @@ const STATUS_LABEL: Record<OrderStatus, string> = {
   [OrderStatus.Delivering]: 'Yetkazib berilmoqda',
   [OrderStatus.Delivered]: 'Yetkazildi',
   [OrderStatus.Cancelled]: 'Bekor qilindi',
+  [OrderStatus.SellerNoResponse]: "Do'kon javob bermadi",
+  [OrderStatus.SellerRejected]: "Do'kon rad etdi",
 };
 
 const MOVEMENT_LABEL: Record<MovementType, string> = {

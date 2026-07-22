@@ -961,6 +961,59 @@ export class ProductsService {
     };
   }
 
+  /**
+   * All shops offering this GlobalProduct OR any of its size-group siblings
+   * (same product family — e.g. Coca-Cola 0.5L/1L/1.5L) — used to suggest
+   * alternatives when a shop doesn't accept an order (SellerNoResponse /
+   * SellerRejected). `excludeShopId` drops the shop that just rejected it,
+   * since the point is finding somewhere ELSE to buy from.
+   */
+  async getFamilyOffers(
+    globalProductId: string,
+    userLat?: number,
+    userLng?: number,
+    excludeShopId?: string,
+  ) {
+    const gp = await this.globalProducts.findOne({ where: { id: globalProductId } });
+    if (!gp) return [];
+    const rootId = gp.parentGlobalProductId ?? gp.id;
+    const family = await this.globalProducts.find({
+      where: [{ id: rootId }, { parentGlobalProductId: rootId }],
+    });
+    const familyIds = family.map((f) => f.id);
+
+    const qb = this.variants
+      .createQueryBuilder('v')
+      .innerJoin('v.shop', 's')
+      .addSelect(['s.id', 's.name', 's.latitude', 's.longitude', 's.isActive', 's.photos'])
+      .where('v.globalProductId IN (:...familyIds)', { familyIds })
+      .andWhere('v.isActive = true')
+      .andWhere('v.stock > 0')
+      .andWhere('s.isActive = true');
+    if (excludeShopId) qb.andWhere('v.shopId != :excludeShopId', { excludeShopId });
+    const variants = await qb.orderBy('COALESCE(v."discountPrice", v.price)', 'ASC').take(50).getMany();
+
+    return variants.map((v: any) => {
+      const s = v.shop as Shop;
+      const distanceKm =
+        userLat && userLng && s?.latitude && s?.longitude
+          ? haversineKm(userLat, userLng, s.latitude, s.longitude)
+          : null;
+      return {
+        variantId: v.id,
+        globalProductId: v.globalProductId,
+        shopId: s?.id ?? v.shopId,
+        shopName: s?.name ?? '',
+        shopPhotos: s?.photos ?? [],
+        distanceKm,
+        price: v.price,
+        discountPrice: v.discountPrice,
+        stock: v.stock,
+        isOpen: s ? isShopOpenNow(s) : false,
+      };
+    });
+  }
+
   /** All shops offering the same GlobalProduct — for customer price comparison. */
   async getGlobalProductOffers(
     globalProductId: string,

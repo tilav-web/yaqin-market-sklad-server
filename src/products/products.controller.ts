@@ -256,6 +256,23 @@ export class CatalogController {
       lng ? parseFloat(lng) : undefined,
     );
   }
+
+  /** Same product family (size-group siblings included) at other shops — used by the "seller didn't accept" suggestion flow. */
+  @Public()
+  @Get('global-products/:globalProductId/family-offers')
+  familyOffers(
+    @Param('globalProductId', ParseUUIDPipe) globalProductId: string,
+    @Query('lat') lat?: string,
+    @Query('lng') lng?: string,
+    @Query('excludeShopId') excludeShopId?: string,
+  ) {
+    return this.products.getFamilyOffers(
+      globalProductId,
+      lat ? parseFloat(lat) : undefined,
+      lng ? parseFloat(lng) : undefined,
+      excludeShopId,
+    );
+  }
 }
 
 // ─── Seller: katalog + kengaytirilgan sklad operatsiyalari ───────────────────
