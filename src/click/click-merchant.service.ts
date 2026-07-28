@@ -117,6 +117,10 @@ export class ClickMerchantService {
       throw new BadRequestException("Click javobini o'qib bo'lmadi");
     }
     if (json.error_code !== 0) {
+      const merchantTransId = body?.merchant_trans_id ?? null;
+      this.logger.warn(
+        `Click Merchant API declined ${path}: error_code=${json.error_code} error_note=${json.error_note} merchant_trans_id=${merchantTransId}`,
+      );
       throw new BadRequestException(json.error_note || 'Click xatosi');
     }
     return json;
