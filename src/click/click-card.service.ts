@@ -10,7 +10,7 @@ import { Order, PaymentMethod, PaymentStatus } from '../orders/entities/order.en
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { AddCardDto } from './dto/add-card.dto';
 import { VerifyCardDto } from './dto/verify-card.dto';
-import { ClickMerchantService } from './click-merchant.service';
+import { ClickDeclinedException, ClickMerchantService } from './click-merchant.service';
 import { ClickPaymentTransaction, ClickTxStatus } from './click-payment-transaction.entity';
 import { SavedCard, SavedCardStatus } from './saved-card.entity';
 
@@ -173,7 +173,9 @@ export class ClickCardService {
       const result = await this.merchant.payWithToken(card.cardToken, order.total, order.id);
       paymentId = result.paymentId;
     } catch (err) {
-      await this.txRepo.update({ orderId: order.id }, { status: ClickTxStatus.Cancelled });
+      const errorCode = err instanceof ClickDeclinedException ? err.errorCode : null;
+      const errorNote = err instanceof ClickDeclinedException ? err.errorNote : (err as Error)?.message ?? null;
+      await this.txRepo.update({ orderId: order.id }, { status: ClickTxStatus.Cancelled, errorCode, errorNote });
       await this.orderRepo.update(order.id, { paymentStatus: PaymentStatus.Failed });
       throw err;
     }

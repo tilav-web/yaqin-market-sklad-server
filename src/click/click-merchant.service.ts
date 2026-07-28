@@ -4,6 +4,7 @@ import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 import type { EnvironmentVariables } from '../config/configuration';
+import { mapClickErrorMessage } from './click-error-messages';
 
 /**
  * Client for Click's *Merchant* API (api.click.uz/v2/merchant) — the
@@ -24,6 +25,16 @@ interface ClickMerchantResponse {
   error_code: number;
   error_note: string;
   [key: string]: unknown;
+}
+
+/** Carries Click's raw error_code/error_note so callers can persist them for diagnostics. */
+export class ClickDeclinedException extends BadRequestException {
+  constructor(
+    public readonly errorCode: number,
+    public readonly errorNote: string,
+  ) {
+    super(mapClickErrorMessage(errorCode, errorNote));
+  }
 }
 
 @Injectable()
@@ -121,7 +132,7 @@ export class ClickMerchantService {
       this.logger.warn(
         `Click Merchant API declined ${path}: error_code=${json.error_code} error_note=${json.error_note} merchant_trans_id=${merchantTransId}`,
       );
-      throw new BadRequestException(json.error_note || 'Click xatosi');
+      throw new ClickDeclinedException(json.error_code, json.error_note);
     }
     return json;
   }

@@ -41,6 +41,15 @@ export class ClickPaymentTransaction {
   @Column({ type: 'enum', enum: ClickTxStatus, default: ClickTxStatus.Pending })
   status!: ClickTxStatus;
 
+  // Populated when Click's Merchant API declines a card_token/payment call
+  // (status -> Cancelled) — kept alongside the raw note so a future lookup
+  // table can be backfilled from real-world codes without losing history.
+  @Column({ type: 'int', nullable: true })
+  errorCode!: number | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  errorNote!: string | null;
+
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt!: Date;
 
