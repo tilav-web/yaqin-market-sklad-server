@@ -61,21 +61,32 @@ export class ClickController {
     return this.clickService.complete(dto);
   }
 
-  /** Click redirects the in-app browser here after payment (CLICK_RETURN_URL). */
+  /**
+   * Click redirects the in-app browser here after payment (return_url built
+   * per-order in ClickService.buildUrl). This page is a UX convenience only —
+   * it never claims success/failure itself, since the redirect isn't the
+   * authoritative payment confirmation (prepare/complete is). It just sends
+   * the customer straight back into the app, to the order that already
+   * renders whatever the real paymentStatus is.
+   */
   @Public()
-  @Get('return')
+  @Get('return/:orderId')
   @Header('Content-Type', 'text/html; charset=utf-8')
-  returnPage() {
+  returnPage(@Param('orderId') orderId: string) {
+    const appUrl = `yaqinmarket://orders/${orderId}`;
     return `<!doctype html>
 <html lang="uz">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta http-equiv="refresh" content="0; url=${appUrl}" />
 <title>Yaqin Market — to'lov</title>
 </head>
 <body style="font-family: -apple-system, Roboto, sans-serif; text-align: center; padding-top: 72px; color: #1a1a1a;">
-<h2>To'lov qabul qilindi</h2>
-<p>Ilovaga qayting — buyurtma holati yangilanadi.</p>
+<h2>Ilovaga qaytilmoqda…</h2>
+<p>Buyurtma holati ilovada ko'rsatiladi.</p>
+<p><a href="${appUrl}" style="color: #E8392E; font-weight: 700;">Avtomatik o'tmadimi? Shu yerni bosing</a></p>
+<script>window.location.replace(${JSON.stringify(appUrl)});</script>
 </body>
 </html>`;
   }

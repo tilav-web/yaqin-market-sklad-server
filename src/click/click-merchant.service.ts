@@ -73,7 +73,12 @@ export class ClickMerchantService {
       service_id: this.serviceId(),
       card_token: cardToken,
       amount,
-      merchant_trans_id: merchantTransId,
+      // Docs.click.uz's "Payment with Card Token" request names this field
+      // `transaction_parameter`, unlike every other Click endpoint (Create
+      // Invoice, the `my.click.uz/services/pay` redirect) which uses
+      // `merchant_trans_id`/`transaction_param` — an inconsistency in
+      // Click's own API, not a typo here.
+      transaction_parameter: merchantTransId,
     });
     return { paymentId: String(res.payment_id) };
   }

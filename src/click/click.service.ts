@@ -9,7 +9,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 
-import { Order, PaymentMethod, PaymentStatus } from '../orders/entities/order.entity';
+import { Order, PaymentMethod, PaymentStatus, isTerminalOrderStatus } from '../orders/entities/order.entity';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { ClickWebhookDto } from './click-webhook.dto';
 import { ClickPaymentTransaction, ClickTxStatus } from './click-payment-transaction.entity';
@@ -60,6 +60,9 @@ export class ClickService {
     }
     if (order.paymentStatus === PaymentStatus.Paid) {
       throw new BadRequestException('Buyurtma allaqachon to\'langan');
+    }
+    if (isTerminalOrderStatus(order.status)) {
+      throw new BadRequestException('Bekor qilingan buyurtma uchun to\'lov qilib bo\'lmaydi');
     }
     return { url: this.buildUrl(order.id, order.total) };
   }
@@ -204,17 +207,23 @@ export class ClickService {
     const service_id = process.env.CLICK_SERVICE_ID;
     const merchant_id = process.env.CLICK_MERCHANT_ID;
     const merchant_user_id = process.env.CLICK_MERCHANT_USER_ID;
-    const return_url = process.env.CLICK_RETURN_URL;
-    if (!service_id || !merchant_id || !merchant_user_id || !return_url) {
+    const returnUrlBase = process.env.CLICK_RETURN_URL;
+    if (!service_id || !merchant_id || !merchant_user_id || !returnUrlBase) {
       throw new Error('Click env vars are missing');
     }
+    // The order id rides along in the path (not appended as a query param by
+    // us) so it survives however Click appends its own query params
+    // (paymentStatus, etc.) when it redirects the browser back here — that
+    // redirect is a UX convenience only, never the authoritative payment
+    // confirmation (that's prepare/complete), so returnPage() just needs to
+    // know which order to send the customer back to.
     const params = new URLSearchParams({
       service_id,
       merchant_id,
       amount: amount.toFixed(2),
       transaction_param: orderId,
       merchant_user_id,
-      return_url,
+      return_url: `${returnUrlBase}/${orderId}`,
     });
     return `https://my.click.uz/services/pay?${params.toString()}`;
   }

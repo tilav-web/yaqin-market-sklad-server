@@ -6,7 +6,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 
-import { Order, PaymentMethod, PaymentStatus } from '../orders/entities/order.entity';
+import { Order, PaymentMethod, PaymentStatus, isTerminalOrderStatus } from '../orders/entities/order.entity';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { AddCardDto } from './dto/add-card.dto';
 import { VerifyCardDto } from './dto/verify-card.dto';
@@ -130,6 +130,9 @@ export class ClickCardService {
     }
     if (order.paymentStatus === PaymentStatus.Paid) {
       throw new BadRequestException("Buyurtma allaqachon to'langan");
+    }
+    if (isTerminalOrderStatus(order.status)) {
+      throw new BadRequestException("Bekor qilingan buyurtma uchun to'lov qilib bo'lmaydi");
     }
 
     const card = await this.cardRepo.findOne({ where: { id: cardId, userId, status: SavedCardStatus.Active } });

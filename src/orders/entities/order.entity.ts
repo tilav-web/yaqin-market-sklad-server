@@ -28,6 +28,15 @@ export enum OrderStatus {
   SellerRejected = 'seller_rejected',
 }
 
+/** Nothing further will happen to this order — mirrors the mobile app's isTerminalStatus. */
+export function isTerminalOrderStatus(status: OrderStatus): boolean {
+  return (
+    status === OrderStatus.Cancelled ||
+    status === OrderStatus.SellerNoResponse ||
+    status === OrderStatus.SellerRejected
+  );
+}
+
 export enum PaymentMethod {
   Cash = 'cash',
   ClickOnline = 'click_online',
