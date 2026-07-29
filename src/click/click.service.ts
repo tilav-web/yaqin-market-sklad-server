@@ -99,13 +99,16 @@ export class ClickService {
         });
       }
       if (tx?.status === ClickTxStatus.Cancelled) {
-        // A row Click itself cancelled (it carries a click_trans_id or a
-        // Merchant API payment_id) must stay dead — Click's docs require -9
-        // on any retry of a cancelled Click transaction. But a row cancelled
-        // by a declined card_token/payment attempt has neither id: it only
-        // records our failed saved-card try, and must not block the user
-        // from paying the same order through the redirect flow — revive it.
-        if (tx.clickTransId || tx.clickPaymentId) {
+        // -9 is only for re-confirming the SAME cancelled Click transaction
+        // (docs: "repeated attempt to confirm a previously cancelled
+        // payment") — i.e. Click retrying the click_trans_id we already
+        // cancelled — or a row that somehow carries a Merchant API payment.
+        // Everything else is a legitimate NEW attempt at paying this order
+        // (a fresh click_trans_id after a user-cancelled payment, or a row
+        // cancelled by our own declined card_token try): revive it, or the
+        // order stays unpayable forever after a single failed attempt.
+        const sameClickTx = !!tx.clickTransId && tx.clickTransId === click_trans_id;
+        if (sameClickTx || tx.clickPaymentId) {
           return errRes(ERR.TX_CANCELLED, 'transaction cancelled');
         }
         tx.status = ClickTxStatus.Pending;

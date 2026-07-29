@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, Not, Repository } from 'typeorm';
 
 import { Order, PaymentMethod, PaymentStatus, isTerminalOrderStatus } from '../orders/entities/order.entity';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
@@ -153,6 +153,14 @@ export class ClickCardService {
           amount: String(order.total),
           status: ClickTxStatus.Pending,
         });
+      } else if (tx.status === ClickTxStatus.Cancelled) {
+        // The user is explicitly starting a NEW charge for this order — a
+        // row left cancelled by an earlier failed attempt must not shadow
+        // it (prepare() would -9 a stale cancelled row, and the failure
+        // branch below only records into a pending row).
+        tx.status = ClickTxStatus.Pending;
+        tx.errorCode = null;
+        tx.errorNote = null;
       }
       try {
         return await em.save(ClickPaymentTransaction, tx);
@@ -178,8 +186,19 @@ export class ClickCardService {
     } catch (err) {
       const errorCode = err instanceof ClickDeclinedException ? err.errorCode : null;
       const errorNote = err instanceof ClickDeclinedException ? err.errorNote : (err as Error)?.message ?? null;
-      await this.txRepo.update({ orderId: order.id }, { status: ClickTxStatus.Cancelled, errorCode, errorNote });
-      await this.orderRepo.update(order.id, { paymentStatus: PaymentStatus.Failed });
+      // The prepare/complete webhooks for this very charge arrive BEFORE the
+      // card_token/payment HTTP call returns — so this call can fail (e.g. a
+      // timeout) for a payment Click actually completed. Never let the local
+      // failure overwrite a webhook-confirmed success: only a still-pending
+      // row / still-unpaid order may record it.
+      await this.txRepo.update(
+        { orderId: order.id, status: ClickTxStatus.Pending },
+        { status: ClickTxStatus.Cancelled, errorCode, errorNote },
+      );
+      await this.orderRepo.update(
+        { id: order.id, paymentStatus: Not(PaymentStatus.Paid) },
+        { paymentStatus: PaymentStatus.Failed },
+      );
       throw err;
     }
 
