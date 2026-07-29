@@ -90,6 +90,16 @@ export class ClickMerchantService {
     await this.request('DELETE', `card_token/${this.serviceId()}/${encodeURIComponent(cardToken)}`);
   }
 
+  /**
+   * Cancels a completed payment, returning the money to the customer's card
+   * (payment/reversal). Click only allows this for current-reporting-month
+   * payments (previous month: only on the 1st) and may see it rejected by
+   * the card network — callers must treat failure as retryable/manual.
+   */
+  async reversePayment(paymentId: string): Promise<void> {
+    await this.request('DELETE', `payment/reversal/${this.serviceId()}/${encodeURIComponent(paymentId)}`);
+  }
+
   // ── private helpers ──────────────────────────────────────────────────────
 
   private serviceId(): string {

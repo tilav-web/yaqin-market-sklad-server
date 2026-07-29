@@ -103,6 +103,12 @@ export class OrdersController {
     return this.orders.updateStatus(user.sub, id, dto.status, dto.note);
   }
 
+  /** Customer: re-ask the silent shop for a paid order — restarts the 5-min window. */
+  @Post(':id/re-request')
+  reRequest(@CurrentUser() user: JwtPayload, @Param('id', ParseUUIDPipe) id: string) {
+    return this.orders.reRequestOrder(user.sub, id);
+  }
+
   /** Customer: switch cash <-> card before the order is paid (locked afterwards). */
   @Patch(':id/payment-method')
   changePaymentMethod(

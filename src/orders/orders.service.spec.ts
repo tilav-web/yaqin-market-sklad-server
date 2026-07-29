@@ -4,7 +4,9 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
 
 import { AuditLogService } from '../audit-log/audit-log.service';
+import { ClickService } from '../click/click.service';
 import { ComplaintsService } from '../complaints/complaints.service';
+import { RedisService } from '../redis/redis.service';
 import { SellerTransaction } from '../payments/entities/seller-transaction.entity';
 import { PaymentsService } from '../payments/payments.service';
 import { GlobalProduct } from '../products/entities/global-product.entity';
@@ -146,6 +148,7 @@ describe('OrdersService', () => {
   let promotions: { findActivePromosForShop: jest.Mock; bestDiscountFor: jest.Mock; findFreeDeliveryPromotion: jest.Mock };
   let complaints: { getForOrder: jest.Mock; openComplaintOrderIds: jest.Mock };
   let auditLog: { record: jest.Mock };
+  let click: { refundPaidOrder: jest.Mock };
 
   const buildRepoMock = () => ({
     findOne: jest.fn(),
@@ -180,6 +183,8 @@ describe('OrdersService', () => {
     };
     complaints = { getForOrder: jest.fn(), openComplaintOrderIds: jest.fn() };
     auditLog = { record: jest.fn().mockResolvedValue(undefined) };
+    click = { refundPaidOrder: jest.fn().mockResolvedValue(true) };
+    const redis = { client: { set: jest.fn().mockResolvedValue('OK'), get: jest.fn().mockResolvedValue(null) } };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -203,6 +208,8 @@ describe('OrdersService', () => {
         { provide: PromotionsService, useValue: promotions },
         { provide: ComplaintsService, useValue: complaints },
         { provide: AuditLogService, useValue: auditLog },
+        { provide: ClickService, useValue: click },
+        { provide: RedisService, useValue: redis },
       ],
     }).compile();
 
@@ -430,16 +437,33 @@ describe('OrdersService', () => {
       ).rejects.toThrow('boshlangandan keyin buyurtmani bekor qilib bo\'lmaydi');
     });
 
-    it('mijoz Click orqali to\'langan buyurtmani o\'zi bekor qila olmaydi', async () => {
+    it('mijoz to\'langan buyurtmani do\'kon qabul qilgach bekor qila olmaydi (support)', async () => {
       orders.findOne.mockResolvedValue(makeOrder({
-        status: OrderStatus.New,
+        status: OrderStatus.Accepted,
         paymentMethod: PaymentMethod.ClickOnline,
         paymentStatus: PaymentStatus.Paid,
       }));
       await expect(
         service.updateStatus(USER_ID, 'order-1', OrderStatus.Cancelled),
-      ).rejects.toThrow('allaqachon to\'langan');
+      ).rejects.toThrow('qo\'llab-quvvatlash');
       expect(dataSource.transaction).not.toHaveBeenCalled();
+    });
+
+    it('mijoz to\'langan NEW buyurtmani bekor qilsa avto-refund chaqiriladi', async () => {
+      const order = makeOrder({
+        status: OrderStatus.New,
+        paymentMethod: PaymentMethod.ClickOnline,
+        paymentStatus: PaymentStatus.Paid,
+      });
+      orders.findOne.mockResolvedValue(order);
+      const em = mockEntityManager({});
+      em.findOne.mockImplementation(async (Entity: unknown) => (Entity === Order ? order : null));
+      dataSource.transaction.mockImplementation((cb) => cb(em));
+
+      const result = await service.updateStatus(USER_ID, 'order-1', OrderStatus.Cancelled);
+
+      expect(result.status).toBe(OrderStatus.Cancelled);
+      expect(click.refundPaidOrder).toHaveBeenCalledWith('order-1');
     });
 
     it.each([OrderStatus.New, OrderStatus.Accepted, OrderStatus.Preparing])(
@@ -528,7 +552,7 @@ describe('OrdersService', () => {
 
       expect(push.sendToUser).toHaveBeenCalledWith(
         USER_ID,
-        expect.objectContaining({ data: expect.objectContaining({ kind: 'order:auto_cancelled' }) }),
+        expect.objectContaining({ data: expect.objectContaining({ kind: 'order:seller_no_response' }) }),
       );
       expect(realtime.emitToShop).toHaveBeenCalled();
     });
@@ -567,8 +591,18 @@ describe('OrdersService', () => {
         paymentMethod: PaymentMethod.ClickOnline,
         paymentStatus: PaymentStatus.Paid,
       } as unknown as Order;
-      // First call: non-paid stale orders — none. Second call: stale PAID orders.
-      orders.find.mockResolvedValueOnce([]).mockResolvedValueOnce([stalePaid]);
+      // Non-paid stale orders — none. Stale PAID orders come through the
+      // query-builder path (COALESCE anchor): first getMany feeds
+      // alertStalePaidOrders, the second (autoRefundAbandonedPaidOrders) is empty.
+      orders.find.mockResolvedValue([]);
+      const qb = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        take: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValueOnce([stalePaid]).mockResolvedValue([]),
+      };
+      orders.createQueryBuilder.mockReturnValue(qb);
       staff.find.mockResolvedValue([]);
 
       await service.autoCancelStaleNewOrders();

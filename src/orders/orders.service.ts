@@ -12,6 +12,7 @@ import { Between, DataSource, In, IsNull, LessThan, Not, Repository } from 'type
 
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { AuditAction } from '../audit-log/entities/admin-audit-log.entity';
+import { ClickService } from '../click/click.service';
 import { ComplaintsService } from '../complaints/complaints.service';
 import { buildXlsxBuffer } from '../common/xlsx.util';
 import { calcDeliveryFee, estimateEtaMinutes, haversineKm, pointInPolygon } from '../geo/geo.util';
@@ -42,6 +43,11 @@ const orderNumberGen = customAlphabet('ABCDEFGHJKLMNPQRSTUVWXYZ23456789', 8);
 
 // A new order the shop doesn't accept within this window is auto-cancelled.
 const AUTO_CANCEL_MS = 5 * 60 * 1000;
+
+// A PAID order the shop keeps ignoring past this (counted from the last
+// customer re-request, if any) is force-closed and auto-refunded — a paying
+// customer who walked away from the app must never stay in limbo.
+const PAID_AUTO_CANCEL_MS = 30 * 60 * 1000;
 
 // Nothing further will happen to an order in one of these — changing its
 // payment method afterwards would be meaningless (or, for a paid order,
@@ -88,6 +94,7 @@ export class OrdersService {
     private readonly promotions: PromotionsService,
     private readonly complaints: ComplaintsService,
     private readonly auditLog: AuditLogService,
+    private readonly click: ClickService,
   ) {}
 
   private static readonly STATUS_LABEL: Record<OrderStatus, string> = {
@@ -777,13 +784,17 @@ export class OrdersService {
         if (!customerCancellableFrom.includes(order.status)) {
           throw new BadRequestException('Yetkazib berish boshlangandan keyin buyurtmani bekor qilib bo\'lmaydi');
         }
-        // An already-paid online order can't be self-service cancelled —
-        // there's no automated refund path, so silently cancelling here
-        // would capture the customer's money with no way back. Route them
-        // to support instead of losing it silently.
-        if (order.paymentMethod === PaymentMethod.ClickOnline && order.paymentStatus === PaymentStatus.Paid) {
+        // A paid online order can be self-service cancelled only while the
+        // shop hasn't accepted it — the money goes straight back to the card
+        // via payment/reversal (hooked after the transition below). Once the
+        // shop has started working on it, route to support instead.
+        if (
+          order.paymentMethod === PaymentMethod.ClickOnline &&
+          order.paymentStatus === PaymentStatus.Paid &&
+          order.status !== OrderStatus.New
+        ) {
           throw new BadRequestException(
-            'Buyurtma allaqachon to\'langan — bekor qilish uchun qo\'llab-quvvatlash xizmatiga murojaat qiling',
+            'Buyurtma allaqachon to\'langan va do\'kon qabul qilgan — bekor qilish uchun qo\'llab-quvvatlash xizmatiga murojaat qiling',
           );
         }
       } else {
@@ -834,6 +845,29 @@ export class OrdersService {
       void this.settleDeliveredOrder(order).catch((err) =>
         this.logger.error(`Payment settlement failed for order ${order.id}: ${err.message}`),
       );
+    }
+
+    // A captured Click payment must follow its order out the door: any
+    // cancel/reject of a paid order triggers an automatic reversal. Fire and
+    // forget — the cancel response shouldn't wait on Click, and
+    // retryPendingRefunds() re-runs any attempt that fails here.
+    if (
+      (nextStatus === OrderStatus.Cancelled || nextStatus === OrderStatus.SellerRejected) &&
+      order.paymentMethod === PaymentMethod.ClickOnline &&
+      order.paymentStatus === PaymentStatus.Paid
+    ) {
+      void this.click
+        .refundPaidOrder(order.id)
+        .then((refunded) => {
+          if (refunded && order.userId) {
+            void this.push.sendToUser(order.userId, {
+              title: `Buyurtma #${order.orderNumber}`,
+              body: "To'lovingiz qaytarildi — pul kartangizga 1-3 ish kunida tushadi",
+              data: { orderId: order.id, kind: 'order:refunded' },
+            });
+          }
+        })
+        .catch((err) => this.logger.error(`Refund failed for order ${order.id}: ${err.message}`));
     }
 
     this.emitOrderEvent('order:updated', saved);
@@ -887,6 +921,46 @@ export class OrdersService {
     });
   }
 
+  /**
+   * Customer: give the silent shop another 5-minute acceptance window on a
+   * PAID order instead of cancelling for a refund. Restarts the no-response
+   * clock (reRequestedAt) and re-arms the one-time urgent alert, plus pings
+   * the shop immediately. Only meaningful for paid orders — unpaid ones are
+   * auto-closed by autoCancelStaleNewOrders at the 5-minute mark anyway.
+   */
+  async reRequestOrder(userId: string, orderId: string): Promise<Order> {
+    const order = await this.orders.findOne({ where: { id: orderId, userId }, relations: { shop: true } });
+    if (!order) throw new NotFoundException('Buyurtma topilmadi');
+    if (order.status !== OrderStatus.New) {
+      throw new BadRequestException('Buyurtma allaqachon ko\'rib chiqilgan');
+    }
+    if (order.paymentMethod !== PaymentMethod.ClickOnline || order.paymentStatus !== PaymentStatus.Paid) {
+      throw new BadRequestException('Qayta so\'rov faqat to\'langan buyurtmalar uchun');
+    }
+    const anchor = order.reRequestedAt ?? order.createdAt;
+    if (Date.now() - anchor.getTime() < AUTO_CANCEL_MS) {
+      throw new BadRequestException('Do\'konga hali javob berish uchun vaqt berilgan — biroz kuting');
+    }
+
+    order.reRequestedAt = new Date();
+    order.paidUnacceptedAlertSentAt = null;
+    order.timeline = [
+      ...order.timeline,
+      { status: OrderStatus.New, at: new Date().toISOString(), byUserId: userId, note: 'customer-re-request' },
+    ];
+    const saved = await this.orders.save(order);
+
+    const staff = await this.staff.find({ where: { shopId: order.shopId, isActive: true } });
+    const recipients = [...new Set([order.shop.ownerId, ...staff.map((s) => s.userId)])];
+    void this.push.sendToUsers(recipients, {
+      title: '⚠️ Mijoz javob kutmoqda',
+      body: `#${order.orderNumber} — to'langan buyurtma uchun mijoz qayta so'rov yubordi. Zudlik bilan qabul qiling!`,
+      data: { orderId: order.id, kind: 'order:paid_unaccepted', shopId: order.shopId, forSeller: true },
+    });
+    this.emitOrderEvent('order:updated', saved);
+    return saved;
+  }
+
   private async settleDeliveredOrder(
     order: Pick<Order, 'id' | 'shop' | 'total' | 'paymentMethod' | 'commissionRateSnapshot' | 'commissionExempt'>,
   ): Promise<void> {
@@ -919,11 +993,12 @@ export class OrdersService {
    * store" suggestions instead of just reporting a dead end. Runs every
    * minute.
    *
-   * EXCEPTION: an order already paid via Click is never auto-transitioned
-   * here. The customer's money has already been captured and there's no
-   * automated refund path — silently moving it would leave it stuck with no
-   * way back. These get an urgent one-time nudge to the shop instead (see
-   * below).
+   * Paid Click orders follow a gentler track: at 5 minutes both sides get
+   * alerted (shop: "accept now!", customer: "wait / re-request / cancel for
+   * a refund" — see alertStalePaidOrders), and only after
+   * PAID_AUTO_CANCEL_MS of continued silence does
+   * autoRefundAbandonedPaidOrders force-close them with an automatic
+   * payment/reversal.
    */
   @Cron(CronExpression.EVERY_MINUTE)
   async autoCancelStaleNewOrders(): Promise<void> {
@@ -933,6 +1008,7 @@ export class OrdersService {
       take: 50,
     });
     await this.alertStalePaidOrders(cutoff);
+    await this.autoRefundAbandonedPaidOrders();
     for (const order of stale) {
       // Only emit/notify if the transition actually happened (it may be
       // skipped if the order was accepted between the scan and the lock).
@@ -966,18 +1042,22 @@ export class OrdersService {
     if (stale.length > 0) this.logger.log(`${stale.length} stale order(s) moved to SellerNoResponse`);
   }
 
-  /** One-time urgent nudge to the shop for a paid order stuck unaccepted past the 5-min window (see autoCancelStaleNewOrders). */
+  /**
+   * One-time (per 5-min window — a re-request re-arms it) alert pair for a
+   * paid order stuck unaccepted: urgent nudge to the shop + an options push
+   * to the customer (wait / re-request / cancel-with-refund). Anchored on
+   * COALESCE(reRequestedAt, createdAt) so each re-request restarts the clock.
+   */
   private async alertStalePaidOrders(cutoff: Date): Promise<void> {
-    const stalePaid = await this.orders.find({
-      where: {
-        status: OrderStatus.New,
-        createdAt: LessThan(cutoff),
-        paymentStatus: PaymentStatus.Paid,
-        paidUnacceptedAlertSentAt: IsNull(),
-      },
-      relations: { shop: true },
-      take: 50,
-    });
+    const stalePaid = await this.orders
+      .createQueryBuilder('o')
+      .leftJoinAndSelect('o.shop', 'shop')
+      .where('o.status = :status', { status: OrderStatus.New })
+      .andWhere('o.paymentStatus = :ps', { ps: PaymentStatus.Paid })
+      .andWhere('o.paidUnacceptedAlertSentAt IS NULL')
+      .andWhere('COALESCE(o.reRequestedAt, o.createdAt) < :cutoff', { cutoff })
+      .take(50)
+      .getMany();
     if (stalePaid.length === 0) return;
 
     for (const order of stalePaid) {
@@ -988,12 +1068,99 @@ export class OrdersService {
         body: `#${order.orderNumber} — mijoz to'lagan, lekin hali qabul qilinmagan. Zudlik bilan javob bering!`,
         data: { orderId: order.id, kind: 'order:paid_unaccepted', shopId: order.shopId, forSeller: true },
       });
+      if (order.userId) {
+        void this.push.sendToUser(order.userId, {
+          title: `Buyurtma #${order.orderNumber}`,
+          body: 'Do\'kon hali javob bermadi. Kutishingiz, qayta so\'rov yuborishingiz yoki bekor qilib pulni qaytarib olishingiz mumkin',
+          data: { orderId: order.id, kind: 'order:paid_unaccepted_customer' },
+        });
+      }
     }
     await this.orders.update(
       { id: In(stalePaid.map((o) => o.id)) },
       { paidUnacceptedAlertSentAt: new Date() },
     );
-    this.logger.warn(`${stalePaid.length} paid order(s) stuck unaccepted past the 5-min window — shop notified`);
+    this.logger.warn(`${stalePaid.length} paid order(s) stuck unaccepted past the 5-min window — shop and customer notified`);
+  }
+
+  /**
+   * Safety net behind the customer's own cancel/re-request buttons: a paid
+   * order the shop has ignored for PAID_AUTO_CANCEL_MS (since the last
+   * re-request) is closed as SellerNoResponse, restocked and auto-refunded.
+   */
+  private async autoRefundAbandonedPaidOrders(): Promise<void> {
+    const cutoff = new Date(Date.now() - PAID_AUTO_CANCEL_MS);
+    const abandoned = await this.orders
+      .createQueryBuilder('o')
+      .where('o.status = :status', { status: OrderStatus.New })
+      .andWhere('o.paymentStatus = :ps', { ps: PaymentStatus.Paid })
+      .andWhere('COALESCE(o.reRequestedAt, o.createdAt) < :cutoff', { cutoff })
+      .take(50)
+      .getMany();
+
+    for (const order of abandoned) {
+      const transitioned = await this.dataSource.transaction(async (manager) => {
+        const fresh = await manager.findOne(Order, {
+          where: { id: order.id },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (!fresh || fresh.status !== OrderStatus.New) return false;
+        await this.restockOrder(manager, fresh.id);
+        fresh.status = OrderStatus.SellerNoResponse;
+        fresh.cancellationReason = 'Do\'kon javob bermadi — to\'lov avtomatik qaytarildi';
+        fresh.timeline = [
+          ...fresh.timeline,
+          { status: OrderStatus.SellerNoResponse, at: new Date().toISOString(), byUserId: null, note: 'auto-refund-timeout' },
+        ];
+        await manager.save(fresh);
+        return true;
+      });
+      if (!transitioned) continue;
+
+      order.status = OrderStatus.SellerNoResponse;
+      this.emitOrderEvent('order:updated', order);
+      const refunded = await this.click.refundPaidOrder(order.id);
+      if (order.userId) {
+        void this.push.sendToUser(order.userId, {
+          title: `Buyurtma #${order.orderNumber}`,
+          body: refunded
+            ? 'Do\'kon javob bermadi — pulingiz qaytarildi (kartaga 1-3 ish kunida tushadi)'
+            : 'Do\'kon javob bermadi — to\'lovni qaytarish boshlandi, tez orada yakunlanadi',
+          data: { orderId: order.id, kind: 'order:seller_no_response' },
+        });
+      }
+      this.logger.warn(
+        `Paid order ${order.id} abandoned by shop — auto-closed, refund ${refunded ? 'done' : 'pending (retry cron)'}`,
+      );
+    }
+  }
+
+  /**
+   * Backstop for reversals that failed at cancel time (Click hiccup, network,
+   * missing payment id later backfilled): any dead paid Click order without
+   * refundedAt gets retried until the money is actually back.
+   */
+  @Cron(CronExpression.EVERY_5_MINUTES)
+  async retryPendingRefunds(): Promise<void> {
+    const stuck = await this.orders.find({
+      where: {
+        status: In([OrderStatus.Cancelled, OrderStatus.SellerNoResponse, OrderStatus.SellerRejected]),
+        paymentMethod: PaymentMethod.ClickOnline,
+        paymentStatus: PaymentStatus.Paid,
+        refundedAt: IsNull(),
+      },
+      take: 20,
+    });
+    for (const order of stuck) {
+      const refunded = await this.click.refundPaidOrder(order.id);
+      if (refunded && order.userId) {
+        void this.push.sendToUser(order.userId, {
+          title: `Buyurtma #${order.orderNumber}`,
+          body: 'To\'lovingiz qaytarildi — pul kartangizga 1-3 ish kunida tushadi',
+          data: { orderId: order.id, kind: 'order:refunded' },
+        });
+      }
+    }
   }
 
   private async restockOrder(manager: import('typeorm').EntityManager, orderId: string) {

@@ -182,12 +182,28 @@ export class Order {
 
   /**
    * Set once the "you have a paid order still unaccepted" urgent nudge has
-   * been sent to the shop. A paid online order is never auto-cancelled (no
-   * automated refund path exists) — this alert is the fallback so it
-   * doesn't just sit there unnoticed instead.
+   * been sent to the shop (and the matching "you can cancel or re-request"
+   * options push to the customer). Cleared by a customer re-request so the
+   * next 5-minute window can alert again.
    */
   @Column({ type: 'timestamptz', nullable: true })
   paidUnacceptedAlertSentAt!: Date | null;
+
+  /**
+   * Customer chose "ask the shop again" on a paid order the shop ignored —
+   * restarts the 5-minute acceptance window from this moment (the
+   * no-response crons anchor on COALESCE(reRequestedAt, createdAt)).
+   */
+  @Column({ type: 'timestamptz', nullable: true })
+  reRequestedAt!: Date | null;
+
+  /**
+   * Set when the Click payment was successfully reversed back to the
+   * customer's card (payment/reversal). paymentStatus intentionally stays
+   * `paid` — this field is what marks the money as returned.
+   */
+  @Column({ type: 'timestamptz', nullable: true })
+  refundedAt!: Date | null;
 
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt!: Date;

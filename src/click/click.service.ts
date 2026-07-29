@@ -7,10 +7,11 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, IsNull, Repository } from 'typeorm';
 
 import { Order, PaymentMethod, PaymentStatus, isTerminalOrderStatus } from '../orders/entities/order.entity';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
+import { ClickMerchantService } from './click-merchant.service';
 import { ClickWebhookDto } from './click-webhook.dto';
 import { ClickPaymentTransaction, ClickTxStatus } from './click-payment-transaction.entity';
 
@@ -49,7 +50,47 @@ export class ClickService {
     private readonly orderRepo: Repository<Order>,
     private readonly dataSource: DataSource,
     private readonly realtime: RealtimeGateway,
+    private readonly merchant: ClickMerchantService,
   ) {}
+
+  /**
+   * Reverses an order's captured Click payment back to the customer's card
+   * and stamps Order.refundedAt. Idempotent: an already-refunded order
+   * returns true immediately, an unpaid/cash order returns false. A false
+   * return with a paid order means the reversal must be retried (see
+   * OrdersService.retryPendingRefunds) or handled manually.
+   */
+  async refundPaidOrder(orderId: string): Promise<boolean> {
+    const order = await this.orderRepo.findOne({ where: { id: orderId } });
+    if (!order) return false;
+    if (order.refundedAt) return true;
+    if (order.paymentMethod !== PaymentMethod.ClickOnline || order.paymentStatus !== PaymentStatus.Paid) {
+      return false;
+    }
+
+    const tx = await this.txRepo.findOne({ where: { orderId, status: ClickTxStatus.Success } });
+    const paymentId = tx?.clickPaymentId ?? tx?.clickPaydocId ?? null;
+    if (!paymentId) {
+      this.logger.warn(`refundPaidOrder: order ${orderId} has no Click payment_id — manual reversal needed`);
+      return false;
+    }
+
+    try {
+      await this.merchant.reversePayment(paymentId);
+    } catch (err) {
+      this.logger.warn(
+        `refundPaidOrder: reversal failed for order ${orderId} payment ${paymentId}: ${(err as Error).message}`,
+      );
+      return false;
+    }
+
+    // IsNull guard: a concurrent refund attempt (cancel path racing the retry
+    // cron) must not stamp twice.
+    await this.orderRepo.update({ id: orderId, refundedAt: IsNull() }, { refundedAt: new Date() });
+    this.logger.log(`Order ${orderId}: Click payment ${paymentId} reversed to the customer's card`);
+    if (order.userId) this.realtime.emitToUser(order.userId, 'order:refunded', { orderId });
+    return true;
+  }
 
   /** Returns the Click payment URL for an order. */
   async getPaymentUrl(orderId: string, userId: string): Promise<{ url: string }> {
