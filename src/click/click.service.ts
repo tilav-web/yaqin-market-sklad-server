@@ -68,7 +68,7 @@ export class ClickService {
   }
 
   async prepare(dto: ClickWebhookDto): Promise<ClickResponse> {
-    const { click_trans_id, merchant_trans_id, amount, action, sign_string, sign_time, service_id } = dto;
+    const { click_trans_id, click_paydoc_id, merchant_trans_id, amount, action, sign_string, sign_time, service_id } = dto;
 
     const cfgErr = this.checkConfig(service_id);
     if (cfgErr) return cfgErr;
@@ -120,11 +120,13 @@ export class ClickService {
         tx = em.create(ClickPaymentTransaction, {
           orderId: order.id,
           clickTransId: click_trans_id ?? null,
+          clickPaydocId: click_paydoc_id ?? null,
           amount: String(order.total),
           status: ClickTxStatus.Pending,
         });
-      } else if (click_trans_id) {
-        tx.clickTransId = click_trans_id;
+      } else {
+        if (click_trans_id) tx.clickTransId = click_trans_id;
+        if (click_paydoc_id) tx.clickPaydocId = click_paydoc_id;
       }
 
       let saved: ClickPaymentTransaction;
@@ -140,6 +142,7 @@ export class ClickService {
           });
           if (!winner) throw e;
           if (click_trans_id) winner.clickTransId = click_trans_id;
+          if (click_paydoc_id) winner.clickPaydocId = click_paydoc_id;
           saved = await em.save(ClickPaymentTransaction, winner);
         } else {
           throw e;
@@ -158,7 +161,7 @@ export class ClickService {
 
   async complete(dto: ClickWebhookDto): Promise<ClickResponse> {
     const {
-      click_trans_id, merchant_trans_id, merchant_prepare_id,
+      click_trans_id, click_paydoc_id, merchant_trans_id, merchant_prepare_id,
       amount, action, sign_string, sign_time, service_id, error: clickError,
     } = dto;
 
@@ -185,6 +188,10 @@ export class ClickService {
       if (tx.status === ClickTxStatus.Success) return errRes(ERR.ALREADY_PAID, 'already paid');
 
       const clickErrCode = Number(clickError ?? 0);
+
+      // Recorded on both outcomes: this is the Merchant API payment_id, the
+      // key needed later for payment/status lookups and payment/reversal.
+      if (click_paydoc_id) tx.clickPaydocId = click_paydoc_id;
 
       if (clickErrCode < 0) {
         tx.status = ClickTxStatus.Cancelled;

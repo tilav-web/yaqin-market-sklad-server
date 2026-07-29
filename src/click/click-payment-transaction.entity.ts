@@ -35,6 +35,13 @@ export class ClickPaymentTransaction {
   @Column({ type: 'varchar', nullable: true })
   clickPaymentId!: string | null;
 
+  // click_paydoc_id from the Shop API webhooks. This — NOT clickTransId — is
+  // the `payment_id` that the Merchant API payment/status and payment/reversal
+  // endpoints accept, so it's what makes automated refunds possible for
+  // redirect payments (card-token payments already get clickPaymentId).
+  @Column({ type: 'varchar', nullable: true })
+  clickPaydocId!: string | null;
+
   @Column({ type: 'decimal', precision: 14, scale: 2 })
   amount!: string;
 
