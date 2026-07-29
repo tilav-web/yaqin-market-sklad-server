@@ -130,6 +130,15 @@ export class ClickMerchantService {
     }
 
     const json = (await res.json().catch(() => null)) as (T & ClickMerchantResponse) | null;
+    // Full request/response trace for payment calls only — this path carries
+    // no PAN/sms_code (unlike card_token/request|verify, which must never be
+    // logged), and the trace is the evidence Click support asks for while the
+    // account activation issues are being resolved.
+    if (path === 'card_token/payment') {
+      this.logger.log(
+        `card_token/payment trace: request=${JSON.stringify(body)} response(HTTP ${res.status})=${JSON.stringify(json)}`,
+      );
+    }
     if (!json || typeof json.error_code !== 'number') {
       this.logger.error(`Click Merchant API unexpected response: HTTP ${res.status}`);
       throw new BadRequestException("Click javobini o'qib bo'lmadi");
