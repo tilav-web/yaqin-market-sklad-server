@@ -45,20 +45,27 @@ export class ClickController {
     return this.cardService.payOrderWithCard(user.sub, id, dto.cardId);
   }
 
+  // The webhook bodies are typed as plain records, NOT ClickWebhookDto: the
+  // global ValidationPipe (forbidNonWhitelisted) skips non-class body types,
+  // and that's deliberate. Click sends undeclared extra fields (observed
+  // 2026-07-29: `param2=merchant` on token-sourced payments) and per the Shop
+  // API contract a webhook must never get an HTTP 400 — errors are reported
+  // in a 200 body via the `error` code. Authenticity is enforced by
+  // checkSign() in the service, which fails closed on any missing field.
   @Public()
   @Post('prepare')
   @HttpCode(HttpStatus.OK)
   @Header('Content-Type', 'application/json')
-  prepare(@Body() dto: ClickWebhookDto) {
-    return this.clickService.prepare(dto);
+  prepare(@Body() body: Record<string, string>) {
+    return this.clickService.prepare(body as unknown as ClickWebhookDto);
   }
 
   @Public()
   @Post('complete')
   @HttpCode(HttpStatus.OK)
   @Header('Content-Type', 'application/json')
-  complete(@Body() dto: ClickWebhookDto) {
-    return this.clickService.complete(dto);
+  complete(@Body() body: Record<string, string>) {
+    return this.clickService.complete(body as unknown as ClickWebhookDto);
   }
 
   /**
