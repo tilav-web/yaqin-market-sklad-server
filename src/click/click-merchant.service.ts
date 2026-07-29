@@ -78,7 +78,7 @@ export class ClickMerchantService {
       // the official click-llc/click-integration-php reference SDK sends
       // `merchant_trans_id` (matching every other Click endpoint). Sending
       // both is a harmless hedge until this is confirmed one way or the
-      // other with Click support — see ../../CLICK_TOLOV_REFERENCE.md.
+      // other with Click support — see ../../CLICK_PAYMENT_REFERENCE.md.
       merchant_trans_id: merchantTransId,
       transaction_parameter: merchantTransId,
     });
