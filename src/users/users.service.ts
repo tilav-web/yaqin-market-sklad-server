@@ -101,7 +101,10 @@ export class UsersService {
 
   // Addresses
   listAddresses(userId: string): Promise<UserAddress[]> {
-    return this.addresses.find({ where: { userId }, order: { isDefault: 'DESC', createdAt: 'ASC' } });
+    return this.addresses.find({
+      where: { userId, isArchived: false },
+      order: { isDefault: 'DESC', createdAt: 'ASC' },
+    });
   }
 
   async createAddress(
@@ -165,8 +168,16 @@ export class UsersService {
   }
 
   async deleteAddress(userId: string, addressId: string): Promise<void> {
-    const result = await this.addresses.delete({ id: addressId, userId });
-    if (!result.affected) throw new NotFoundException('Manzil topilmadi');
+    const address = await this.addresses.findOne({ where: { id: addressId, userId } });
+    if (!address) throw new NotFoundException('Manzil topilmadi');
+    // orders.deliveryAddressId is ON DELETE RESTRICT — an address referenced by
+    // any order can only be archived, a hard delete would fail on the FK.
+    const usedInOrders = await this.orders.count({ where: { deliveryAddressId: addressId } });
+    if (usedInOrders > 0) {
+      await this.addresses.update({ id: addressId }, { isArchived: true, isDefault: false });
+    } else {
+      await this.addresses.delete({ id: addressId });
+    }
   }
 
   // ---- Admin ---------------------------------------------------------------
