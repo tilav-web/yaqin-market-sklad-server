@@ -11,7 +11,6 @@ import {
 } from 'typeorm';
 
 import { Shop } from '../../shops/entities/shop.entity';
-import { UserAddress } from '../../users/entities/user-address.entity';
 import { User } from '../../users/entities/user.entity';
 import { OrderItem } from './order-item.entity';
 
@@ -67,6 +66,18 @@ export interface OrderTimelineEvent {
   note?: string;
 }
 
+/** Delivery address as it was at order time (see Order.deliveryAddress). */
+export interface OrderDeliveryAddress {
+  label: string;
+  address: string;
+  latitude: number;
+  longitude: number;
+  entrance: string | null;
+  floor: string | null;
+  apartment: string | null;
+  intercom: string | null;
+}
+
 @Entity({ name: 'orders' })
 @Index(['userId'])
 @Index(['shopId'])
@@ -91,13 +102,19 @@ export class Order {
   @JoinColumn({ name: 'shopId' })
   shop!: Shop;
 
-  // Null for in-store sales (no delivery).
+  // Null for in-store sales (no delivery). Plain uuid, deliberately no FK —
+  // the user may edit or delete the saved address at any time; the order
+  // relies only on its own snapshot below.
   @Column({ type: 'uuid', nullable: true })
   deliveryAddressId!: string | null;
 
-  @ManyToOne(() => UserAddress, { onDelete: 'RESTRICT', nullable: true })
-  @JoinColumn({ name: 'deliveryAddressId' })
-  deliveryAddress!: UserAddress | null;
+  /**
+   * Full copy of the delivery address captured at order-creation time.
+   * Saved addresses change often (edited coordinates, deleted entirely), so
+   * the order keeps its own immutable snapshot instead of a relation.
+   */
+  @Column({ type: 'jsonb', nullable: true })
+  deliveryAddress!: OrderDeliveryAddress | null;
 
   @Column({ type: 'enum', enum: OrderChannel, default: OrderChannel.Delivery })
   channel!: OrderChannel;

@@ -211,10 +211,7 @@ export class OrdersService {
     lat: number,
     lng: number,
   ): Promise<{ orderId: string; lat: number; lng: number; etaMinutes: number | null; updatedAt: string }> {
-    const order = await this.orders.findOne({
-      where: { id: orderId },
-      relations: { deliveryAddress: true },
-    });
+    const order = await this.orders.findOne({ where: { id: orderId } });
     if (!order) throw new NotFoundException('Buyurtma topilmadi');
     if (order.status !== OrderStatus.Delivering) {
       throw new BadRequestException('Buyurtma hozir yetkazilmoqda holatida emas');
@@ -254,7 +251,7 @@ export class OrdersService {
     const activeStatuses = [OrderStatus.New, OrderStatus.Accepted, OrderStatus.Preparing, OrderStatus.Delivering];
     const orders = await this.orders.find({
       where: { userId, status: In(activeStatuses) },
-      relations: { shop: true, deliveryAddress: true },
+      relations: { shop: true },
       order: { createdAt: 'DESC' },
     });
 
@@ -404,6 +401,17 @@ export class OrdersService {
         userId,
         shopId: shop.id,
         deliveryAddressId: address.id,
+        // Immutable copy — the saved address may be edited/deleted later.
+        deliveryAddress: {
+          label: address.label,
+          address: address.address,
+          latitude: address.latitude,
+          longitude: address.longitude,
+          entrance: address.entrance,
+          floor: address.floor,
+          apartment: address.apartment,
+          intercom: address.intercom,
+        },
         orderNumber: orderNumberGen(),
         subTotal,
         deliveryFee,
@@ -641,7 +649,6 @@ export class OrdersService {
       // Photos live on GlobalProduct, not ProductVariant — join through so
       // the seller app can show a product image per order line.
       .leftJoinAndSelect('pv.globalProduct', 'gp')
-      .leftJoinAndSelect('o.deliveryAddress', 'addr')
       .leftJoinAndSelect('o.user', 'usr')
       .where('o.shopId = :shopId', { shopId });
     if (effectiveStatus) qb.andWhere('o.status = :status', { status: effectiveStatus });
@@ -692,7 +699,6 @@ export class OrdersService {
       relations: {
         items: { productVariant: { globalProduct: true } },
         shop: true,
-        deliveryAddress: true,
         user: true,
       },
     });
@@ -1543,7 +1549,7 @@ export class OrdersService {
 
     const deliveringOrders = await this.orders.find({
       where: { shopId, status: OrderStatus.Delivering },
-      relations: { deliveryAddress: true, user: true },
+      relations: { user: true },
     });
 
     const unvisited = deliveringOrders
@@ -1687,7 +1693,7 @@ export class OrdersService {
   async adminGetOrder(id: string): Promise<Order> {
     const order = await this.orders.findOne({
       where: { id },
-      relations: { items: { productVariant: true }, shop: true, user: true, deliveryAddress: true },
+      relations: { items: { productVariant: true }, shop: true, user: true },
     });
     if (!order) throw new NotFoundException('Buyurtma topilmadi');
     return order;

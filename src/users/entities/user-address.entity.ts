@@ -54,15 +54,6 @@ export class UserAddress {
   @Column({ type: 'boolean', default: false })
   isDefault!: boolean;
 
-  /**
-   * Delivered orders keep an FK to their address (ON DELETE RESTRICT), so an
-   * address that was ever used in an order can't be hard-deleted. "Deleting"
-   * such an address archives it instead: hidden from the user's list but still
-   * resolvable from order history.
-   */
-  @Column({ type: 'boolean', default: false })
-  isArchived!: boolean;
-
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt!: Date;
 
