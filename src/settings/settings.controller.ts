@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Put } from '@nestjs/common';
+import { Body, Controller, Get, Param, Put, Query } from '@nestjs/common';
 
 import { Role } from '../auth/role.enum';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -15,8 +15,22 @@ export class SettingsController {
     return this.svc.getAll();
   }
 
+  /**
+   * Marja-kalkulyator: admin panel komissiya maydonini o'zgartirganda shu
+   * endpoint bilan jonli breakdown/ogohlantirish ko'rsatadi.
+   * ?commission=2 — saqlanmagan qiymatni sinab ko'rish; bo'sh — joriy sozlama.
+   */
+  @Get('economics')
+  economics(@Query('commission') commission?: string) {
+    const n =
+      commission != null && commission.trim() !== ''
+        ? Number(commission)
+        : undefined;
+    return this.svc.computeEconomics(Number.isFinite(n) ? n : undefined);
+  }
+
   @Put(':key')
   set(@Param('key') key: string, @Body() body: SetSettingValueDto) {
-    return this.svc.set(key, body.value);
+    return this.svc.set(key, body.value, body.force ?? false);
   }
 }

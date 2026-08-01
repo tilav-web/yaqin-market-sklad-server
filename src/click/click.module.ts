@@ -1,8 +1,10 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
+import { FiscalModule } from '../fiscal/fiscal.module';
 import { Order } from '../orders/entities/order.entity';
 import { RealtimeModule } from '../realtime/realtime.module';
+import { SettingsModule } from '../settings/settings.module';
 import { ClickCardController } from './click-card.controller';
 import { ClickCardService } from './click-card.service';
 import { ClickController } from './click.controller';
@@ -15,6 +17,8 @@ import { SavedCard } from './saved-card.entity';
   imports: [
     TypeOrmModule.forFeature([ClickPaymentTransaction, Order, SavedCard]),
     RealtimeModule,
+    SettingsModule,
+    FiscalModule,
   ],
   controllers: [ClickController, ClickCardController],
   providers: [ClickService, ClickMerchantService, ClickCardService],

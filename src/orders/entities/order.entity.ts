@@ -222,6 +222,18 @@ export class Order {
   @Column({ type: 'timestamptz', nullable: true })
   refundedAt!: Date | null;
 
+  /**
+   * To'lov provayderi (Click) totaldan ushlab qolgan ekvayring haqi —
+   * to'lov tasdiqlangan paytdagi click_fee_percent bo'yicha snapshot.
+   * Platforma o'z zimmasiga oladi (seller ulushidan ayrilmaydi) — analitika
+   * va real marja hisobi uchun saqlanadi. Naqd buyurtmada 0.
+   */
+  @Column({ type: 'int', default: 0 })
+  providerFeeAmount!: number;
+
+  @Column({ type: 'double precision', nullable: true })
+  providerFeePercentSnapshot!: number | null;
+
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt!: Date;
 

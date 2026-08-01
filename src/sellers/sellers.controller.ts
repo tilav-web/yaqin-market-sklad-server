@@ -19,6 +19,7 @@ import {
   ApproveApplicationDto,
   CreateSellerApplicationDto,
   RejectApplicationDto,
+  SetKomissionerStatusDto,
   UpsertSellerProfileDto,
 } from './dto/seller-application.dto';
 import { SellersService } from './sellers.service';
@@ -31,7 +32,10 @@ export class SellersController {
 
   // Customer side
   @Post('apply')
-  apply(@CurrentUser() user: JwtPayload, @Body() dto: CreateSellerApplicationDto) {
+  apply(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: CreateSellerApplicationDto,
+  ) {
     return this.sellers.submitApplication(user.sub, dto);
   }
 
@@ -90,5 +94,21 @@ export class SellersController {
   ) {
     const { verify, ...dto } = body;
     return this.sellers.upsertProfile(userId, admin.sub, dto, verify);
+  }
+
+  /**
+   * Seller my.soliq.uz kabinetida platformani komissioner sifatida
+   * ro'yxatdan o'tkazganini admin tasdiqlaydi (soliq kabinetdan qo'lda
+   * tekshirib) — shundan keyin uning nomidan chek chiqarish qonuniy kuchga
+   * ega bo'ladi.
+   */
+  @Roles(Role.Admin)
+  @Put('admin/profiles/:userId/komissioner')
+  setKomissioner(
+    @CurrentUser() admin: JwtPayload,
+    @Param('userId', ParseUUIDPipe) userId: string,
+    @Body() body: SetKomissionerStatusDto,
+  ) {
+    return this.sellers.setKomissionerStatus(userId, admin.sub, body.confirmed);
   }
 }

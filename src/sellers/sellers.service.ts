@@ -26,6 +26,8 @@ export class SellersService {
       firstName: string;
       lastName: string;
       contactPhone?: string;
+      stir?: string;
+      entityType?: string;
       note?: string;
     },
   ): Promise<SellerApplication> {
@@ -40,6 +42,8 @@ export class SellersService {
       firstName: dto.firstName,
       lastName: dto.lastName,
       contactPhone: dto.contactPhone ?? null,
+      stir: dto.stir ?? null,
+      entityType: dto.entityType ?? null,
       note: dto.note ?? null,
       status: SellerApplicationStatus.Pending,
     });
@@ -91,7 +95,16 @@ export class SellersService {
 
       let profile = await manager.findOne(SellerProfile, { where: { userId: locked.userId } });
       if (!profile) profile = manager.create(SellerProfile, { userId: locked.userId });
+      // Arizada kelgan soliq rekvizitlari — admin approve-dto'da bermagan
+      // bo'lsa arizadagisi profilega ko'chadi.
+      if (locked.stir && !profileDto.stir) profile.stir = locked.stir;
+      if (locked.entityType && !profileDto.entityType) profile.entityType = locked.entityType;
       Object.assign(profile, profileDto);
+      // STIR bor — endi seller my.soliq.uz'da bizni komissioner qilib
+      // qo'shishi kutiladi; admin tasdiqlagach 'confirmed' bo'ladi.
+      if (profile.stir && profile.komissionerStatus === 'none') {
+        profile.komissionerStatus = 'pending';
+      }
       profile.verifiedAt = new Date();
       profile.verifiedByAdminId = adminUserId;
       await manager.save(profile);
@@ -137,7 +150,7 @@ export class SellersService {
   async upsertProfile(
     userId: string,
     adminId: string,
-    dto: Partial<Pick<SellerProfile, 'fullName' | 'passportOrPinfl' | 'stir' | 'bankCardNumber' | 'bankCardHolderName' | 'adminNotes'>>,
+    dto: Partial<Pick<SellerProfile, 'fullName' | 'passportOrPinfl' | 'stir' | 'entityType' | 'vatPayer' | 'bankCardNumber' | 'bankCardHolderName' | 'adminNotes'>>,
     verify = false,
   ): Promise<SellerProfile> {
     let profile = await this.profiles.findOne({ where: { userId } });
@@ -145,10 +158,35 @@ export class SellersService {
       profile = this.profiles.create({ userId });
     }
     Object.assign(profile, dto);
+    if (profile.stir && profile.komissionerStatus === 'none') {
+      profile.komissionerStatus = 'pending';
+    }
     if (verify) {
       profile.verifiedAt = new Date();
       profile.verifiedByAdminId = adminId;
     }
+    return this.profiles.save(profile);
+  }
+
+  /**
+   * Admin soliq kabinetida sellerning komissioner ro'yxatiga qo'shganini
+   * ko'rib tasdiqlaydi (yoki bekor qiladi). Avtomatik tekshirish uchun soliq
+   * tomonida ochiq API yo'q — jarayon hozircha qo'lda; API chiqsa shu metod
+   * cron ichidan chaqiriladigan bo'ladi.
+   */
+  async setKomissionerStatus(
+    userId: string,
+    adminId: string,
+    confirmed: boolean,
+  ): Promise<SellerProfile> {
+    const profile = await this.profiles.findOne({ where: { userId } });
+    if (!profile) throw new NotFoundException('Seller profili topilmadi');
+    if (confirmed && !profile.stir) {
+      throw new BadRequestException("Avval sellerning STIRini kiriting — STIRsiz komissioner tasdig'i ma'nosiz");
+    }
+    profile.komissionerStatus = confirmed ? 'confirmed' : 'pending';
+    profile.komissionerConfirmedAt = confirmed ? new Date() : null;
+    profile.komissionerConfirmedByAdminId = confirmed ? adminId : null;
     return this.profiles.save(profile);
   }
 }

@@ -18,11 +18,34 @@ export class CreateSellerApplicationDto {
   @MaxLength(32)
   contactPhone?: string;
 
+  @ApiPropertyOptional({
+    description: 'STIR (soliq raqami) — chek chiqarish uchun kerak',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(16)
+  stir?: string;
+
+  @ApiPropertyOptional({ description: 'YaTT, MChJ, AJ...' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  entityType?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
   @MaxLength(1000)
   note?: string;
+}
+
+export class SetKomissionerStatusDto {
+  @ApiProperty({
+    description:
+      "true = soliq kabinetida tasdiqlangan, false = qaytadan 'pending'",
+  })
+  @IsBoolean()
+  confirmed!: boolean;
 }
 
 export class RejectApplicationDto {
@@ -138,6 +161,13 @@ export class UpsertSellerProfileDto {
   @IsOptional()
   @IsString()
   adminNotes?: string;
+
+  @ApiPropertyOptional({
+    description: "QQS to'lovchimi — cheklar QQS bilan chiqadi",
+  })
+  @IsOptional()
+  @IsBoolean()
+  vatPayer?: boolean;
 
   @ApiPropertyOptional()
   @IsOptional()

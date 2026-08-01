@@ -10,6 +10,7 @@ import {
 } from 'typeorm';
 
 import { Category } from '../../categories/entities/category.entity';
+import { TaxCategory } from '../../fiscal/entities/tax-category.entity';
 
 export type UnitType = 'piece' | 'kg' | 'liter' | 'gram' | 'pack';
 
@@ -50,6 +51,19 @@ export class GlobalProduct {
   @ManyToOne(() => Category, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'categoryId' })
   category!: Category | null;
+
+  /**
+   * Soliq toifasi (MXIK/IKPU) — katalog darajasida, chunki bir mahsulotni
+   * sotayotgan barcha do'konlar uchun kod bir xil. Null = fiskal chek
+   * 'incomplete' bo'ladi (admin "MXIK biriktirilmagan mahsulotlar" ro'yxatida
+   * ko'radi).
+   */
+  @Column({ type: 'uuid', nullable: true })
+  taxCategoryId!: string | null;
+
+  @ManyToOne(() => TaxCategory, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'taxCategoryId' })
+  taxCategory!: TaxCategory | null;
 
   @Column({ type: 'jsonb', default: () => "'[]'::jsonb" })
   photos!: string[];

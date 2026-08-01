@@ -14,6 +14,7 @@ import { AuditLogService } from '../audit-log/audit-log.service';
 import { AuditAction } from '../audit-log/entities/admin-audit-log.entity';
 import { ClickService } from '../click/click.service';
 import { ComplaintsService } from '../complaints/complaints.service';
+import { FiscalService } from '../fiscal/fiscal.service';
 import { buildXlsxBuffer } from '../common/xlsx.util';
 import { calcDeliveryFee, estimateEtaMinutes, haversineKm, pointInPolygon } from '../geo/geo.util';
 import { SellerTransaction, SellerTxType } from '../payments/entities/seller-transaction.entity';
@@ -95,6 +96,7 @@ export class OrdersService {
     private readonly complaints: ComplaintsService,
     private readonly auditLog: AuditLogService,
     private readonly click: ClickService,
+    private readonly fiscal: FiscalService,
   ) {}
 
   private static readonly STATUS_LABEL: Record<OrderStatus, string> = {
@@ -371,6 +373,15 @@ export class OrdersService {
       throw new BadRequestException(`Minimal buyurtma narxi: ${shop.minOrderPrice} so'm`);
     }
 
+    // Platforma-darajali minimal buyurtma (unit economics himoyasi): juda
+    // kichik buyurtmada Click ekvayring + SMS + payout xarajatlari
+    // komissiyadan oshib ketadi — har bir shunday buyurtma platformaga zarar.
+    // Do'kon o'z minimumini bundan yuqori qo'yishi mumkin (yuqoridagi check).
+    const platformMin = this.settings.getNumber(SETTING_KEYS.MIN_ORDER_TOTAL, 0);
+    if (platformMin > 0 && subTotal < platformMin) {
+      throw new BadRequestException(`Minimal buyurtma summasi: ${platformMin} so'm`);
+    }
+
     // Free-delivery polygon is authoritative over the circle-based freeKm too
     // (mirrors products.service.ts's feedNearby fee calc) — a customer inside
     // the configured free-delivery polygon must not be charged a fee.
@@ -595,6 +606,10 @@ export class OrdersService {
         );
       }
       return manager.findOneOrFail(Order, { where: { id: savedOrder.id }, relations: { items: true } });
+    }).then((order) => {
+      // Do'konda naqd sotildi — pul shu zahoti olindi, chek ham shu zahoti.
+      void this.fiscal.createSaleReceipt(order.id);
+      return order;
     });
   }
 
@@ -851,6 +866,10 @@ export class OrdersService {
       void this.settleDeliveredOrder(order).catch((err) =>
         this.logger.error(`Payment settlement failed for order ${order.id}: ${err.message}`),
       );
+      // Fiskal chek: naqd buyurtmada pul shu paytda olinadi. Onlaynda chek
+      // to'lov webhookida chiqqan — createSaleReceipt idempotent, shuning
+      // uchun bu chaqiruv webhook paytida yiqilgan chekni ham qoplaydi.
+      void this.fiscal.createSaleReceipt(order.id);
     }
 
     // A captured Click payment must follow its order out the door: any
@@ -1284,6 +1303,11 @@ export class OrdersService {
 
     const result = await this.orders.findOneOrFail({ where: { id: orderId }, relations: { items: true, shop: true } });
     this.emitOrderEvent('order:updated', result);
+    // To'lab bo'lingan (onlayn) buyurtmada sotuv cheki allaqachon chiqqan —
+    // qaytarilgan qatorlar uchun qisman refund chek kerak. Naqdda sotuv cheki
+    // hali yo'q (u Delivered'da, kamaytirilgan miqdorlar bilan chiqadi) —
+    // createRefundReceipt sotuv cheki bo'lmasa o'zi hech narsa qilmaydi.
+    void this.fiscal.createRefundReceipt(orderId, returns);
     // Remind the customer to (optionally) add a return reason.
     if (result.userId) void this.push.sendToUser(result.userId, {
       title: `Buyurtma #${result.orderNumber}`,

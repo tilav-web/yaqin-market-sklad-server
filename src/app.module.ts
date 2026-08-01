@@ -11,6 +11,7 @@ import { AuditLogModule } from './audit-log/audit-log.module';
 import { ChatTemplatesModule } from './chat-templates/chat-templates.module';
 import { ClickModule } from './click/click.module';
 import { ComplaintsModule } from './complaints/complaints.module';
+import { FiscalModule } from './fiscal/fiscal.module';
 import { PromotionsModule } from './promotions/promotions.module';
 import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
@@ -74,6 +75,7 @@ import { UsersModule } from './users/users.module';
     ClickModule,
     ComplaintsModule,
     AuditLogModule,
+    FiscalModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsFilter },

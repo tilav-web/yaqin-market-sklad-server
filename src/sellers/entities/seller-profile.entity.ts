@@ -1,4 +1,12 @@
-import { Column, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
+import {
+  Column,
+  Entity,
+  Index,
+  JoinColumn,
+  ManyToOne,
+  PrimaryGeneratedColumn,
+  UpdateDateColumn,
+} from 'typeorm';
 
 import { User } from '../../users/entities/user.entity';
 
@@ -35,6 +43,31 @@ export class SellerProfile {
   /** YaTT, MChJ, AJ, etc. */
   @Column({ type: 'varchar', length: 64, nullable: true })
   entityType!: string | null;
+
+  /**
+   * QQS to'lovchisimi — fiskal chek qatorlarida QQS ko'rsatiladimi-yo'qmi
+   * shunga qarab hal bo'ladi (QQS mahsulotga emas, sellerning rejimiga
+   * bog'liq).
+   */
+  @Column({ type: 'boolean', default: false })
+  vatPayer!: boolean;
+
+  /**
+   * Komissioner ro'yxati holati. Seller my.soliq.uz kabinetida platformani
+   * (STIRimizni) "vositachi/komissioner" sifatida qo'shishi shart — aks holda
+   * uning nomidan chiqargan cheklarimiz soliq hisobotida unga bog'lanmaydi.
+   * Buni avtomatik aniqlash uchun ochiq API yo'q — admin soliq kabinetdan
+   * tekshirib qo'lda tasdiqlaydi (API paydo bo'lsa shu maydonlar avtomatik
+   * to'ldiriladigan bo'ladi).
+   */
+  @Column({ type: 'varchar', length: 16, default: 'none' })
+  komissionerStatus!: 'none' | 'pending' | 'confirmed';
+
+  @Column({ type: 'timestamptz', nullable: true })
+  komissionerConfirmedAt!: Date | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  komissionerConfirmedByAdminId!: string | null;
 
   @Column({ type: 'varchar', length: 64, nullable: true })
   contractNumber!: string | null;

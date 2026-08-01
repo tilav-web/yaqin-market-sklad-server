@@ -9,8 +9,11 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, IsNull, Repository } from 'typeorm';
 
+import { FiscalService } from '../fiscal/fiscal.service';
 import { Order, PaymentMethod, PaymentStatus, isTerminalOrderStatus } from '../orders/entities/order.entity';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
+import { SETTING_KEYS } from '../settings/entities/global-setting.entity';
+import { SettingsService } from '../settings/settings.service';
 import { ClickMerchantService } from './click-merchant.service';
 import { ClickWebhookDto } from './click-webhook.dto';
 import { ClickPaymentTransaction, ClickTxStatus } from './click-payment-transaction.entity';
@@ -51,6 +54,8 @@ export class ClickService {
     private readonly dataSource: DataSource,
     private readonly realtime: RealtimeGateway,
     private readonly merchant: ClickMerchantService,
+    private readonly settings: SettingsService,
+    private readonly fiscal: FiscalService,
   ) {}
 
   /**
@@ -86,9 +91,13 @@ export class ClickService {
 
     // IsNull guard: a concurrent refund attempt (cancel path racing the retry
     // cron) must not stamp twice.
-    await this.orderRepo.update({ id: orderId, refundedAt: IsNull() }, { refundedAt: new Date() });
+    const stamped = await this.orderRepo.update({ id: orderId, refundedAt: IsNull() }, { refundedAt: new Date() });
     this.logger.log(`Order ${orderId}: Click payment ${paymentId} reversed to the customer's card`);
     if (order.userId) this.realtime.emitToUser(order.userId, 'order:refunded', { orderId });
+    // Pul qaytdi → qaytarish cheki (asl sotuv chekini soliq tizimida bekor
+    // qiladi; mijoz cashback olgan bo'lsa uni soliq tizimi o'zi qaytarib
+    // oladi). Faqat birinchi stamplagan chaqiruv chiqaradi — poyga yo'q.
+    if (stamped.affected) void this.fiscal.createRefundReceipt(orderId);
     return true;
   }
 
@@ -244,7 +253,15 @@ export class ClickService {
       tx.status = ClickTxStatus.Success;
       tx.clickTransId = click_trans_id;
       await em.save(ClickPaymentTransaction, tx);
-      await em.update(Order, order.id, { paymentStatus: PaymentStatus.Paid });
+      // Click o'z ekvayring haqini totaldan ushlab qoladi — real marja
+      // hisobi uchun to'lov paytidagi foiz bo'yicha snapshot qilinadi
+      // (platforma yutadi, seller hisob-kitobiga ta'sir qilmaydi).
+      const feePercent = this.settings.getNumber(SETTING_KEYS.CLICK_FEE_PERCENT, 0);
+      await em.update(Order, order.id, {
+        paymentStatus: PaymentStatus.Paid,
+        providerFeeAmount: Math.round((order.total * feePercent) / 100),
+        providerFeePercentSnapshot: feePercent,
+      });
 
       return {
         click_trans_id,
@@ -258,6 +275,10 @@ export class ClickService {
     // Notify customer via Socket.IO after payment confirmed
     if (!('error' in result) || result.error === String(ERR.OK)) {
       if (order.userId) this.realtime.emitToUser(order.userId, 'order:payment_confirmed', { orderId: order.id });
+      // Qonun: chek to'lov qabul qilingan paytda chiqariladi. Fire-and-forget
+      // — chek muammosi to'lov webhookini yiqitmasligi kerak (servis o'zi
+      // xatoni yutadi va log qiladi).
+      void this.fiscal.createSaleReceipt(order.id);
     }
 
     return result;

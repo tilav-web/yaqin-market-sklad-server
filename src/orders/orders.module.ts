@@ -4,6 +4,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuditLogModule } from '../audit-log/audit-log.module';
 import { ClickModule } from '../click/click.module';
 import { ComplaintsModule } from '../complaints/complaints.module';
+import { FiscalModule } from '../fiscal/fiscal.module';
 import { InventoryMovement } from '../products/entities/inventory-movement.entity';
 import { SellerTransaction } from '../payments/entities/seller-transaction.entity';
 import { PaymentsModule } from '../payments/payments.module';
@@ -50,6 +51,7 @@ import { OrdersService } from './orders.service';
     ComplaintsModule,
     AuditLogModule,
     ClickModule,
+    FiscalModule,
   ],
   controllers: [OrdersController, SellerOrdersController, AdminOrdersController],
   providers: [OrdersService],
