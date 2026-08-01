@@ -39,7 +39,8 @@ export interface FiscalReceiptLine {
   unitCode: string | null;
   markingRequired: boolean;
   /** Data Matrix kodi — skanerlash oqimi qo'shilganda to'ldiriladi. */
-  markingCode: string | null;
+  /** Data Matrix kodlari — har bir sotilgan dona uchun bittadan (skanerlangan bo'lsa). */
+  markingCodes: string[];
   quantity: number;
   unitPrice: number;
   lineTotal: number;

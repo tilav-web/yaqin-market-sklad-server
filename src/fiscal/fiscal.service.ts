@@ -121,6 +121,14 @@ export class FiscalService {
           const gid = item.productVariant?.globalProduct?.id ?? 'unknown';
           missing.push(`product:${gid}:mxik`);
         }
+        // Markirovkali tovar: har bir dona uchun skanerlangan Data Matrix kod
+        // bo'lishi shart — kod yetishmasa chek incomplete bo'ladi (skanerlash
+        // seller mobil ilovasida, marking-codes endpoint orqali keladi).
+        const markingRequired = tax?.markingRequired ?? false;
+        const markingCodes = (item.markingCodes ?? []).slice(0, qty);
+        if (markingRequired && markingCodes.length < qty) {
+          missing.push(`marking:${item.id}`);
+        }
         const lineTotal = item.unitPrice * qty;
         lines.push({
           orderItemId: item.id,
@@ -128,8 +136,8 @@ export class FiscalService {
           mxikCode: tax?.mxikCode ?? null,
           packageCode: tax?.packageCode ?? null,
           unitCode: tax?.unitCode ?? null,
-          markingRequired: tax?.markingRequired ?? false,
-          markingCode: null,
+          markingRequired,
+          markingCodes,
           quantity: qty,
           unitPrice: item.unitPrice,
           lineTotal,
@@ -139,18 +147,19 @@ export class FiscalService {
       }
 
       // Yetkazib berish — alohida xizmat qatori (chek jami mijoz to'lagan
-      // summaga teng bo'lishi shart). Xizmatning MXIK kodi hozircha yo'q —
-      // topilgach TaxCategory sifatida kiritilib shu yerga ulanadi.
+      // summaga teng bo'lishi shart). MXIK: tasnif "Kuryerlik xizmati",
+      // sozlamadan olinadi (delivery_mxik_code).
       if (order.deliveryFee > 0) {
-        missing.push('delivery:mxik');
+        const deliveryMxik = this.settings.get(SETTING_KEYS.DELIVERY_MXIK_CODE, '');
+        if (!deliveryMxik) missing.push('delivery:mxik');
         lines.push({
           orderItemId: 'delivery',
           productName: 'Yetkazib berish xizmati',
-          mxikCode: null,
+          mxikCode: deliveryMxik || null,
           packageCode: null,
           unitCode: null,
           markingRequired: false,
-          markingCode: null,
+          markingCodes: [],
           quantity: 1,
           unitPrice: order.deliveryFee,
           lineTotal: order.deliveryFee,
@@ -410,6 +419,50 @@ export class FiscalService {
     }
     product.taxCategoryId = taxCategoryId;
     return this.globalProducts.save(product);
+  }
+
+  async getGlobalProduct(globalProductId: string): Promise<GlobalProduct> {
+    const product = await this.globalProducts.findOne({ where: { id: globalProductId } });
+    if (!product) throw new NotFoundException('Mahsulot topilmadi');
+    return product;
+  }
+
+  /**
+   * Tasnif taklifini bir bosishda qo'llash: shu mxikCode bilan toifa bo'lsa
+   * o'shanga, bo'lmasa yangi toifa yaratib mahsulotga biriktiradi.
+   */
+  async applyTasnifSuggestion(
+    globalProductId: string,
+    dto: { mxikCode: string; name: string; unitCode?: string | null; markingRequired?: boolean },
+  ): Promise<GlobalProduct> {
+    let tax = await this.taxCategories.findOne({ where: { mxikCode: dto.mxikCode } });
+    if (!tax) {
+      tax = await this.taxCategories.save(
+        this.taxCategories.create({
+          title: dto.name.slice(0, 256),
+          mxikCode: dto.mxikCode,
+          unitCode: dto.unitCode ?? null,
+          markingRequired: dto.markingRequired ?? false,
+        }),
+      );
+    }
+    return this.assignTaxCategory(globalProductId, tax.id);
+  }
+
+  /**
+   * Order bo'yicha incomplete sotuv chekini qayta qurish — marking kodlar
+   * skanerlangandan yoki MXIK biriktirilgandan keyin chaqiriladi. Chek yo'q
+   * yoki allaqachon to'liq bo'lsa jim o'tadi.
+   */
+  async rebuildIncompleteSaleForOrder(orderId: string): Promise<void> {
+    try {
+      const receipt = await this.receipts.findOne({
+        where: { orderId, type: FiscalReceiptType.Sale, status: FiscalReceiptStatus.Incomplete },
+      });
+      if (receipt) await this.rebuildReceipt(receipt.id);
+    } catch (err) {
+      this.logger.warn(`rebuildIncompleteSaleForOrder(${orderId}): ${(err as Error).message}`);
+    }
   }
 
   /* ─── TaxCategory CRUD ─── */

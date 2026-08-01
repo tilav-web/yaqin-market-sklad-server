@@ -32,6 +32,7 @@ export const SETTING_KEYS = {
   FISCAL_MODE: 'fiscal_mode', // off | collect | live
   PLATFORM_LEGAL_NAME: 'platform_legal_name', // operator (MChJ) nomi — cheklar uchun
   PLATFORM_STIR: 'platform_stir', // operator STIRi — cheklar uchun
+  DELIVERY_MXIK_CODE: 'delivery_mxik_code', // yetkazish xizmati MXIK (tasnif: Kuryerlik xizmati)
 } as const;
 
 /**
@@ -43,4 +44,5 @@ export const STRING_SETTING_KEYS: Record<string, { allowedValues?: string[] }> =
     [SETTING_KEYS.FISCAL_MODE]: { allowedValues: ['off', 'collect', 'live'] },
     [SETTING_KEYS.PLATFORM_LEGAL_NAME]: {},
     [SETTING_KEYS.PLATFORM_STIR]: {},
+    [SETTING_KEYS.DELIVERY_MXIK_CODE]: {},
   };

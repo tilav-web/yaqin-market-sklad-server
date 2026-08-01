@@ -37,7 +37,7 @@ import { isShopOpenNow } from '../shops/shop-hours.util';
 import { UserAddress } from '../users/entities/user-address.entity';
 import { ChatMessage } from './entities/chat-message.entity';
 import { OrderItem } from './entities/order-item.entity';
-import { Order, OrderChannel, OrderStatus, OrderTimelineEvent, PaymentMethod, PaymentStatus } from './entities/order.entity';
+import { Order, OrderChannel, OrderStatus, OrderTimelineEvent, PaymentMethod, PaymentStatus, isTerminalOrderStatus } from './entities/order.entity';
 import { Review } from './entities/review.entity';
 
 const orderNumberGen = customAlphabet('ABCDEFGHJKLMNPQRSTUVWXYZ23456789', 8);
@@ -712,7 +712,9 @@ export class OrdersService {
       // is just price/stock) — load through to it so the app can show a
       // product image per order line.
       relations: {
-        items: { productVariant: { globalProduct: true } },
+        // taxCategory ham yuklanadi — mobil seller UI markirovka talab
+        // qilinadigan qatorlarni (markingRequired) shu orqali biladi.
+        items: { productVariant: { globalProduct: { taxCategory: true } } },
         shop: true,
         user: true,
       },
@@ -1321,6 +1323,40 @@ export class OrdersService {
    * Customer adds (or edits) an optional free-text reason for the returned
    * items in their order. Not required — just captured if offered.
    */
+  /**
+   * Seller tomoni: markirovkali (Asl belgisi) tovarlarning Data Matrix
+   * kodlarini saqlash — yig'uvchi/kuryer mobil ilovada skanerlaydi.
+   * Kodlar fiskal chek qatoriga kiradi; agar order bo'yicha incomplete chek
+   * bo'lsa (masalan onlayn to'lov chekida marking yetishmagan) avtomatik
+   * qayta quriladi.
+   */
+  async setMarkingCodes(
+    userId: string,
+    orderId: string,
+    items: { orderItemId: string; codes: string[] }[],
+  ): Promise<Order> {
+    const order = await this.orders.findOne({ where: { id: orderId }, relations: { shop: true } });
+    if (!order) throw new NotFoundException('Buyurtma topilmadi');
+    await this.assertShopCanManage(userId, order, 'orders.update_status');
+    if (isTerminalOrderStatus(order.status)) {
+      throw new BadRequestException('Yakunlangan buyurtmaga kod kiritib bo\'lmaydi');
+    }
+
+    const orderItems = await this.items.find({ where: { orderId } });
+    for (const { orderItemId, codes } of items) {
+      const item = orderItems.find((i) => i.id === orderItemId);
+      if (!item) throw new NotFoundException('Buyurtma elementi topilmadi');
+      // Takror skanerlangan kodlar tushiriladi; donadan ortiq kod saqlanmaydi.
+      item.markingCodes = [...new Set(codes.map((c) => c.trim()).filter(Boolean))].slice(
+        0,
+        item.quantity,
+      );
+      await this.items.save(item);
+    }
+    void this.fiscal.rebuildIncompleteSaleForOrder(orderId);
+    return this.orders.findOneOrFail({ where: { id: orderId }, relations: { items: true } });
+  }
+
   async setReturnReason(userId: string, orderId: string, reason: string): Promise<Order> {
     const order = await this.orders.findOne({ where: { id: orderId } });
     if (!order) throw new NotFoundException('Buyurtma topilmadi');

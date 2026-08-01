@@ -6,6 +6,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Put,
   Query,
   Res,
 } from '@nestjs/common';
@@ -29,6 +30,7 @@ import {
   ReturnReasonDto,
   SendMessageDto,
   SetCommissionExemptDto,
+  SetMarkingCodesDto,
   UpdateCourierLocationDto,
   UpdateOrderStatusDto,
 } from './dto/order.dto';
@@ -126,6 +128,16 @@ export class OrdersController {
     @Body() dto: PartialReturnDto,
   ) {
     return this.orders.partialReturn(user.sub, id, dto.items, dto.reason);
+  }
+
+  /** Seller/yig'uvchi: markirovkali tovarlarning Data Matrix kodlarini saqlash. */
+  @Put(':id/marking-codes')
+  setMarkingCodes(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: SetMarkingCodesDto,
+  ) {
+    return this.orders.setMarkingCodes(user.sub, id, dto.items);
   }
 
   @Post(':id/return-reason')

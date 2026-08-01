@@ -53,6 +53,14 @@ export class OrderItem {
   @Column({ type: 'int', default: 0 })
   costOfGoods!: number;
 
+  /**
+   * Asl belgisi (Data Matrix) markirovka kodlari — markirovka majburiy
+   * tovarlarda har bir dona uchun bittadan skanerlangan kod. Yig'uvchi/kuryer
+   * mobil ilovada skanerlaydi; fiskal chek qatoriga kiradi (qonun talabi).
+   */
+  @Column({ type: 'jsonb', default: () => "'[]'::jsonb" })
+  markingCodes!: string[];
+
   /** Qo'llanilgan aksiya (snapshot uchun). */
   @Column({ type: 'uuid', nullable: true })
   appliedPromotionId!: string | null;

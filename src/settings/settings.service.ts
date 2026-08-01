@@ -66,6 +66,10 @@ const DEFAULTS: Record<string, { value: string; description: string }> = {
     value: '',
     description: 'Operator (MChJ) STIRi — fiskal cheklar uchun',
   },
+  [SETTING_KEYS.DELIVERY_MXIK_CODE]: {
+    value: '10105001002000000',
+    description: "Yetkazib berish xizmati MXIK kodi (tasnif: 'Kuryerlik xizmati')",
+  },
 };
 
 /** Komissiya foizi berilganda platforma marjasi qanday bo'lishini hisoblaydi. */

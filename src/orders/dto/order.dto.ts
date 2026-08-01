@@ -238,3 +238,24 @@ export class SetCommissionExemptDto {
   @IsBoolean()
   exempt!: boolean;
 }
+
+export class MarkingItemDto {
+  @ApiProperty()
+  @IsUUID()
+  orderItemId!: string;
+
+  /** Data Matrix kodlari — har bir dona uchun bittadan. */
+  @ApiProperty({ type: [String] })
+  @IsArray()
+  @IsString({ each: true })
+  codes!: string[];
+}
+
+export class SetMarkingCodesDto {
+  @ApiProperty({ type: [MarkingItemDto] })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => MarkingItemDto)
+  items!: MarkingItemDto[];
+}

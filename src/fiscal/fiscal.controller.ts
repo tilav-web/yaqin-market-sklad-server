@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -17,18 +18,23 @@ import {
   FiscalReceiptType,
 } from './entities/fiscal-receipt.entity';
 import {
+  ApplyTasnifDto,
   AssignTaxCategoryDto,
   CreateTaxCategoryDto,
   UpdateTaxCategoryDto,
 } from './dto/fiscal.dto';
 import { FiscalService } from './fiscal.service';
+import { TasnifService } from './tasnif.service';
 
 @ApiBearerAuth()
 @ApiTags('admin-fiscal')
 @Controller('admin/fiscal')
 @Roles(Role.Admin)
 export class FiscalController {
-  constructor(private readonly fiscal: FiscalService) {}
+  constructor(
+    private readonly fiscal: FiscalService,
+    private readonly tasnif: TasnifService,
+  ) {}
 
   /* ─── Cheklar ─── */
 
@@ -107,5 +113,30 @@ export class FiscalController {
       globalProductId,
       dto.taxCategoryId ?? null,
     );
+  }
+
+  /* ─── Tasnif (soliq katalogi) qidiruv va taklif ─── */
+
+  /** Erkin qidiruv — toifa yaratishda MXIK topish uchun. */
+  @Get('tasnif-search')
+  tasnifSearch(@Query('text') text: string) {
+    if (!text?.trim()) throw new BadRequestException('text parametri kerak');
+    return this.tasnif.search(text, 10);
+  }
+
+  /** Mahsulot uchun taklif: barcode bo'yicha aniq, bo'lmasa nomi bo'yicha. */
+  @Get('products/:globalProductId/tasnif-suggest')
+  async tasnifSuggest(@Param('globalProductId', ParseUUIDPipe) globalProductId: string) {
+    const product = await this.fiscal.getGlobalProduct(globalProductId);
+    return this.tasnif.suggestForProduct({ barcode: product.barcode, name: product.name });
+  }
+
+  /** Taklifni bir bosishda qo'llash: toifa (topilsa mavjudi) + biriktirish. */
+  @Post('products/:globalProductId/apply-tasnif')
+  applyTasnif(
+    @Param('globalProductId', ParseUUIDPipe) globalProductId: string,
+    @Body() dto: ApplyTasnifDto,
+  ) {
+    return this.fiscal.applyTasnifSuggestion(globalProductId, dto);
   }
 }

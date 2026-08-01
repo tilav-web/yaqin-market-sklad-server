@@ -87,3 +87,26 @@ export class AssignTaxCategoryDto {
   @IsUUID()
   taxCategoryId?: string | null;
 }
+
+export class ApplyTasnifDto {
+  @ApiProperty({ description: 'Tasnif taklifidan kelgan 17 xonali MXIK' })
+  @IsString()
+  @Matches(/^\d{17}$/, { message: "MXIK kodi 17 xonali raqam bo'lishi kerak" })
+  mxikCode!: string;
+
+  @ApiProperty({ description: 'Toifa nomi (tasnifdagi mxikName)' })
+  @IsString()
+  @MaxLength(512)
+  name!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(16)
+  unitCode?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  markingRequired?: boolean;
+}

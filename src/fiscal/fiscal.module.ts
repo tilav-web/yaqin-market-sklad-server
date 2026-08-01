@@ -9,6 +9,7 @@ import { FiscalReceipt } from './entities/fiscal-receipt.entity';
 import { TaxCategory } from './entities/tax-category.entity';
 import { FiscalController } from './fiscal.controller';
 import { FiscalService } from './fiscal.service';
+import { TasnifService } from './tasnif.service';
 
 @Module({
   imports: [
@@ -22,7 +23,7 @@ import { FiscalService } from './fiscal.service';
     SettingsModule,
   ],
   controllers: [FiscalController],
-  providers: [FiscalService],
+  providers: [FiscalService, TasnifService],
   exports: [FiscalService],
 })
 export class FiscalModule {}
