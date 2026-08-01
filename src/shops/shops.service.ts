@@ -18,6 +18,8 @@ import { GlobalProduct } from '../products/entities/global-product.entity';
 import { ProductVariant } from '../products/entities/product-variant.entity';
 import { User } from '../users/entities/user.entity';
 import { boundingBox, calcDeliveryFee, GeoJsonPolygon, haversineKm, pointInPolygon } from '../geo/geo.util';
+import { SETTING_KEYS } from '../settings/entities/global-setting.entity';
+import { SettingsService } from '../settings/settings.service';
 import { Shop } from './entities/shop.entity';
 import {
   PRESET_PERMISSIONS,
@@ -68,6 +70,7 @@ export class ShopsService {
     private readonly globalProducts: Repository<GlobalProduct>,
     private readonly dataSource: DataSource,
     private readonly auditLog: AuditLogService,
+    private readonly settings: SettingsService,
   ) {}
 
   findOne(id: string): Promise<Shop | null> {
@@ -524,6 +527,13 @@ export class ShopsService {
     // not be reachable via direct link either.
     const shop = await this.shops.findOne({ where: { id: shopId, isActive: true } });
     if (!shop) throw new NotFoundException('Do\'kon topilmadi');
+    // Mijozga ko'rinadigan minimal buyurtma — do'kon minimumi va platforma
+    // minimumining kattasi (order-yaratishdagi ikkala tekshiruv bilan bir
+    // xil). Klient UI bitta raqam bilan ishlayveradi.
+    shop.minOrderPrice = Math.max(
+      shop.minOrderPrice ?? 0,
+      this.settings.getNumber(SETTING_KEYS.MIN_ORDER_TOTAL, 0),
+    );
     if (latitude !== undefined && longitude !== undefined) {
       const distanceKm = haversineKm(latitude, longitude, shop.latitude, shop.longitude);
       const isWithinZone = distanceKm <= shop.deliveryZone.maxKm;

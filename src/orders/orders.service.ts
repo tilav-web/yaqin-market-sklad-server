@@ -605,7 +605,12 @@ export class OrdersService {
           }),
         );
       }
-      return manager.findOneOrFail(Order, { where: { id: savedOrder.id }, relations: { items: true } });
+      return manager.findOneOrFail(Order, {
+        where: { id: savedOrder.id },
+        // taxCategory ham qaytadi — POS sotuvdan keyin markirovkali tovar
+        // bo'lsa skanerlash oqimiga yo'naltirish uchun.
+        relations: { items: { productVariant: { globalProduct: { taxCategory: true } } } },
+      });
     }).then((order) => {
       // Do'konda naqd sotildi — pul shu zahoti olindi, chek ham shu zahoti.
       void this.fiscal.createSaleReceipt(order.id);

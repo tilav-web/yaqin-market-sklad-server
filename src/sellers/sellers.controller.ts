@@ -44,6 +44,16 @@ export class SellersController {
     return this.sellers.listMyApplications(user.sub);
   }
 
+  /**
+   * Seller o'z soliq/profil holatini ko'radi (STIR, QQS, komissioner) —
+   * mobil ilovadagi "Soliq sozlamalari" kartasi uchun. Profil hali
+   * yaratilmagan bo'lsa null.
+   */
+  @Get('my-profile')
+  myProfile(@CurrentUser() user: JwtPayload) {
+    return this.sellers.getProfile(user.sub);
+  }
+
   // Admin side
   @Roles(Role.Admin)
   @Get('admin/applications')
