@@ -9,6 +9,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 
+import { LocationEvidence } from '../../geo/location-evidence';
 import { User } from './user.entity';
 
 @Entity({ name: 'user_addresses' })
@@ -53,6 +54,18 @@ export class UserAddress {
 
   @Column({ type: 'boolean', default: false })
   isDefault!: boolean;
+
+  /**
+   * Device fix at the moment this pin was last set (create or lat/lng
+   * edit) — anti-fraud evidence, wired up once `address_far_from_device`
+   * (currently shipped disabled) is enabled. Not populated yet.
+   */
+  @Column({ type: 'jsonb', nullable: true })
+  pinEvidence!: LocationEvidence | null;
+
+  /** How many times the coordinates have been changed. Not populated yet. */
+  @Column({ type: 'int', default: 0 })
+  pinSetCount!: number;
 
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt!: Date;

@@ -19,6 +19,7 @@ import {
 } from 'class-validator';
 
 
+import { LocationEvidenceDto } from '../../geo/location-evidence';
 import { OrderChannel, OrderStatus, PaymentMethod, PaymentStatus } from '../entities/order.entity';
 
 export class OrderItemDto {
@@ -63,6 +64,13 @@ export class CreateOrderDto {
   @IsString()
   @MaxLength(500)
   courierComment?: string;
+
+  /** Best-effort device fix at checkout time — recorded, not enforced (anti-fraud). */
+  @ApiPropertyOptional({ type: LocationEvidenceDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => LocationEvidenceDto)
+  evidence?: LocationEvidenceDto;
 }
 
 export class AssignOrderDto {
@@ -100,6 +108,13 @@ export class UpdateOrderStatusDto {
   @IsOptional()
   @IsString()
   note?: string;
+
+  /** Best-effort device fix at the moment of this status transition (anti-fraud). */
+  @ApiPropertyOptional({ type: LocationEvidenceDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => LocationEvidenceDto)
+  evidence?: LocationEvidenceDto;
 }
 
 export class ChangePaymentMethodDto {

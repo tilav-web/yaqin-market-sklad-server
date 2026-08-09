@@ -64,6 +64,17 @@ export class Shop {
   @Column({ type: 'double precision' })
   longitude!: number;
 
+  /**
+   * Device fix at the moment this pin was last set — anti-fraud evidence,
+   * wired up once `shop_relocated_after_orders` is enabled. Not populated yet.
+   */
+  @Column({ type: 'jsonb', nullable: true })
+  pinEvidence!: import('../../geo/location-evidence').LocationEvidence | null;
+
+  /** Last time latitude/longitude changed. Not populated yet. */
+  @Column({ type: 'timestamptz', nullable: true })
+  relocatedAt!: Date | null;
+
   @Column({ type: 'jsonb', default: () => "'[]'::jsonb" })
   workingHours!: WorkingHourSlot[];
 

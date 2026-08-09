@@ -10,6 +10,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 
+import { LocationEvidence } from '../../geo/location-evidence';
 import { Shop } from '../../shops/entities/shop.entity';
 import { User } from '../../users/entities/user.entity';
 import { OrderItem } from './order-item.entity';
@@ -34,6 +35,21 @@ export function isTerminalOrderStatus(status: OrderStatus): boolean {
     status === OrderStatus.SellerNoResponse ||
     status === OrderStatus.SellerRejected
   );
+}
+
+export type OrderEvidenceKey = 'orderEvidence' | 'dispatchedEvidence' | 'deliveredEvidence';
+
+/**
+ * Strip the anti-fraud location-evidence columns before an order reaches a
+ * customer or shop — otherwise a customer could read the courier's precise
+ * coordinates (or a shop the customer's) straight off `GET /orders/:id`.
+ * Only admin reads (`adminGetOrder`) are allowed to skip this.
+ */
+export function omitOrderEvidence<T extends Record<OrderEvidenceKey, unknown>>(
+  order: T,
+): Omit<T, OrderEvidenceKey> {
+  const { orderEvidence: _oe, dispatchedEvidence: _de, deliveredEvidence: _dve, ...rest } = order;
+  return rest;
 }
 
 export enum PaymentMethod {
@@ -116,6 +132,22 @@ export class Order {
   @Column({ type: 'jsonb', nullable: true })
   deliveryAddress!: OrderDeliveryAddress | null;
 
+  /**
+   * Location-evidence layer (anti-fraud). Each is an immutable snapshot of
+   * the device fix at that moment, recorded but not exposed to the
+   * customer/shop themselves — see OrdersService's read-path stripping.
+   * NEVER include these three columns in a customer- or shop-facing read;
+   * they leak the counterparty's precise coordinates.
+   */
+  @Column({ type: 'jsonb', nullable: true })
+  orderEvidence!: LocationEvidence | null;
+
+  @Column({ type: 'jsonb', nullable: true })
+  dispatchedEvidence!: LocationEvidence | null;
+
+  @Column({ type: 'jsonb', nullable: true })
+  deliveredEvidence!: LocationEvidence | null;
+
   @Column({ type: 'enum', enum: OrderChannel, default: OrderChannel.Delivery })
   channel!: OrderChannel;
 
@@ -155,6 +187,16 @@ export class Order {
 
   @Column({ type: 'uuid', nullable: true })
   deliveredByStaffId!: string | null;
+
+  /**
+   * User.id of whoever tapped "Yetkazildi" on the shop side (owner/staff) —
+   * null when the customer self-confirmed receipt instead. Distinct from
+   * `assignedStaffId` (a ShopStaff.id, mutable, set by a separate manual
+   * assignment step): this is the actual confirming actor, captured once,
+   * at the delivered transition. Used to attribute a courier rating.
+   */
+  @Column({ type: 'uuid', nullable: true })
+  deliveredByUserId!: string | null;
 
   @Column({ type: 'jsonb', default: () => "'[]'::jsonb" })
   timeline!: OrderTimelineEvent[];

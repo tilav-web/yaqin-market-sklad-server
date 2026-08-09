@@ -18,6 +18,7 @@ import type { JwtPayload } from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '../auth/role.enum';
 import { sendXlsx } from '../common/xlsx.util';
+import { DeviceId } from '../common/device-id.decorator';
 import { RedisService } from '../redis/redis.service';
 import {
   AdminListOrdersQuery,
@@ -82,8 +83,8 @@ export class OrdersController {
   }
 
   @Post()
-  create(@CurrentUser() user: JwtPayload, @Body() dto: CreateOrderDto) {
-    return this.orders.create(user.sub, dto);
+  create(@CurrentUser() user: JwtPayload, @Body() dto: CreateOrderDto, @DeviceId() deviceId: string | null) {
+    return this.orders.create(user.sub, dto, deviceId);
   }
 
   @Get('mine')
@@ -101,8 +102,9 @@ export class OrdersController {
     @CurrentUser() user: JwtPayload,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateOrderStatusDto,
+    @DeviceId() deviceId: string | null,
   ) {
-    return this.orders.updateStatus(user.sub, id, dto.status, dto.note);
+    return this.orders.updateStatus(user.sub, id, dto.status, dto.note, { evidence: dto.evidence, deviceId });
   }
 
   /** Customer: re-ask the silent shop for a paid order — restarts the 5-min window. */

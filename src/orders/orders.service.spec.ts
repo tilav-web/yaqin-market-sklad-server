@@ -148,6 +148,8 @@ describe('OrdersService', () => {
   let addresses: jest.Mocked<Repository<UserAddress>>;
   let staff: jest.Mocked<Repository<ShopStaff>>;
   let globalProducts: jest.Mocked<Repository<GlobalProduct>>;
+  let reviews: jest.Mocked<Repository<Review>>;
+  let sellerTransactions: jest.Mocked<Repository<SellerTransaction>>;
   let dataSource: { transaction: jest.Mock; createQueryBuilder: jest.Mock };
   let realtime: { emitToUser: jest.Mock; emitToShop: jest.Mock };
   let push: { sendToUser: jest.Mock; sendToUsers: jest.Mock };
@@ -242,6 +244,8 @@ describe('OrdersService', () => {
     addresses = module.get(getRepositoryToken(UserAddress));
     staff = module.get(getRepositoryToken(ShopStaff));
     globalProducts = module.get(getRepositoryToken(GlobalProduct));
+    reviews = module.get(getRepositoryToken(Review));
+    sellerTransactions = module.get(getRepositoryToken(SellerTransaction));
 
     // Common defaults shared by most `create()` tests.
     globalProducts.findBy.mockResolvedValue([{ id: 'gp-1', name: 'Test mahsulot', categoryId: 'cat-1' }] as never);
@@ -540,6 +544,92 @@ describe('OrdersService', () => {
       expect(payments.recordCashOrderDelivery).toHaveBeenCalledWith(
         expect.objectContaining({ sellerId: OWNER_ID, orderId: 'order-1', orderTotal: 20_000 }),
       );
+    });
+
+    it('kuryerga berishda (delivering) lokatsiya dalili bazaga yoziladi, lekin javobda qaytarilmaydi', async () => {
+      const order = makeOrder({ status: OrderStatus.Preparing });
+      orders.findOne.mockResolvedValue(order);
+      const em = mockEntityManager({});
+      em.findOne.mockImplementation(async (Entity: unknown) => (Entity === Order ? order : null));
+      dataSource.transaction.mockImplementation((cb) => cb(em));
+
+      const result = await service.updateStatus(OWNER_ID, 'order-1', OrderStatus.Delivering, undefined, {
+        evidence: { latitude: 41.0, longitude: 69.0, accuracy: 12, source: 'foreground' },
+        deviceId: 'device-1',
+      });
+
+      expect(em.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          dispatchedEvidence: expect.objectContaining({
+            latitude: 41.0,
+            longitude: 69.0,
+            deviceId: 'device-1',
+            actorRole: 'shop',
+          }),
+        }),
+      );
+      expect(result).not.toHaveProperty('dispatchedEvidence');
+    });
+
+    it('do\'kon tomoni "Yetkazildi" bosganda deliveredEvidence + deliveredByUserId bazaga yoziladi (javobda emas)', async () => {
+      const order = makeOrder({ status: OrderStatus.Delivering });
+      orders.findOne.mockResolvedValue(order);
+      const em = mockEntityManager({});
+      em.findOne.mockImplementation(async (Entity: unknown) => (Entity === Order ? order : null));
+      dataSource.transaction.mockImplementation((cb) => cb(em));
+
+      const result = await service.updateStatus(OWNER_ID, 'order-1', OrderStatus.Delivered, undefined, {
+        evidence: { latitude: 41.01, longitude: 69.01, mocked: false, source: 'foreground' },
+      });
+
+      expect(em.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          deliveredByUserId: OWNER_ID,
+          deliveredEvidence: expect.objectContaining({ latitude: 41.01, longitude: 69.01 }),
+        }),
+      );
+      expect(result).not.toHaveProperty('deliveredEvidence');
+      expect(result).not.toHaveProperty('orderEvidence');
+    });
+
+    it('mijoz o\'zi "Yetkazib oldim" desa deliveredByUserId kuryerga tegishli qilib yozilmaydi', async () => {
+      const order = makeOrder({ status: OrderStatus.Delivering, userId: USER_ID });
+      orders.findOne.mockResolvedValue(order);
+      const em = mockEntityManager({});
+      em.findOne.mockImplementation(async (Entity: unknown) => (Entity === Order ? order : null));
+      dataSource.transaction.mockImplementation((cb) => cb(em));
+
+      await service.updateStatus(USER_ID, 'order-1', OrderStatus.Delivered);
+
+      expect(em.save).toHaveBeenCalledWith(
+        expect.not.objectContaining({ deliveredByUserId: USER_ID }),
+      );
+    });
+  });
+
+  describe('getOne — location-evidence leakage', () => {
+    it('mijozga/do\'konga hech qachon lokatsiya dalilini qaytarmaydi', async () => {
+      const order = {
+        id: 'order-1',
+        userId: USER_ID,
+        shopId: SHOP_ID,
+        shop: makeShop(),
+        status: OrderStatus.Delivered,
+        items: [],
+        orderEvidence: { latitude: 1, longitude: 2 },
+        dispatchedEvidence: { latitude: 3, longitude: 4 },
+        deliveredEvidence: { latitude: 5, longitude: 6 },
+      } as unknown as Order;
+      orders.findOne.mockResolvedValue(order);
+      reviews.find.mockResolvedValue([]);
+      complaints.getForOrder.mockResolvedValue(null);
+      sellerTransactions.findOne.mockResolvedValue(null);
+
+      const result = await service.getOne(USER_ID, 'order-1');
+
+      expect(result).not.toHaveProperty('orderEvidence');
+      expect(result).not.toHaveProperty('dispatchedEvidence');
+      expect(result).not.toHaveProperty('deliveredEvidence');
     });
   });
 

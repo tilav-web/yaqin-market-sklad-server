@@ -17,6 +17,7 @@ import { ComplaintsService } from '../complaints/complaints.service';
 import { FiscalService } from '../fiscal/fiscal.service';
 import { buildXlsxBuffer } from '../common/xlsx.util';
 import { calcDeliveryFee, estimateEtaMinutes, haversineKm, pointInPolygon } from '../geo/geo.util';
+import { LocationEvidenceDto, buildEvidence } from '../geo/location-evidence';
 import { SellerTransaction, SellerTxType } from '../payments/entities/seller-transaction.entity';
 import { PaymentsService } from '../payments/payments.service';
 import { GlobalProduct } from '../products/entities/global-product.entity';
@@ -37,7 +38,7 @@ import { isShopOpenNow } from '../shops/shop-hours.util';
 import { UserAddress } from '../users/entities/user-address.entity';
 import { ChatMessage } from './entities/chat-message.entity';
 import { OrderItem } from './entities/order-item.entity';
-import { Order, OrderChannel, OrderStatus, OrderTimelineEvent, PaymentMethod, PaymentStatus, isTerminalOrderStatus } from './entities/order.entity';
+import { Order, OrderChannel, OrderEvidenceKey, OrderStatus, OrderTimelineEvent, PaymentMethod, PaymentStatus, isTerminalOrderStatus, omitOrderEvidence } from './entities/order.entity';
 import { Review } from './entities/review.entity';
 
 const orderNumberGen = customAlphabet('ABCDEFGHJKLMNPQRSTUVWXYZ23456789', 8);
@@ -295,7 +296,9 @@ export class OrdersService {
       paymentMethod?: PaymentMethod;
       recipientPhone?: string;
       courierComment?: string;
+      evidence?: LocationEvidenceDto;
     },
+    deviceId?: string | null,
   ): Promise<Order> {
     const shop = await this.shops.findOne({ where: { id: dto.shopId, isActive: true } });
     if (!shop) throw new NotFoundException('Do\'kon topilmadi');
@@ -423,6 +426,11 @@ export class OrdersService {
           apartment: address.apartment,
           intercom: address.intercom,
         },
+        orderEvidence: buildEvidence(dto.evidence, {
+          deviceId: deviceId ?? null,
+          actorUserId: userId,
+          actorRole: 'customer',
+        }),
         orderNumber: orderNumberGen(),
         subTotal,
         deliveryFee,
@@ -633,16 +641,21 @@ export class OrdersService {
     });
   }
 
-  listForUser(userId: string): Promise<Order[]> {
-    return this.orders.find({
+  async listForUser(userId: string): Promise<Omit<Order, OrderEvidenceKey>[]> {
+    const orders = await this.orders.find({
       where: { userId },
       relations: { items: true, shop: true },
       order: { createdAt: 'DESC' },
       take: 100,
     });
+    return orders.map(omitOrderEvidence);
   }
 
-  async listForShop(actorUserId: string, shopId: string, status?: OrderStatus): Promise<Order[]> {
+  async listForShop(
+    actorUserId: string,
+    shopId: string,
+    status?: OrderStatus,
+  ): Promise<Omit<Order, OrderEvidenceKey>[]> {
     // Owner or any staff who can view orders (full or assigned).
     const shop = await this.shops.findOne({ where: { id: shopId } });
     if (!shop) throw new NotFoundException('Do\'kon topilmadi');
@@ -673,7 +686,8 @@ export class OrdersService {
       .where('o.shopId = :shopId', { shopId });
     if (effectiveStatus) qb.andWhere('o.status = :status', { status: effectiveStatus });
     if (assignedToStaffId) qb.andWhere('o.assignedStaffId = :asid', { asid: assignedToStaffId });
-    return qb.orderBy('o.createdAt', 'DESC').take(200).getMany();
+    const orders = await qb.orderBy('o.createdAt', 'DESC').take(200).getMany();
+    return orders.map(omitOrderEvidence);
   }
 
   /** Assign (or unassign) an order to a staff member — e.g. a delivery courier. */
@@ -682,7 +696,7 @@ export class OrdersService {
     shopId: string,
     orderId: string,
     staffId: string | null,
-  ): Promise<Order> {
+  ): Promise<Omit<Order, OrderEvidenceKey>> {
     const order = await this.orders.findOne({ where: { id: orderId, shopId }, relations: { shop: true } });
     if (!order) throw new NotFoundException('Buyurtma topilmadi');
     await this.assertShopCanManage(actorUserId, order, 'orders.update_status');
@@ -698,14 +712,14 @@ export class OrdersService {
     } else {
       order.assignedStaffId = null;
     }
-    return this.orders.save(order);
+    return omitOrderEvidence(await this.orders.save(order));
   }
 
   async getOne(
     userId: string,
     orderId: string,
   ): Promise<
-    Order & {
+    Omit<Order, OrderEvidenceKey> & {
       reviewedVariantIds: string[];
       complaint: { status: string; reason: string; createdAt: Date; resolvedAt: Date | null } | null;
       refund: { amount: number; at: Date } | null;
@@ -750,7 +764,7 @@ export class OrdersService {
     });
 
     return {
-      ...order,
+      ...omitOrderEvidence(order),
       reviewedVariantIds: myReviews.map((r) => r.productVariantId),
       complaint: complaint
         ? {
@@ -769,12 +783,18 @@ export class OrdersService {
     orderId: string,
     nextStatus: OrderStatus,
     note?: string,
-  ): Promise<Order> {
+    evidenceCtx?: { evidence?: LocationEvidenceDto | null; deviceId?: string | null },
+  ): Promise<Omit<Order, OrderEvidenceKey>> {
     const order = await this.orders.findOne({ where: { id: orderId }, relations: { shop: true } });
     if (!order) throw new NotFoundException('Buyurtma topilmadi');
 
     const isOwner = order.shop.ownerId === actorUserId;
     const isCustomer = order.userId === actorUserId;
+    const evidence = buildEvidence(evidenceCtx?.evidence, {
+      deviceId: evidenceCtx?.deviceId ?? null,
+      actorUserId,
+      actorRole: isCustomer ? 'customer' : 'shop',
+    });
 
     const allowedTransitions: Record<OrderStatus, OrderStatus[]> = {
       [OrderStatus.New]: [OrderStatus.Accepted, OrderStatus.Cancelled, OrderStatus.SellerRejected],
@@ -860,6 +880,16 @@ export class OrdersService {
         note,
       };
       locked.timeline = [...locked.timeline, event];
+      // Location-evidence layer (anti-fraud) — recorded, not enforced. See
+      // server/src/geo/location-evidence.ts and the risk module (later phase).
+      if (nextStatus === OrderStatus.Delivering) {
+        locked.dispatchedEvidence = evidence;
+      } else if (nextStatus === OrderStatus.Delivered) {
+        locked.deliveredEvidence = evidence;
+        // Only when the shop side confirmed — a customer self-confirm isn't
+        // a courier action and must never be attributed as one.
+        if (!isCustomer) locked.deliveredByUserId = actorUserId;
+      }
       if (nextStatus === OrderStatus.Cancelled || nextStatus === OrderStatus.SellerRejected) {
         locked.cancellationReason =
           note ?? (nextStatus === OrderStatus.SellerRejected ? "Do'kon buyurtmani rad etdi" : null);
@@ -923,7 +953,9 @@ export class OrdersService {
       },
       imageUrl: shopPhoto,
     });
-    return saved;
+    // `saved` is what we just wrote evidence INTO — strip it before it goes
+    // back over the wire to whichever party (customer or shop) called this.
+    return omitOrderEvidence(saved);
   }
 
   /**
