@@ -50,12 +50,16 @@ export const SETTING_KEYS = {
 
 /**
  * Raqam bo'lmagan (matnli) kalitlar — set() bulardan boshqasini raqam sifatida
- * tekshiradi. allowedValues berilgan bo'lsa faqat shu qiymatlar qabul qilinadi.
+ * tekshiradi. allowedValues berilgan bo'lsa faqat shu qiymatlar qabul qilinadi,
+ * pattern berilgan bo'lsa qiymat shu regexga mos kelishi shart.
  */
-export const STRING_SETTING_KEYS: Record<string, { allowedValues?: string[] }> =
-  {
+export const STRING_SETTING_KEYS: Record<
+  string,
+  { allowedValues?: string[]; pattern?: RegExp; patternHint?: string }
+> = {
     [SETTING_KEYS.FISCAL_MODE]: { allowedValues: ['off', 'collect', 'live'] },
     [SETTING_KEYS.PLATFORM_LEGAL_NAME]: {},
-    [SETTING_KEYS.PLATFORM_STIR]: {},
+    // Yuridik shaxs STIRi (INN) — O'zbekistonda 9 xonali raqam.
+    [SETTING_KEYS.PLATFORM_STIR]: { pattern: /^\d{9}$/, patternHint: '9 xonali raqam' },
     [SETTING_KEYS.DELIVERY_MXIK_CODE]: {},
   };

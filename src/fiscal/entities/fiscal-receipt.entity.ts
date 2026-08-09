@@ -104,6 +104,19 @@ export class FiscalReceipt {
   @Column({ type: 'boolean', default: false })
   sellerVatPayer!: boolean;
 
+  /**
+   * Operator (platforma, MChJ) rekvizitlari — chek paytidagi snapshot,
+   * GlobalSetting.platform_stir/platform_legal_name'dan. Komissioner
+   * modelida chekning har bir qatorida SOTUVCHI STIRi ko'rinadi (yuqorida),
+   * lekin chekni CHIQARGAN tomon sifatida operator identifikatori ham real
+   * OFD integratsiyasi uchun zarur — shuning uchun alohida saqlanadi.
+   */
+  @Column({ type: 'varchar', length: 16, nullable: true })
+  platformStir!: string | null;
+
+  @Column({ type: 'varchar', length: 256, nullable: true })
+  platformLegalName!: string | null;
+
   @Column({ type: 'jsonb', default: () => "'[]'::jsonb" })
   lines!: FiscalReceiptLine[];
 

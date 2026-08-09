@@ -7,6 +7,7 @@ import { SellerProfile } from '../sellers/entities/seller-profile.entity';
 import { SettingsModule } from '../settings/settings.module';
 import { FiscalReceipt } from './entities/fiscal-receipt.entity';
 import { TaxCategory } from './entities/tax-category.entity';
+import { FISCAL_PROVIDER, NoopFiscalProvider } from './fiscal-provider.interface';
 import { FiscalController } from './fiscal.controller';
 import { FiscalService } from './fiscal.service';
 import { TasnifService } from './tasnif.service';
@@ -23,7 +24,13 @@ import { TasnifService } from './tasnif.service';
     SettingsModule,
   ],
   controllers: [FiscalController],
-  providers: [FiscalService, TasnifService],
+  providers: [
+    FiscalService,
+    TasnifService,
+    // Real OFD/vendor provayder ulanganda FAQAT shu qatorni o'zgartiring
+    // (masalan `useClass: RegosFiscalProvider`) — FiscalService o'zi tegilmaydi.
+    { provide: FISCAL_PROVIDER, useClass: NoopFiscalProvider },
+  ],
   exports: [FiscalService],
 })
 export class FiscalModule {}

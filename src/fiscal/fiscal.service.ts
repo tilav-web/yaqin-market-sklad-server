@@ -1,12 +1,13 @@
 import {
   BadRequestException,
+  Inject,
   Injectable,
   Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, IsNull, Repository } from 'typeorm';
+import { IsNull, LessThan, Repository } from 'typeorm';
 
 import { Order, PaymentMethod } from '../orders/entities/order.entity';
 import { GlobalProduct } from '../products/entities/global-product.entity';
@@ -20,10 +21,8 @@ import {
   FiscalReceiptType,
 } from './entities/fiscal-receipt.entity';
 import { TaxCategory } from './entities/tax-category.entity';
-import {
-  FiscalProvider,
-  NoopFiscalProvider,
-} from './fiscal-provider.interface';
+import { FISCAL_PROVIDER } from './fiscal-provider.interface';
+import type { FiscalProvider } from './fiscal-provider.interface';
 
 /**
  * Fiskal cheklar — komissioner modeli.
@@ -46,7 +45,6 @@ import {
 @Injectable()
 export class FiscalService {
   private readonly logger = new Logger(FiscalService.name);
-  private provider: FiscalProvider = new NoopFiscalProvider();
 
   constructor(
     @InjectRepository(FiscalReceipt)
@@ -60,6 +58,8 @@ export class FiscalService {
     @InjectRepository(GlobalProduct)
     private readonly globalProducts: Repository<GlobalProduct>,
     private readonly settings: SettingsService,
+    @Inject(FISCAL_PROVIDER)
+    private readonly provider: FiscalProvider,
   ) {}
 
   private get mode(): string {
@@ -100,12 +100,14 @@ export class FiscalService {
       const vatRate = profile?.vatPayer
         ? this.settings.getNumber(SETTING_KEYS.VAT_RATE_PERCENT, 12)
         : 0;
+      const platformStir = this.settings.get(SETTING_KEYS.PLATFORM_STIR);
+      const platformLegalName = this.settings.get(SETTING_KEYS.PLATFORM_LEGAL_NAME);
       const missing: string[] = [];
       if (!profile?.stir) missing.push('seller:stir');
       if (profile && profile.komissionerStatus !== 'confirmed')
         missing.push('seller:komissioner');
-      if (!this.settings.get(SETTING_KEYS.PLATFORM_STIR))
-        missing.push('platform:stir');
+      if (!platformStir) missing.push('platform:stir');
+      if (!platformLegalName) missing.push('platform:legalName');
 
       const lines: FiscalReceiptLine[] = [];
       for (const item of order.items) {
@@ -180,6 +182,8 @@ export class FiscalService {
         sellerStir: profile?.stir ?? null,
         sellerName: profile?.fullName ?? order.shop.name ?? null,
         sellerVatPayer: profile?.vatPayer ?? false,
+        platformStir: platformStir || null,
+        platformLegalName: platformLegalName || null,
         lines,
         totalAmount: order.total,
         totalVatAmount: lines.reduce((s, l) => s + l.vatAmount, 0),
@@ -251,6 +255,8 @@ export class FiscalService {
         sellerStir: sale.sellerStir,
         sellerName: sale.sellerName,
         sellerVatPayer: sale.sellerVatPayer,
+        platformStir: sale.platformStir,
+        platformLegalName: sale.platformLegalName,
         lines,
         totalAmount,
         totalVatAmount: lines.reduce((s, l) => s + l.vatAmount, 0),
@@ -295,6 +301,8 @@ export class FiscalService {
         : null;
       if (sale) {
         receipt.sellerStir = sale.sellerStir;
+        receipt.platformStir = sale.platformStir;
+        receipt.platformLegalName = sale.platformLegalName;
         receipt.missingFields = [...sale.missingFields];
         receipt.status = sale.missingFields.length
           ? FiscalReceiptStatus.Incomplete
@@ -314,14 +322,27 @@ export class FiscalService {
 
   /* ─── OFDga yuborish ─── */
 
+  /**
+   * Shundan ko'p muvaffaqiyatsiz urinishdan keyin cron chekni tashlab
+   * ketadi (cheksiz urinish + log-shovqin o'rniga) — qator hali
+   * `Failed`/`attempts` bilan bazada qoladi, faqat avtomatik qayta
+   * urinishdan chiqariladi. `rebuildReceipt` orqali qo'lda qayta urinish
+   * mumkin.
+   */
+  private static readonly MAX_DISPATCH_ATTEMPTS = 10;
+
   /** live rejimda pending cheklarni provayder orqali uzatadi. */
   @Cron(CronExpression.EVERY_5_MINUTES)
   async dispatchPending(): Promise<void> {
     if (this.mode !== 'live') return;
     const pending = await this.receipts.find({
-      where: {
-        status: In([FiscalReceiptStatus.Pending, FiscalReceiptStatus.Failed]),
-      },
+      where: [
+        { status: FiscalReceiptStatus.Pending },
+        {
+          status: FiscalReceiptStatus.Failed,
+          attempts: LessThan(FiscalService.MAX_DISPATCH_ATTEMPTS),
+        },
+      ],
       order: { createdAt: 'ASC' },
       take: 50,
     });
@@ -340,6 +361,16 @@ export class FiscalService {
         receipt.status = FiscalReceiptStatus.Failed;
         receipt.attempts += 1;
         receipt.lastError = (err as Error).message;
+        if (receipt.attempts >= FiscalService.MAX_DISPATCH_ATTEMPTS) {
+          // Routine failures log at warn (via provider); this is the
+          // escalation point — greppable/alertable, and the last one this
+          // receipt will ever produce automatically.
+          this.logger.error(
+            `dispatchPending: chek ${receipt.id} (order ${receipt.orderId}) ` +
+              `${FiscalService.MAX_DISPATCH_ATTEMPTS} marta urinishdan keyin ham OFDga yuborilmadi — ` +
+              `avtomatik qayta urinish to'xtatildi, qo'lda tekshiring. Oxirgi xato: ${receipt.lastError}`,
+          );
+        }
       }
       await this.receipts.save(receipt);
     }

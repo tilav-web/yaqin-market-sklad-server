@@ -191,6 +191,14 @@ export class SettingsService implements OnModuleInit {
           `Qiymat quyidagilardan biri bo'lishi kerak: ${stringKey.allowedValues.join(', ')}`,
         );
       }
+      // Bo'sh qiymat doim ruxsat etiladi (masalan platform_stir MChJ ochilishini
+      // kutayotganda bo'sh qolishi normal) — faqat TO'LDIRILGAN qiymat formatga
+      // mos kelishi tekshiriladi.
+      if (stringKey.pattern && value !== '' && !stringKey.pattern.test(value)) {
+        throw new BadRequestException(
+          `Noto'g'ri format${stringKey.patternHint ? ` — ${stringKey.patternHint} bo'lishi kerak` : ''}`,
+        );
+      }
     } else {
       // Every numeric setting (percent/days/hours) is parsed by getNumber()
       // with parseFloat — an unparseable value (e.g. a comma-decimal "12,00",
