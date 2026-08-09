@@ -1,10 +1,11 @@
 import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { DataSource, In, Repository } from 'typeorm';
+import { DataSource, In, Repository, SelectQueryBuilder } from 'typeorm';
 
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { ClickService } from '../click/click.service';
+import { FiscalService } from '../fiscal/fiscal.service';
 import { ComplaintsService } from '../complaints/complaints.service';
 import { RedisService } from '../redis/redis.service';
 import { SellerTransaction } from '../payments/entities/seller-transaction.entity';
@@ -120,12 +121,20 @@ function mockEntityManager(variantsById: Record<string, ProductVariant>) {
       if (!isTwoArg && data === orderRecord) orderRecord = withId;
       return withId;
     }),
-    findOne: jest.fn(async (Entity: unknown, opts: { where: { id?: string } }) => {
-      if (Entity === ProductVariant) return variantsById[opts.where.id as string] ?? null;
-      if (Entity === Order) return orderRecord ? { ...orderRecord, items: itemRecords } : null;
-      return null;
-    }),
-    find: jest.fn(async () => []), // StockBatch lookups inside consumeFifo — no batches, falls back to 0 cost
+    // Return type is widened on purpose: individual tests override this with
+    // `mockImplementation` to hand back other entities (a whole Order, for
+    // instance), and the narrow type TypeScript infers from this default body
+    // would reject every one of those.
+    findOne: jest.fn(
+      async (Entity: unknown, opts: { where: { id?: string } }): Promise<unknown> => {
+        if (Entity === ProductVariant) return variantsById[opts.where.id as string] ?? null;
+        if (Entity === Order) return orderRecord ? { ...orderRecord, items: itemRecords } : null;
+        return null;
+      },
+    ),
+    // StockBatch lookups inside consumeFifo — no batches, falls back to 0 cost.
+    // Widened like `findOne` above: tests override it to return order items.
+    find: jest.fn(async (_Entity?: unknown): Promise<unknown[]> => []),
     update: jest.fn(),
   };
   return em;
@@ -149,6 +158,11 @@ describe('OrdersService', () => {
   let complaints: { getForOrder: jest.Mock; openComplaintOrderIds: jest.Mock };
   let auditLog: { record: jest.Mock };
   let click: { refundPaidOrder: jest.Mock };
+  let fiscal: {
+    createSaleReceipt: jest.Mock;
+    createRefundReceipt: jest.Mock;
+    rebuildIncompleteSaleForOrder: jest.Mock;
+  };
 
   const buildRepoMock = () => ({
     findOne: jest.fn(),
@@ -184,6 +198,13 @@ describe('OrdersService', () => {
     complaints = { getForOrder: jest.fn(), openComplaintOrderIds: jest.fn() };
     auditLog = { record: jest.fn().mockResolvedValue(undefined) };
     click = { refundPaidOrder: jest.fn().mockResolvedValue(true) };
+    // Receipts are dispatched fire-and-forget from the order flow — the tests
+    // here assert on the order, not on what the OFD received.
+    fiscal = {
+      createSaleReceipt: jest.fn().mockResolvedValue(undefined),
+      createRefundReceipt: jest.fn().mockResolvedValue(undefined),
+      rebuildIncompleteSaleForOrder: jest.fn().mockResolvedValue(undefined),
+    };
     const redis = { client: { set: jest.fn().mockResolvedValue('OK'), get: jest.fn().mockResolvedValue(null) } };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -209,6 +230,7 @@ describe('OrdersService', () => {
         { provide: ComplaintsService, useValue: complaints },
         { provide: AuditLogService, useValue: auditLog },
         { provide: ClickService, useValue: click },
+        { provide: FiscalService, useValue: fiscal },
         { provide: RedisService, useValue: redis },
       ],
     }).compile();
@@ -602,7 +624,9 @@ describe('OrdersService', () => {
         take: jest.fn().mockReturnThis(),
         getMany: jest.fn().mockResolvedValueOnce([stalePaid]).mockResolvedValue([]),
       };
-      orders.createQueryBuilder.mockReturnValue(qb);
+      // Only the four builder methods this code path touches are stubbed —
+      // the cast avoids having to fake the whole SelectQueryBuilder surface.
+      orders.createQueryBuilder.mockReturnValue(qb as unknown as SelectQueryBuilder<Order>);
       staff.find.mockResolvedValue([]);
 
       await service.autoCancelStaleNewOrders();
