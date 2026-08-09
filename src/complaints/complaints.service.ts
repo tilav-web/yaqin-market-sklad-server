@@ -3,9 +3,20 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 
 import { Order, OrderStatus } from '../orders/entities/order.entity';
+import { PushService } from '../push/push.service';
+import { RiskService } from '../risk/risk.service';
 import { SETTING_KEYS } from '../settings/entities/global-setting.entity';
 import { SettingsService } from '../settings/settings.service';
+import { Shop } from '../shops/entities/shop.entity';
+import { ShopStaff } from '../shops/entities/shop-staff.entity';
+import { User } from '../users/entities/user.entity';
 import { ComplaintStatus, OrderComplaint } from './entities/order-complaint.entity';
+
+export interface AdminComplaintRow extends OrderComplaint {
+  orderNumber: string | null;
+  customerName: string | null;
+  shopName: string | null;
+}
 
 @Injectable()
 export class ComplaintsService {
@@ -14,8 +25,43 @@ export class ComplaintsService {
     private readonly complaints: Repository<OrderComplaint>,
     @InjectRepository(Order)
     private readonly orders: Repository<Order>,
+    @InjectRepository(ShopStaff)
+    private readonly staff: Repository<ShopStaff>,
+    @InjectRepository(User)
+    private readonly users: Repository<User>,
+    @InjectRepository(Shop)
+    private readonly shops: Repository<Shop>,
     private readonly settings: SettingsService,
+    private readonly push: PushService,
+    private readonly risk: RiskService,
   ) {}
+
+  /** Batch-joins order/customer/shop names onto raw complaint rows — mirrors AuditLogService.list()'s pattern. */
+  private async withNames(items: OrderComplaint[]): Promise<AdminComplaintRow[]> {
+    const orderIds = [...new Set(items.map((c) => c.orderId))];
+    const customerIds = [...new Set(items.map((c) => c.customerId))];
+    const shopIds = [...new Set(items.map((c) => c.shopId))];
+
+    const [orders, customers, shops] = await Promise.all([
+      orderIds.length
+        ? this.orders.find({ where: { id: In(orderIds) }, select: { id: true, orderNumber: true } })
+        : [],
+      customerIds.length
+        ? this.users.find({ where: { id: In(customerIds) }, select: { id: true, name: true, phone: true } })
+        : [],
+      shopIds.length ? this.shops.find({ where: { id: In(shopIds) }, select: { id: true, name: true } }) : [],
+    ]);
+    const orderMap = new Map(orders.map((o) => [o.id, o.orderNumber]));
+    const customerMap = new Map(customers.map((u) => [u.id, u.name || u.phone]));
+    const shopMap = new Map(shops.map((s) => [s.id, s.name]));
+
+    return items.map((c) => ({
+      ...c,
+      orderNumber: orderMap.get(c.orderId) ?? null,
+      customerName: customerMap.get(c.customerId) ?? null,
+      shopName: shopMap.get(c.shopId) ?? null,
+    }));
+  }
 
   /** The order's `delivered` timeline timestamp, or null if never delivered. */
   private deliveredAt(order: Pick<Order, 'timeline'>): Date | null {
@@ -36,7 +82,7 @@ export class ComplaintsService {
     orderId: string,
     dto: { reason: string; description?: string },
   ): Promise<OrderComplaint> {
-    const order = await this.orders.findOne({ where: { id: orderId } });
+    const order = await this.orders.findOne({ where: { id: orderId }, relations: { shop: true } });
     if (!order) throw new NotFoundException('Buyurtma topilmadi');
     if (order.userId !== customerId) throw new ForbiddenException();
     if (order.status !== OrderStatus.Delivered) {
@@ -55,7 +101,7 @@ export class ComplaintsService {
     const existing = await this.complaints.findOne({ where: { orderId } });
     if (existing) throw new BadRequestException('Bu buyurtma uchun shikoyat allaqachon yuborilgan');
 
-    return this.complaints.save(
+    const complaint = await this.complaints.save(
       this.complaints.create({
         orderId,
         customerId,
@@ -65,6 +111,20 @@ export class ComplaintsService {
         status: ComplaintStatus.Open,
       }),
     );
+
+    // Notify the shop side — previously a complaint sat silently until an
+    // admin happened to open the queue and poll it.
+    const staff = await this.staff.find({ where: { shopId: order.shopId, isActive: true } });
+    const recipients = [...new Set([order.shop.ownerId, ...staff.map((s) => s.userId)])];
+    void this.push.sendToUsers(recipients, {
+      title: 'Yangi shikoyat',
+      body: `#${order.orderNumber} — ${dto.reason}`,
+      data: { orderId: order.id, kind: 'complaint:new', shopId: order.shopId, forSeller: true },
+    });
+
+    void this.risk.onComplaintFiled({ orderId: order.id, courierUserId: order.deliveredByUserId, reason: dto.reason });
+
+    return complaint;
   }
 
   /** Single-order lookup — used to surface complaint status on order-detail. */
@@ -90,7 +150,7 @@ export class ComplaintsService {
     shopId?: string;
     limit?: number;
     offset?: number;
-  }): Promise<{ items: OrderComplaint[]; total: number }> {
+  }): Promise<{ items: AdminComplaintRow[]; total: number }> {
     const qb = this.complaints
       .createQueryBuilder('c')
       .orderBy('c.createdAt', 'DESC')
@@ -99,12 +159,18 @@ export class ComplaintsService {
     if (opts.status) qb.andWhere('c.status = :status', { status: opts.status });
     if (opts.shopId) qb.andWhere('c.shopId = :shopId', { shopId: opts.shopId });
     const [items, total] = await qb.getManyAndCount();
-    return { items, total };
+    return { items: await this.withNames(items), total };
   }
 
   /** Admin: all complaints for one shop (for the admin shop-detail page). */
-  listForShop(shopId: string): Promise<OrderComplaint[]> {
-    return this.complaints.find({ where: { shopId }, order: { createdAt: 'DESC' } });
+  async listForShop(shopId: string): Promise<AdminComplaintRow[]> {
+    const items = await this.complaints.find({ where: { shopId }, order: { createdAt: 'DESC' } });
+    return this.withNames(items);
+  }
+
+  /** Admin sidebar badge — mirrors ContactService.unreadCount(). */
+  openCount(): Promise<number> {
+    return this.complaints.count({ where: { status: ComplaintStatus.Open } });
   }
 
   async adminResolve(id: string, adminId: string, resolution: string): Promise<OrderComplaint> {

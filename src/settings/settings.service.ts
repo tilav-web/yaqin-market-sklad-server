@@ -70,6 +70,54 @@ const DEFAULTS: Record<string, { value: string; description: string }> = {
     value: '10105001002000000',
     description: "Yetkazib berish xizmati MXIK kodi (tasnif: 'Kuryerlik xizmati')",
   },
+  [SETTING_KEYS.RISK_DELIVERED_MAX_DISTANCE_M]: {
+    value: '300',
+    description: '"Yetkazildi" tugmasi bosilgan joy manzildan qancha uzoq bo\'lsa flag (metr)',
+  },
+  [SETTING_KEYS.RISK_EVIDENCE_MAX_ACCURACY_M]: {
+    value: '150',
+    description: 'GPS aniqligi bundan yomon bo\'lsa masofa qoidasi ishlamaydi (metr)',
+  },
+  [SETTING_KEYS.RISK_PICKUP_MAX_DISTANCE_M]: {
+    value: '400',
+    description: 'Kuryer "yo\'lga chiqdim" bosgan joy do\'kondan uzoqligi (metr)',
+  },
+  [SETTING_KEYS.RISK_IMPOSSIBLE_SPEED_KMH]: {
+    value: '120',
+    description: 'Ikki nuqta orasidagi imkonsiz tezlik chegarasi (km/soat)',
+  },
+  [SETTING_KEYS.RISK_IMPOSSIBLE_MIN_SEGMENT_M]: {
+    value: '1000',
+    description: "Bundan qisqa masofada tezlik tekshirilmaydi — GPS sakrashi (metr)",
+  },
+  [SETTING_KEYS.RISK_LOW_RATING_THRESHOLD]: {
+    value: '2',
+    description: 'Kuryerga shu yoki past yulduz — flag',
+  },
+  [SETTING_KEYS.RISK_ADDRESS_PIN_MAX_DISTANCE_M]: {
+    value: '0',
+    description: "Saqlangan manzil pini qurilma GPSidan uzoqligi (metr). 0 = o'chirilgan",
+  },
+  [SETTING_KEYS.RISK_SHOP_RELOCATION_MAX_M]: {
+    value: '500',
+    description: "Buyurtmalari bor do'kon pinining siljishi (metr)",
+  },
+  [SETTING_KEYS.RISK_DEVICE_MAX_ACCOUNTS]: {
+    value: '5',
+    description: "Bitta qurilmada haftasiga nechta akkaunt — undan ko'pi flag",
+  },
+  [SETTING_KEYS.RISK_PING_RETENTION_DAYS]: {
+    value: '90',
+    description: "Kuryer marshruti saqlanish muddati (kun)",
+  },
+  [SETTING_KEYS.RISK_PING_MIN_INTERVAL_SEC]: {
+    value: '5',
+    description: "Bir buyurtma uchun ping oralig'i (soniya)",
+  },
+  [SETTING_KEYS.RISK_QR_HANDSHAKE_ENABLED]: {
+    value: '1',
+    description: "Bayrog'i tasdiqlangan kuryerga QR-tasdiq talab qilinsinmi (1/0)",
+  },
 };
 
 /** Komissiya foizi berilganda platforma marjasi qanday bo'lishini hisoblaydi. */

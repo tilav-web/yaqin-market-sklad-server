@@ -33,6 +33,19 @@ export const SETTING_KEYS = {
   PLATFORM_LEGAL_NAME: 'platform_legal_name', // operator (MChJ) nomi — cheklar uchun
   PLATFORM_STIR: 'platform_stir', // operator STIRi — cheklar uchun
   DELIVERY_MXIK_CODE: 'delivery_mxik_code', // yetkazish xizmati MXIK (tasnif: Kuryerlik xizmati)
+  // ---- Anti-fraud / lokatsiya risk qoidalari ----
+  RISK_DELIVERED_MAX_DISTANCE_M: 'risk_delivered_max_distance_m', // "Yetkazildi" bosilgan joy manzildan uzoqligi (metr)
+  RISK_EVIDENCE_MAX_ACCURACY_M: 'risk_evidence_max_accuracy_m', // GPS aniqligi bundan yomon bo'lsa masofa qoidasi ishlamaydi (metr)
+  RISK_PICKUP_MAX_DISTANCE_M: 'risk_pickup_max_distance_m', // "Kuryerga berish" bosilgan joy do'kondan uzoqligi (metr)
+  RISK_IMPOSSIBLE_SPEED_KMH: 'risk_impossible_speed_kmh', // Ikki nuqta orasidagi imkonsiz tezlik chegarasi (km/soat)
+  RISK_IMPOSSIBLE_MIN_SEGMENT_M: 'risk_impossible_min_segment_m', // Bundan qisqa masofada tezlik tekshirilmaydi (metr)
+  RISK_LOW_RATING_THRESHOLD: 'risk_low_rating_threshold', // Kuryerga shu yoki past yulduz — flag
+  RISK_ADDRESS_PIN_MAX_DISTANCE_M: 'risk_address_pin_max_distance_m', // Manzil pini qurilma GPSidan uzoqligi (metr). 0 = o'chirilgan
+  RISK_SHOP_RELOCATION_MAX_M: 'risk_shop_relocation_max_m', // Buyurtmalari bor do'kon pinining siljishi (metr)
+  RISK_DEVICE_MAX_ACCOUNTS: 'risk_device_max_accounts', // Bitta qurilmada haftasiga nechta akkaunt — undan ko'pi flag
+  RISK_PING_RETENTION_DAYS: 'risk_ping_retention_days', // Kuryer marshruti saqlanish muddati (kun)
+  RISK_PING_MIN_INTERVAL_SEC: 'risk_ping_min_interval_sec', // Bir buyurtma uchun ping oralig'i (soniya)
+  RISK_QR_HANDSHAKE_ENABLED: 'risk_qr_handshake_enabled', // Bayroqli kuryerga QR talab qilinsinmi (1/0)
 } as const;
 
 /**

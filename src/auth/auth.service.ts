@@ -11,6 +11,7 @@ import { customAlphabet } from 'nanoid';
 
 import type { EnvironmentVariables } from '../config/configuration';
 import { RedisService } from '../redis/redis.service';
+import { RiskService } from '../risk/risk.service';
 import { SmsService } from '../sms/sms.service';
 import { UsersService } from '../users/users.service';
 import type { JwtPayload } from './decorators/current-user.decorator';
@@ -41,6 +42,7 @@ export class AuthService {
     private readonly redis: RedisService,
     private readonly jwt: JwtService,
     private readonly config: ConfigService<EnvironmentVariables, true>,
+    private readonly risk: RiskService,
   ) {}
 
   async requestOtp(phone: string): Promise<{ resendAfterSec: number; ttlSec: number }> {
@@ -81,7 +83,7 @@ export class AuthService {
     return { resendAfterSec: RESEND_COOLDOWN_SEC, ttlSec: OTP_TTL_SEC };
   }
 
-  async verifyOtp(phone: string, code: string) {
+  async verifyOtp(phone: string, code: string, deviceId?: string | null) {
     const key = `otp:${phone}`;
     const raw = await this.redis.client.get(key);
     if (!raw) {
@@ -116,6 +118,7 @@ export class AuthService {
     const user = await this.users.upsertByPhone(phone);
     const roles = await this.users.computeRoles(user);
     const tokens = await this.issueTokens({ sub: user.id, phone: user.phone, roles });
+    void this.risk.linkDevice(user.id, deviceId ?? null);
 
     return {
       user: { id: user.id, phone: user.phone, name: user.name, avatarUrl: user.avatarUrl, roles },

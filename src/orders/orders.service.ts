@@ -29,6 +29,7 @@ import { PromotionsService } from '../promotions/promotions.service';
 import { PushService } from '../push/push.service';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { RedisService } from '../redis/redis.service';
+import { RiskService } from '../risk/risk.service';
 import { SETTING_KEYS } from '../settings/entities/global-setting.entity';
 import { SettingsService } from '../settings/settings.service';
 import { Shop } from '../shops/entities/shop.entity';
@@ -36,10 +37,11 @@ import { ShopStaff, StaffPermission } from '../shops/entities/shop-staff.entity'
 import { assertShopPermission } from '../shops/shop-access.util';
 import { isShopOpenNow } from '../shops/shop-hours.util';
 import { UserAddress } from '../users/entities/user-address.entity';
+import { User } from '../users/entities/user.entity';
 import { ChatMessage } from './entities/chat-message.entity';
 import { OrderItem } from './entities/order-item.entity';
 import { Order, OrderChannel, OrderEvidenceKey, OrderStatus, OrderTimelineEvent, PaymentMethod, PaymentStatus, isTerminalOrderStatus, omitOrderEvidence } from './entities/order.entity';
-import { Review } from './entities/review.entity';
+import { Review, ReviewTarget } from './entities/review.entity';
 
 const orderNumberGen = customAlphabet('ABCDEFGHJKLMNPQRSTUVWXYZ23456789', 8);
 
@@ -86,6 +88,8 @@ export class OrdersService {
     private readonly globalProducts: Repository<GlobalProduct>,
     @InjectRepository(SellerTransaction)
     private readonly sellerTransactions: Repository<SellerTransaction>,
+    @InjectRepository(User)
+    private readonly users: Repository<User>,
     private readonly dataSource: DataSource,
     private readonly realtime: RealtimeGateway,
     private readonly redis: RedisService,
@@ -98,6 +102,7 @@ export class OrdersService {
     private readonly auditLog: AuditLogService,
     private readonly click: ClickService,
     private readonly fiscal: FiscalService,
+    private readonly risk: RiskService,
   ) {}
 
   private static readonly STATUS_LABEL: Record<OrderStatus, string> = {
@@ -201,6 +206,37 @@ export class OrdersService {
     return !!staff;
   }
 
+  /** ShopStaff.id → User.id — resolves the courier a QR handshake/rating should attribute to. */
+  private async resolveCourierUserId(assignedStaffId: string | null): Promise<string | null> {
+    if (!assignedStaffId) return null;
+    const staff = await this.staff.findOne({ where: { id: assignedStaffId }, select: { userId: true } });
+    return staff?.userId ?? null;
+  }
+
+  /**
+   * Customer: fetch (lazily issuing) the QR handshake token for a delivering
+   * order. Narrow by design — `required` is only true when the assigned
+   * courier already has an admin-CONFIRMED risk flag, so this is absent for
+   * the overwhelming majority of deliveries.
+   */
+  async getHandshake(userId: string, orderId: string): Promise<{ required: boolean; token?: string }> {
+    const order = await this.orders.findOne({ where: { id: orderId } });
+    if (!order) throw new NotFoundException('Buyurtma topilmadi');
+    if (order.userId !== userId) throw new ForbiddenException();
+    if (order.status !== OrderStatus.Delivering) return { required: false };
+    const courierUserId = await this.resolveCourierUserId(order.assignedStaffId);
+    const required = await this.risk.requiresHandshake(courierUserId);
+    if (!required) return { required: false };
+    const token = await this.risk.getOrIssueHandshakeToken(orderId);
+    return { required: true, token };
+  }
+
+  /** Courier: verify a scanned QR handshake token before marking delivered — never blocks the delivery itself, only feeds the risk signal. */
+  async verifyHandshake(userId: string, orderId: string, token: string): Promise<{ ok: boolean }> {
+    if (!(await this.isAssignedCourier(userId, orderId))) throw new ForbiddenException();
+    return { ok: await this.risk.verifyHandshake(orderId, token) };
+  }
+
   /**
    * Called by the courier's mobile app — a foreground interval while the
    * order screen is open, or a background location task once the OS wakes
@@ -213,6 +249,7 @@ export class OrdersService {
     orderId: string,
     lat: number,
     lng: number,
+    evidenceCtx?: { evidence?: LocationEvidenceDto | null; deviceId?: string | null },
   ): Promise<{ orderId: string; lat: number; lng: number; etaMinutes: number | null; updatedAt: string }> {
     const order = await this.orders.findOne({ where: { id: orderId } });
     if (!order) throw new NotFoundException('Buyurtma topilmadi');
@@ -226,8 +263,20 @@ export class OrdersService {
       : null;
 
     const payload = { orderId, lat, lng, etaMinutes, updatedAt: new Date().toISOString() };
+    // Live-tracking cache/broadcast — byte-identical to before evidence
+    // capture existed, the customer map depends on this exact shape.
     await this.redis.client.set(`courier:location:${orderId}`, JSON.stringify(payload), 'EX', 60);
     this.realtime.emitToOrder(orderId, 'courier:location', payload);
+
+    // Durable anti-fraud trail — separate from the 60s cache above.
+    const evidence = buildEvidence(
+      evidenceCtx?.evidence ?? { latitude: lat, longitude: lng, source: 'background' },
+      { deviceId: evidenceCtx?.deviceId ?? null, actorUserId: userId, actorRole: 'shop' },
+    );
+    if (evidence) {
+      void this.risk.recordCourierPing({ orderId, courierUserId: userId, shopId: order.shopId, evidence });
+    }
+
     return payload;
   }
 
@@ -721,6 +770,9 @@ export class OrdersService {
   ): Promise<
     Omit<Order, OrderEvidenceKey> & {
       reviewedVariantIds: string[];
+      courierReviewed: boolean;
+      shopReviewed: boolean;
+      requiresHandshake: boolean;
       complaint: { status: string; reason: string; createdAt: Date; resolvedAt: Date | null } | null;
       refund: { amount: number; at: Date } | null;
     }
@@ -748,12 +800,18 @@ export class OrdersService {
       });
       if (!staff || !this.staffCanViewOrder(staff, order)) throw new ForbiddenException();
     }
-    const myReviews = order.userId
-      ? await this.reviews.find({
-          where: { orderId, userId: order.userId },
-          select: { productVariantId: true },
-        })
-      : [];
+    const [myReviews, myPartyReviews] = order.userId
+      ? await Promise.all([
+          this.reviews.find({
+            where: { orderId, userId: order.userId, target: ReviewTarget.Product },
+            select: { productVariantId: true },
+          }),
+          this.reviews.find({
+            where: { orderId, userId: order.userId, target: In([ReviewTarget.Courier, ReviewTarget.Shop]) },
+            select: { target: true },
+          }),
+        ])
+      : [[], []];
 
     // Surface dispute + refund state so the customer (and shop side) can see
     // whether an order is under complaint or has already been refunded —
@@ -762,10 +820,20 @@ export class OrdersService {
     const refundTx = await this.sellerTransactions.findOne({
       where: { orderId, type: SellerTxType.RefundDebit },
     });
+    // Plain boolean, not the token itself — safe for both customer and shop
+    // reads. Lets the seller app decide whether to open the QR scanner
+    // without a second round-trip.
+    const requiresHandshake =
+      order.status === OrderStatus.Delivering
+        ? await this.risk.requiresHandshake(await this.resolveCourierUserId(order.assignedStaffId))
+        : false;
 
     return {
       ...omitOrderEvidence(order),
-      reviewedVariantIds: myReviews.map((r) => r.productVariantId),
+      reviewedVariantIds: myReviews.map((r) => r.productVariantId as string),
+      courierReviewed: myPartyReviews.some((r) => r.target === ReviewTarget.Courier),
+      shopReviewed: myPartyReviews.some((r) => r.target === ReviewTarget.Shop),
+      requiresHandshake,
       complaint: complaint
         ? {
             status: complaint.status,
@@ -907,6 +975,24 @@ export class OrdersService {
       // to'lov webhookida chiqqan — createSaleReceipt idempotent, shuning
       // uchun bu chaqiruv webhook paytida yiqilgan chekni ham qoplaydi.
       void this.fiscal.createSaleReceipt(order.id);
+    }
+
+    // Anti-fraud location-evidence rules — fire-and-forget, never affects the order flow.
+    if (nextStatus === OrderStatus.Delivering) {
+      void this.risk.onOrderDispatched({
+        orderId: saved.id,
+        shop: { latitude: order.shop.latitude, longitude: order.shop.longitude },
+        evidence,
+      });
+    } else if (nextStatus === OrderStatus.Delivered) {
+      void this.risk.onOrderDelivered({
+        orderId: saved.id,
+        deliveryAddress: saved.deliveryAddress
+          ? { latitude: saved.deliveryAddress.latitude, longitude: saved.deliveryAddress.longitude }
+          : null,
+        deliveredByUserId: saved.deliveredByUserId,
+        evidence,
+      });
     }
 
     // A captured Click payment must follow its order out the door: any
@@ -1434,7 +1520,7 @@ export class OrdersService {
     await this.dataSource.transaction(async (manager) => {
       for (const r of items) {
         const existing = await manager.findOne(Review, {
-          where: { userId, orderId, productVariantId: r.productVariantId },
+          where: { userId, orderId, target: ReviewTarget.Product, productVariantId: r.productVariantId },
         });
         if (existing) {
           existing.stars = r.stars;
@@ -1445,6 +1531,7 @@ export class OrdersService {
             manager.create(Review, {
               userId,
               orderId,
+              target: ReviewTarget.Product,
               productVariantId: r.productVariantId,
               stars: r.stars,
               text: r.text ?? null,
@@ -1462,10 +1549,94 @@ export class OrdersService {
     await this.recomputeShopRating(order.shopId);
 
     const myReviews = await this.reviews.find({
-      where: { orderId, userId },
+      where: { orderId, userId, target: ReviewTarget.Product },
       select: { productVariantId: true },
     });
-    return { reviewedVariantIds: myReviews.map((rv) => rv.productVariantId) };
+    return { reviewedVariantIds: myReviews.map((rv) => rv.productVariantId as string) };
+  }
+
+  /**
+   * Customer rates the courier who confirmed delivery (target='courier') —
+   * separate from product reviews. Courier is resolved from
+   * Order.deliveredByUserId (set when the shop side taps "Yetkazildi"); if
+   * the customer self-confirmed, there's no courier to attribute this to.
+   */
+  async rateCourier(userId: string, orderId: string, stars: number, text?: string): Promise<void> {
+    const order = await this.orders.findOne({ where: { id: orderId } });
+    if (!order) throw new NotFoundException('Buyurtma topilmadi');
+    if (order.userId !== userId) throw new ForbiddenException();
+    if (order.status !== OrderStatus.Delivered) {
+      throw new BadRequestException('Faqat yetkazilgan buyurtmani baholash mumkin');
+    }
+    if (!order.deliveredByUserId) {
+      throw new BadRequestException('Bu buyurtmada baholash uchun kuryer aniqlanmagan');
+    }
+    const courierUserId = order.deliveredByUserId;
+
+    await this.upsertPartyReview(userId, orderId, ReviewTarget.Courier, stars, text, { courierUserId });
+    await this.recomputeCourierRating(courierUserId);
+    void this.risk.onCourierRated({ orderId, courierUserId, stars });
+  }
+
+  /** Customer rates the shop/delivery experience (target='shop') — separate from per-product reviews. */
+  async rateShop(userId: string, orderId: string, stars: number, text?: string): Promise<void> {
+    const order = await this.orders.findOne({ where: { id: orderId } });
+    if (!order) throw new NotFoundException('Buyurtma topilmadi');
+    if (order.userId !== userId) throw new ForbiddenException();
+    if (order.status !== OrderStatus.Delivered) {
+      throw new BadRequestException('Faqat yetkazilgan buyurtmani baholash mumkin');
+    }
+
+    await this.upsertPartyReview(userId, orderId, ReviewTarget.Shop, stars, text, { shopId: order.shopId });
+    await this.recomputeShopServiceRating(order.shopId);
+  }
+
+  private async upsertPartyReview(
+    userId: string,
+    orderId: string,
+    target: ReviewTarget.Courier | ReviewTarget.Shop,
+    stars: number,
+    text: string | undefined,
+    extra: { courierUserId?: string; shopId?: string },
+  ): Promise<void> {
+    const existing = await this.reviews.findOne({ where: { userId, orderId, target } });
+    if (existing) {
+      existing.stars = stars;
+      existing.text = text ?? null;
+      await this.reviews.save(existing);
+    } else {
+      await this.reviews.save(this.reviews.create({ userId, orderId, target, stars, text: text ?? null, ...extra }));
+    }
+  }
+
+  /** Recompute a courier's cached rating from Review rows with target='courier'. */
+  private async recomputeCourierRating(courierUserId: string): Promise<void> {
+    const agg = await this.reviews
+      .createQueryBuilder('r')
+      .select('COALESCE(AVG(r.stars), 0)', 'avg')
+      .addSelect('COUNT(*)', 'cnt')
+      .where('r.target = :target', { target: ReviewTarget.Courier })
+      .andWhere('r.courierUserId = :courierUserId', { courierUserId })
+      .getRawOne<{ avg: string; cnt: string }>();
+    await this.users.update(courierUserId, {
+      courierRatingAverage: Math.round(Number(agg?.avg ?? 0) * 100) / 100,
+      courierRatingCount: Number(agg?.cnt ?? 0),
+    });
+  }
+
+  /** Recompute a shop's service/delivery rating from Review rows with target='shop' — distinct from product-based ratingAverage. */
+  private async recomputeShopServiceRating(shopId: string): Promise<void> {
+    const agg = await this.reviews
+      .createQueryBuilder('r')
+      .select('COALESCE(AVG(r.stars), 0)', 'avg')
+      .addSelect('COUNT(*)', 'cnt')
+      .where('r.target = :target', { target: ReviewTarget.Shop })
+      .andWhere('r.shopId = :shopId', { shopId })
+      .getRawOne<{ avg: string; cnt: string }>();
+    await this.shops.update(shopId, {
+      serviceRatingAverage: Math.round(Number(agg?.avg ?? 0) * 100) / 100,
+      serviceRatingCount: Number(agg?.cnt ?? 0),
+    });
   }
 
   /** Recompute a variant's cached rating from its reviews (SQL aggregation). */
@@ -1569,13 +1740,19 @@ export class OrdersService {
 
   /**
    * Reminds customers to rate delivered orders. Runs every 4 hours.
-   * Targets orders delivered 4–48 hours ago that still have unreviewed items.
+   * Targets orders delivered 2–24 hours ago that still have unreviewed
+   * items. Previously this fired 4–48h after delivery — well past the
+   * default 24h complaint window (SETTLEMENT_HOURS), so a customer nudged
+   * to rate their order often couldn't file a complaint about it anymore
+   * even if the reminder made them realise something was wrong. 2h leaves
+   * the reminder itself meaningful (order/courier are fresh); by 24h the
+   * complaint window is closing, so this stops before then.
    */
   @Cron('0 */4 * * *')
   async sendReviewReminders(): Promise<void> {
     const now = Date.now();
-    const from = new Date(now - 48 * 60 * 60 * 1000);
-    const to = new Date(now - 4 * 60 * 60 * 1000);
+    const from = new Date(now - 24 * 60 * 60 * 1000);
+    const to = new Date(now - 2 * 60 * 60 * 1000);
 
     const delivered = await this.orders.find({
       where: { status: OrderStatus.Delivered, updatedAt: Between(from, to), reviewReminderSentAt: IsNull() },
@@ -1586,7 +1763,7 @@ export class OrdersService {
 
     // For each order check if all items have been reviewed.
     const orderIds = delivered.map((o) => o.id);
-    const existingReviews = await this.reviews.find({ where: { orderId: In(orderIds) } });
+    const existingReviews = await this.reviews.find({ where: { orderId: In(orderIds), target: ReviewTarget.Product } });
     const reviewedPairs = new Set(existingReviews.map((r) => `${r.orderId}:${r.productVariantId}`));
 
     const reminded = new Set<string>();
@@ -1606,7 +1783,7 @@ export class OrdersService {
       void this.push.sendToUser(order.userId, {
         title: 'Buyurtmangizni baholang',
         body: `#${order.orderNumber} buyurtmangiz haqida fikr qoldiring — bu do'konni rivojlantiradi!`,
-        data: { kind: 'review_reminder', orderId: order.id },
+        data: { kind: 'review_reminder', orderId: order.id, deepLink: `/orders/${order.id}` },
       });
     }
     if (remindedOrderIds.length > 0) {
@@ -1785,6 +1962,66 @@ export class OrdersService {
         createdAt: o.createdAt.toISOString(),
       })),
     );
+  }
+
+  /**
+   * Admin review queue — there was previously NO admin surface for reviews
+   * at all (only the seller's own product-review list existed). `maxStars`
+   * is what makes this useful for spotting fraud fallout: a low-star
+   * courier/shop review is a customer signal the risk module also reacts to
+   * (RiskService.onCourierRated), but an admin needs to actually read it.
+   */
+  async adminListReviews(opts: {
+    target?: ReviewTarget;
+    maxStars?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<{
+    items: (Review & { customerName: string | null; targetName: string | null })[];
+    total: number;
+  }> {
+    const qb = this.reviews
+      .createQueryBuilder('r')
+      .leftJoinAndSelect('r.user', 'user')
+      .leftJoinAndSelect('r.courier', 'courier')
+      .leftJoinAndSelect('r.shop', 'shop')
+      .orderBy('r.createdAt', 'DESC')
+      .take(Math.min(opts.limit ?? 30, 100))
+      .skip(Math.max(opts.offset ?? 0, 0));
+    if (opts.target) qb.andWhere('r.target = :target', { target: opts.target });
+    if (opts.maxStars != null) qb.andWhere('r.stars <= :maxStars', { maxStars: opts.maxStars });
+    const [items, total] = await qb.getManyAndCount();
+
+    const variantIds = [
+      ...new Set(
+        items
+          .filter((r) => r.target === ReviewTarget.Product && r.productVariantId)
+          .map((r) => r.productVariantId as string),
+      ),
+    ];
+    const variants = variantIds.length
+      ? await this.variants
+          .createQueryBuilder('v')
+          .innerJoinAndSelect('v.globalProduct', 'gp')
+          .where('v.id IN (:...ids)', { ids: variantIds })
+          .select(['v.id', 'gp.name'])
+          .getMany()
+      : [];
+    const variantNameMap = new Map(variants.map((v) => [v.id, v.globalProduct?.name ?? null]));
+
+    return {
+      items: items.map((r) => ({
+        ...r,
+        customerName: r.user?.name || r.user?.phone || null,
+        targetName:
+          r.target === ReviewTarget.Product
+            ? (r.productVariantId ? (variantNameMap.get(r.productVariantId) ?? null) : null)
+            : r.target === ReviewTarget.Courier
+              ? r.courier?.name || r.courier?.phone || null
+              : (r.shop?.name ?? null),
+      })),
+      total,
+    };
   }
 
   async adminGetOrder(id: string): Promise<Order> {

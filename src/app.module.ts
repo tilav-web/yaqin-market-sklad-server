@@ -31,6 +31,7 @@ import { PrimeModule } from './prime/prime.module';
 import { ProductsModule } from './products/products.module';
 import { PushModule } from './push/push.module';
 import { RedisModule } from './redis/redis.module';
+import { RiskModule } from './risk/risk.module';
 import { SellersModule } from './sellers/sellers.module';
 import { SettingsModule } from './settings/settings.module';
 import { ShopsModule } from './shops/shops.module';
@@ -76,6 +77,7 @@ import { UsersModule } from './users/users.module';
     ComplaintsModule,
     AuditLogModule,
     FiscalModule,
+    RiskModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsFilter },

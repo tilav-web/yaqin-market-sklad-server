@@ -17,6 +17,7 @@ export enum AuditAction {
   PrimeSubscriptionExtended = 'prime_subscription_extended',
   OrderCommissionExempted = 'order_commission_exempted',
   OrderCommissionExemptRemoved = 'order_commission_exempt_removed',
+  RiskFlagReviewed = 'risk_flag_reviewed',
 }
 
 @Entity({ name: 'admin_audit_logs' })

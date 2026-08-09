@@ -5,9 +5,12 @@ import {
   IsArray,
   IsBoolean,
   IsEnum,
+  IsIn,
   IsInt,
+  IsISO8601,
   IsLatitude,
   IsLongitude,
+  IsNumber,
   IsOptional,
   IsString,
   IsUUID,
@@ -21,6 +24,7 @@ import {
 
 import { LocationEvidenceDto } from '../../geo/location-evidence';
 import { OrderChannel, OrderStatus, PaymentMethod, PaymentStatus } from '../entities/order.entity';
+import { ReviewTarget } from '../entities/review.entity';
 
 export class OrderItemDto {
   @ApiProperty()
@@ -88,6 +92,29 @@ export class UpdateCourierLocationDto {
   @ApiProperty()
   @IsLongitude()
   lng!: number;
+
+  /** Metres, from the OS — anti-fraud evidence, doesn't affect the live-tracking payload. */
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(10000)
+  accuracy?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsISO8601()
+  capturedAt?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  mocked?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsIn(['foreground', 'background', 'last_known', 'map_pick'])
+  source?: 'foreground' | 'background' | 'last_known' | 'map_pick';
 }
 
 export class InStoreSaleDto {
@@ -161,6 +188,21 @@ export class CreateReviewsDto {
   @ValidateNested({ each: true })
   @Type(() => ReviewItemDto)
   items!: ReviewItemDto[];
+}
+
+/** Rate the courier or the shop for one order — separate from per-product reviews. */
+export class RateOrderPartyDto {
+  @ApiProperty({ example: 5, minimum: 1, maximum: 5 })
+  @IsInt()
+  @Min(1)
+  @Max(5)
+  stars!: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  text?: string;
 }
 
 export class ReturnItemDto {
@@ -273,4 +315,41 @@ export class SetMarkingCodesDto {
   @ValidateNested({ each: true })
   @Type(() => MarkingItemDto)
   items!: MarkingItemDto[];
+}
+
+export class VerifyHandshakeDto {
+  @ApiProperty()
+  @IsString()
+  @MaxLength(64)
+  token!: string;
+}
+
+export class AdminListReviewsQuery {
+  @ApiPropertyOptional({ enum: ReviewTarget })
+  @IsOptional()
+  @IsEnum(ReviewTarget)
+  target?: ReviewTarget;
+
+  @ApiPropertyOptional({ description: 'Faqat shu qiymatdan past/teng baholar (masalan 2 — muammoli sharhlarni topish uchun)' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(5)
+  maxStars?: number;
+
+  @ApiPropertyOptional({ default: 30 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number;
+
+  @ApiPropertyOptional({ default: 0 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  offset?: number;
 }

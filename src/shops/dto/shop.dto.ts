@@ -24,6 +24,8 @@ import {
   ValidatorConstraintInterface,
 } from 'class-validator';
 
+import { LocationEvidenceDto } from '../../geo/location-evidence';
+
 /**
  * A valid GeoJSON Polygon needs every ring to have >=4 [lng, lat] points
  * (closed: first === last) with coordinates in range. Without this, a
@@ -198,6 +200,13 @@ export class CreateShopDto {
   @ArrayMaxSize(5)
   @IsString({ each: true })
   photos?: string[];
+
+  /** Best-effort device fix at the moment this pin was set (anti-fraud). */
+  @ApiPropertyOptional({ type: LocationEvidenceDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => LocationEvidenceDto)
+  evidence?: LocationEvidenceDto;
 }
 
 export class UpdateShopDto {
@@ -233,6 +242,13 @@ export class UpdateShopDto {
   @IsOptional()
   @IsLongitude()
   longitude?: number;
+
+  /** Best-effort device fix at the moment this pin was set (anti-fraud). */
+  @ApiPropertyOptional({ type: LocationEvidenceDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => LocationEvidenceDto)
+  evidence?: LocationEvidenceDto;
 
   @ApiPropertyOptional({ type: [WorkingHourSlotDto] })
   @IsOptional()

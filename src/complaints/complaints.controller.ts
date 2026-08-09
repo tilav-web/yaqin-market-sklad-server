@@ -37,6 +37,12 @@ export class AdminComplaintsController {
     return this.complaints.adminList(query);
   }
 
+  /** Admin sidebar badge. */
+  @Get('open-count')
+  openCount() {
+    return this.complaints.openCount();
+  }
+
   @Post(':id/resolve')
   resolve(
     @CurrentUser() user: JwtPayload,

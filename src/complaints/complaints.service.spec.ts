@@ -4,8 +4,13 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
 import { Order, OrderStatus } from '../orders/entities/order.entity';
+import { PushService } from '../push/push.service';
+import { RiskService } from '../risk/risk.service';
 import { SETTING_KEYS } from '../settings/entities/global-setting.entity';
 import { SettingsService } from '../settings/settings.service';
+import { Shop } from '../shops/entities/shop.entity';
+import { ShopStaff } from '../shops/entities/shop-staff.entity';
+import { User } from '../users/entities/user.entity';
 import { ComplaintsService } from './complaints.service';
 import { ComplaintStatus, OrderComplaint } from './entities/order-complaint.entity';
 
@@ -14,6 +19,9 @@ function makeOrder(overrides: Partial<Order> = {}): Order {
     id: 'order-1',
     userId: 'customer-1',
     shopId: 'shop-1',
+    shop: { ownerId: 'owner-1' },
+    orderNumber: 'ABC12345',
+    deliveredByUserId: null,
     status: OrderStatus.Delivered,
     timeline: [],
     ...overrides,
@@ -52,7 +60,21 @@ describe('ComplaintsService', () => {
           provide: getRepositoryToken(Order),
           useValue: { findOne: jest.fn() },
         },
+        {
+          provide: getRepositoryToken(ShopStaff),
+          useValue: { find: jest.fn().mockResolvedValue([]) },
+        },
+        {
+          provide: getRepositoryToken(User),
+          useValue: { find: jest.fn().mockResolvedValue([]) },
+        },
+        {
+          provide: getRepositoryToken(Shop),
+          useValue: { find: jest.fn().mockResolvedValue([]) },
+        },
         { provide: SettingsService, useValue: settings },
+        { provide: PushService, useValue: { sendToUsers: jest.fn() } },
+        { provide: RiskService, useValue: { onComplaintFiled: jest.fn() } },
       ],
     }).compile();
 

@@ -14,16 +14,18 @@ import { PushModule } from '../push/push.module';
 import { SettingsModule } from '../settings/settings.module';
 import { RealtimeModule } from '../realtime/realtime.module';
 import { RedisModule } from '../redis/redis.module';
+import { RiskModule } from '../risk/risk.module';
 import { Shop } from '../shops/entities/shop.entity';
 import { ShopStaff } from '../shops/entities/shop-staff.entity';
 import { UserAddress } from '../users/entities/user-address.entity';
+import { User } from '../users/entities/user.entity';
 import { GlobalProduct } from '../products/entities/global-product.entity';
 import { ProductVariant } from '../products/entities/product-variant.entity';
 import { ChatMessage } from './entities/chat-message.entity';
 import { OrderItem } from './entities/order-item.entity';
 import { Order } from './entities/order.entity';
 import { Review } from './entities/review.entity';
-import { AdminOrdersController, OrdersController, SellerOrdersController } from './orders.controller';
+import { AdminOrdersController, AdminReviewsController, OrdersController, SellerOrdersController } from './orders.controller';
 import { OrdersService } from './orders.service';
 
 @Module({
@@ -40,6 +42,7 @@ import { OrdersService } from './orders.service';
       InventoryMovement,
       UserAddress,
       SellerTransaction,
+      User,
     ]),
     RealtimeModule,
     RedisModule,
@@ -52,8 +55,9 @@ import { OrdersService } from './orders.service';
     AuditLogModule,
     ClickModule,
     FiscalModule,
+    RiskModule,
   ],
-  controllers: [OrdersController, SellerOrdersController, AdminOrdersController],
+  controllers: [OrdersController, SellerOrdersController, AdminOrdersController, AdminReviewsController],
   providers: [OrdersService],
   exports: [OrdersService],
 })

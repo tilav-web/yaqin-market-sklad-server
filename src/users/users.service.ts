@@ -6,7 +6,9 @@ import { Role } from '../auth/role.enum';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { AuditAction } from '../audit-log/entities/admin-audit-log.entity';
 import { buildXlsxBuffer } from '../common/xlsx.util';
+import { LocationEvidenceDto, buildEvidence } from '../geo/location-evidence';
 import { Order } from '../orders/entities/order.entity';
+import { RiskService } from '../risk/risk.service';
 import { ShopStaff } from '../shops/entities/shop-staff.entity';
 import { UserAddress } from './entities/user-address.entity';
 import { User, UserGender, UserStatus } from './entities/user.entity';
@@ -23,6 +25,7 @@ export class UsersService {
     @InjectRepository(Order)
     private readonly orders: Repository<Order>,
     private readonly auditLog: AuditLogService,
+    private readonly risk: RiskService,
   ) {}
 
   /**
@@ -117,12 +120,15 @@ export class UsersService {
       apartment?: string;
       intercom?: string;
       isDefault?: boolean;
+      evidence?: LocationEvidenceDto;
     },
+    deviceId?: string | null,
   ): Promise<UserAddress> {
     if (dto.isDefault) {
       await this.addresses.update({ userId }, { isDefault: false });
     }
     const existing = await this.addresses.count({ where: { userId } });
+    const pinEvidence = buildEvidence(dto.evidence, { deviceId: deviceId ?? null, actorUserId: userId, actorRole: 'customer' });
     const address = this.addresses.create({
       userId,
       label: dto.label,
@@ -135,8 +141,17 @@ export class UsersService {
       apartment: dto.apartment ?? null,
       intercom: dto.intercom ?? null,
       isDefault: dto.isDefault ?? existing === 0,
+      pinEvidence,
+      pinSetCount: 1,
     });
-    return this.addresses.save(address);
+    const saved = await this.addresses.save(address);
+    void this.risk.onAddressPinned({
+      userId,
+      addressId: saved.id,
+      pin: { latitude: saved.latitude, longitude: saved.longitude },
+      evidence: pinEvidence,
+    });
+    return saved;
   }
 
   async updateAddress(
@@ -153,15 +168,36 @@ export class UsersService {
       apartment: string;
       intercom: string;
       isDefault: boolean;
+      evidence: LocationEvidenceDto;
     }>,
+    deviceId?: string | null,
   ): Promise<UserAddress> {
     const address = await this.addresses.findOne({ where: { id: addressId, userId } });
     if (!address) throw new NotFoundException('Manzil topilmadi');
     if (dto.isDefault) {
       await this.addresses.update({ userId }, { isDefault: false });
     }
-    Object.assign(address, dto);
-    return this.addresses.save(address);
+    const coordsChanged =
+      (dto.latitude != null && dto.latitude !== address.latitude) ||
+      (dto.longitude != null && dto.longitude !== address.longitude);
+    const { evidence: evidenceDto, ...rest } = dto;
+    Object.assign(address, rest);
+    let pinEvidence = address.pinEvidence;
+    if (coordsChanged) {
+      pinEvidence = buildEvidence(evidenceDto, { deviceId: deviceId ?? null, actorUserId: userId, actorRole: 'customer' });
+      address.pinEvidence = pinEvidence;
+      address.pinSetCount += 1;
+    }
+    const saved = await this.addresses.save(address);
+    if (coordsChanged) {
+      void this.risk.onAddressPinned({
+        userId,
+        addressId: saved.id,
+        pin: { latitude: saved.latitude, longitude: saved.longitude },
+        evidence: pinEvidence,
+      });
+    }
+    return saved;
   }
 
   async deleteAddress(userId: string, addressId: string): Promise<void> {

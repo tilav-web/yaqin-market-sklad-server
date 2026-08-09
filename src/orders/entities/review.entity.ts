@@ -10,12 +10,21 @@ import {
 } from 'typeorm';
 
 import { ProductVariant } from '../../products/entities/product-variant.entity';
+import { Shop } from '../../shops/entities/shop.entity';
 import { User } from '../../users/entities/user.entity';
 import { Order } from './order.entity';
 
+export enum ReviewTarget {
+  Product = 'product',
+  Courier = 'courier',
+  Shop = 'shop',
+}
+
 @Entity({ name: 'reviews' })
-@Unique(['userId', 'productVariantId', 'orderId'])
+@Unique(['userId', 'orderId', 'target', 'productVariantId'])
 @Index(['productVariantId'])
+@Index(['courierUserId'])
+@Index(['shopId'])
 export class Review {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
@@ -27,12 +36,32 @@ export class Review {
   @JoinColumn({ name: 'userId' })
   user!: User;
 
-  @Column({ type: 'uuid' })
-  productVariantId!: string;
+  @Column({ type: 'enum', enum: ReviewTarget, default: ReviewTarget.Product })
+  target!: ReviewTarget;
 
-  @ManyToOne(() => ProductVariant, { onDelete: 'CASCADE' })
+  /** Set only when target = product. */
+  @Column({ type: 'uuid', nullable: true })
+  productVariantId!: string | null;
+
+  @ManyToOne(() => ProductVariant, { onDelete: 'CASCADE', nullable: true })
   @JoinColumn({ name: 'productVariantId' })
-  productVariant!: ProductVariant;
+  productVariant!: ProductVariant | null;
+
+  /** Set only when target = courier — the User.id who confirmed delivery (Order.deliveredByUserId). */
+  @Column({ type: 'uuid', nullable: true })
+  courierUserId!: string | null;
+
+  @ManyToOne(() => User, { onDelete: 'CASCADE', nullable: true })
+  @JoinColumn({ name: 'courierUserId' })
+  courier!: User | null;
+
+  /** Set only when target = shop. */
+  @Column({ type: 'uuid', nullable: true })
+  shopId!: string | null;
+
+  @ManyToOne(() => Shop, { onDelete: 'CASCADE', nullable: true })
+  @JoinColumn({ name: 'shopId' })
+  shop!: Shop | null;
 
   @Column({ type: 'uuid' })
   orderId!: string;

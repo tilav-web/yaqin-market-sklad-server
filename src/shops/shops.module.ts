@@ -13,6 +13,7 @@ import {
   ShopsController,
   StaffController,
 } from './shops.controller';
+import { RiskModule } from '../risk/risk.module';
 import { SettingsModule } from '../settings/settings.module';
 import { ShopsService } from './shops.service';
 import { Shop } from './entities/shop.entity';
@@ -28,6 +29,7 @@ import { StaffInvitation } from './entities/staff-invitation.entity';
     ComplaintsModule,
     AuditLogModule,
     SettingsModule,
+    RiskModule,
   ],
   controllers: [ShopsController, SellerShopsController, StaffController, AdminShopsController],
   providers: [ShopsService],

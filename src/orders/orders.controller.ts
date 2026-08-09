@@ -22,18 +22,21 @@ import { DeviceId } from '../common/device-id.decorator';
 import { RedisService } from '../redis/redis.service';
 import {
   AdminListOrdersQuery,
+  AdminListReviewsQuery,
   AssignOrderDto,
   ChangePaymentMethodDto,
   CreateOrderDto,
   CreateReviewsDto,
   InStoreSaleDto,
   PartialReturnDto,
+  RateOrderPartyDto,
   ReturnReasonDto,
   SendMessageDto,
   SetCommissionExemptDto,
   SetMarkingCodesDto,
   UpdateCourierLocationDto,
   UpdateOrderStatusDto,
+  VerifyHandshakeDto,
 } from './dto/order.dto';
 import { OrderStatus } from './entities/order.entity';
 import { OrdersService } from './orders.service';
@@ -72,8 +75,19 @@ export class OrdersController {
     @CurrentUser() user: JwtPayload,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateCourierLocationDto,
+    @DeviceId() deviceId: string | null,
   ) {
-    return this.orders.updateCourierLocation(user.sub, id, dto.lat, dto.lng);
+    return this.orders.updateCourierLocation(user.sub, id, dto.lat, dto.lng, {
+      evidence: {
+        latitude: dto.lat,
+        longitude: dto.lng,
+        accuracy: dto.accuracy,
+        capturedAt: dto.capturedAt,
+        mocked: dto.mocked,
+        source: dto.source ?? 'background',
+      },
+      deviceId,
+    });
   }
 
   /** Customer: every currently-active order at once, for the multi-order live map. */
@@ -158,6 +172,42 @@ export class OrdersController {
     @Body() dto: CreateReviewsDto,
   ) {
     return this.orders.createReviews(user.sub, id, dto.items);
+  }
+
+  /** Customer: rate the courier who confirmed delivery — separate from per-product reviews. */
+  @Post(':id/review-courier')
+  reviewCourier(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: RateOrderPartyDto,
+  ) {
+    return this.orders.rateCourier(user.sub, id, dto.stars, dto.text);
+  }
+
+  /** Customer: rate the shop/delivery experience — separate from per-product reviews. */
+  @Post(':id/review-shop')
+  reviewShop(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: RateOrderPartyDto,
+  ) {
+    return this.orders.rateShop(user.sub, id, dto.stars, dto.text);
+  }
+
+  /** Customer: fetch (lazily issuing) the QR handshake token — `required` is almost always false. */
+  @Get(':id/handshake')
+  getHandshake(@CurrentUser() user: JwtPayload, @Param('id', ParseUUIDPipe) id: string) {
+    return this.orders.getHandshake(user.sub, id);
+  }
+
+  /** Courier: verify a scanned QR handshake before marking delivered. */
+  @Post(':id/handshake/verify')
+  verifyHandshake(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: VerifyHandshakeDto,
+  ) {
+    return this.orders.verifyHandshake(user.sub, id, dto.token);
   }
 
   @Get(':id/messages')
@@ -254,5 +304,19 @@ export class AdminOrdersController {
     @Body() dto: SetCommissionExemptDto,
   ) {
     return this.orders.adminSetCommissionExempt(id, dto.exempt, admin.sub);
+  }
+}
+
+/** Platform-wide review queue — was previously invisible to admins entirely. */
+@ApiBearerAuth()
+@ApiTags('admin-reviews')
+@Roles(Role.Admin)
+@Controller('admin/reviews')
+export class AdminReviewsController {
+  constructor(private readonly orders: OrdersService) {}
+
+  @Get()
+  list(@Query() query: AdminListReviewsQuery) {
+    return this.orders.adminListReviews(query);
   }
 }

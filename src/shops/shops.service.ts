@@ -13,11 +13,13 @@ import { Between, DataSource, In, Repository } from 'typeorm';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { AuditAction } from '../audit-log/entities/admin-audit-log.entity';
 import { buildXlsxBuffer } from '../common/xlsx.util';
-import { Order } from '../orders/entities/order.entity';
+import { Order, OrderStatus } from '../orders/entities/order.entity';
 import { GlobalProduct } from '../products/entities/global-product.entity';
 import { ProductVariant } from '../products/entities/product-variant.entity';
 import { User } from '../users/entities/user.entity';
 import { boundingBox, calcDeliveryFee, GeoJsonPolygon, haversineKm, pointInPolygon } from '../geo/geo.util';
+import { LocationEvidenceDto, buildEvidence } from '../geo/location-evidence';
+import { RiskService } from '../risk/risk.service';
 import { SETTING_KEYS } from '../settings/entities/global-setting.entity';
 import { SettingsService } from '../settings/settings.service';
 import { Shop } from './entities/shop.entity';
@@ -71,6 +73,7 @@ export class ShopsService {
     private readonly dataSource: DataSource,
     private readonly auditLog: AuditLogService,
     private readonly settings: SettingsService,
+    private readonly risk: RiskService,
   ) {}
 
   findOne(id: string): Promise<Shop | null> {
@@ -107,7 +110,7 @@ export class ShopsService {
    * A user creates a shop directly and instantly becomes its owner (and a
    * seller). Sellers may own multiple shops.
    */
-  async createShop(userId: string, dto: CreateShopDto): Promise<Shop> {
+  async createShop(userId: string, dto: CreateShopDto, deviceId?: string | null): Promise<Shop> {
     const user = await this.users.findOne({ where: { id: userId } });
     if (!user?.isSellerApproved) {
       throw new ForbiddenException(
@@ -123,6 +126,7 @@ export class ShopsService {
         longitude: dto.longitude,
         description: dto.description ?? null,
         photos: dto.photos ?? [],
+        pinEvidence: buildEvidence(dto.evidence, { deviceId: deviceId ?? null, actorUserId: userId, actorRole: 'shop' }),
       }),
     );
   }
@@ -149,10 +153,29 @@ export class ShopsService {
     return shop;
   }
 
-  async update(userId: string, shopId: string, dto: UpdateShopDto): Promise<Shop> {
+  async update(userId: string, shopId: string, dto: UpdateShopDto, deviceId?: string | null): Promise<Shop> {
     const shop = await this.getOwned(userId, shopId);
-    Object.assign(shop, dto);
-    return this.shops.save(shop);
+    const coordsChanged =
+      (dto.latitude != null && dto.latitude !== shop.latitude) ||
+      (dto.longitude != null && dto.longitude !== shop.longitude);
+    const previous = coordsChanged ? { latitude: shop.latitude, longitude: shop.longitude } : null;
+    const { evidence: evidenceDto, ...rest } = dto;
+    Object.assign(shop, rest);
+    if (coordsChanged) {
+      shop.pinEvidence = buildEvidence(evidenceDto, { deviceId: deviceId ?? null, actorUserId: userId, actorRole: 'shop' });
+      shop.relocatedAt = new Date();
+    }
+    const saved = await this.shops.save(shop);
+    if (previous) {
+      const hasDeliveredOrders = (await this.orders.count({ where: { shopId, status: OrderStatus.Delivered } })) > 0;
+      void this.risk.onShopPinned({
+        shopId,
+        hasDeliveredOrders,
+        previous,
+        next: { latitude: saved.latitude, longitude: saved.longitude },
+      });
+    }
+    return saved;
   }
 
   // ---- Staff (QR onboarding) ----------------------------------------------

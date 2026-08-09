@@ -52,6 +52,13 @@ export class User {
   @Column({ type: 'enum', enum: UserStatus, default: UserStatus.Active })
   status!: UserStatus;
 
+  /** Rolled up from Review rows with target='courier' where this user is courierUserId. */
+  @Column({ type: 'double precision', nullable: true })
+  courierRatingAverage!: number | null;
+
+  @Column({ type: 'int', default: 0 })
+  courierRatingCount!: number;
+
   @Column({ type: 'boolean', default: false })
   isSellerApproved!: boolean;
 

@@ -16,10 +16,12 @@ import { PrimeService } from '../prime/prime.service';
 import { PromotionsService } from '../promotions/promotions.service';
 import { PushService } from '../push/push.service';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
+import { RiskService } from '../risk/risk.service';
 import { SettingsService } from '../settings/settings.service';
 import { Shop } from '../shops/entities/shop.entity';
 import { ShopStaff } from '../shops/entities/shop-staff.entity';
 import { UserAddress } from '../users/entities/user-address.entity';
+import { User } from '../users/entities/user.entity';
 import { ChatMessage } from './entities/chat-message.entity';
 import { OrderItem } from './entities/order-item.entity';
 import { Order, OrderStatus, PaymentMethod, PaymentStatus } from './entities/order.entity';
@@ -160,6 +162,12 @@ describe('OrdersService', () => {
   let complaints: { getForOrder: jest.Mock; openComplaintOrderIds: jest.Mock };
   let auditLog: { record: jest.Mock };
   let click: { refundPaidOrder: jest.Mock };
+  let risk: {
+    recordCourierPing: jest.Mock;
+    onOrderDispatched: jest.Mock;
+    onOrderDelivered: jest.Mock;
+    requiresHandshake: jest.Mock;
+  };
   let fiscal: {
     createSaleReceipt: jest.Mock;
     createRefundReceipt: jest.Mock;
@@ -207,6 +215,12 @@ describe('OrdersService', () => {
       createRefundReceipt: jest.fn().mockResolvedValue(undefined),
       rebuildIncompleteSaleForOrder: jest.fn().mockResolvedValue(undefined),
     };
+    risk = {
+      recordCourierPing: jest.fn().mockResolvedValue(undefined),
+      onOrderDispatched: jest.fn().mockResolvedValue(undefined),
+      onOrderDelivered: jest.fn().mockResolvedValue(undefined),
+      requiresHandshake: jest.fn().mockResolvedValue(false),
+    };
     const redis = { client: { set: jest.fn().mockResolvedValue('OK'), get: jest.fn().mockResolvedValue(null) } };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -222,6 +236,7 @@ describe('OrdersService', () => {
         { provide: getRepositoryToken(ShopStaff), useFactory: buildRepoMock },
         { provide: getRepositoryToken(GlobalProduct), useFactory: buildRepoMock },
         { provide: getRepositoryToken(SellerTransaction), useFactory: buildRepoMock },
+        { provide: getRepositoryToken(User), useFactory: buildRepoMock },
         { provide: DataSource, useValue: dataSource },
         { provide: RealtimeGateway, useValue: realtime },
         { provide: PushService, useValue: push },
@@ -234,6 +249,7 @@ describe('OrdersService', () => {
         { provide: ClickService, useValue: click },
         { provide: FiscalService, useValue: fiscal },
         { provide: RedisService, useValue: redis },
+        { provide: RiskService, useValue: risk },
       ],
     }).compile();
 

@@ -2,7 +2,12 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { Order } from '../orders/entities/order.entity';
+import { PushModule } from '../push/push.module';
+import { RiskModule } from '../risk/risk.module';
 import { SettingsModule } from '../settings/settings.module';
+import { Shop } from '../shops/entities/shop.entity';
+import { ShopStaff } from '../shops/entities/shop-staff.entity';
+import { User } from '../users/entities/user.entity';
 import { AdminComplaintsController, OrderComplaintController } from './complaints.controller';
 import { ComplaintsService } from './complaints.service';
 import { OrderComplaint } from './entities/order-complaint.entity';
@@ -17,7 +22,12 @@ import { OrderComplaint } from './entities/order-complaint.entity';
  * each other's entities without importing the whole module.
  */
 @Module({
-  imports: [TypeOrmModule.forFeature([OrderComplaint, Order]), SettingsModule],
+  imports: [
+    TypeOrmModule.forFeature([OrderComplaint, Order, ShopStaff, User, Shop]),
+    SettingsModule,
+    PushModule,
+    RiskModule,
+  ],
   controllers: [OrderComplaintController, AdminComplaintsController],
   providers: [ComplaintsService],
   exports: [ComplaintsService],

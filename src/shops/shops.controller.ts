@@ -23,6 +23,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '../auth/role.enum';
 import { ComplaintsService } from '../complaints/complaints.service';
 import { sendXlsx } from '../common/xlsx.util';
+import { DeviceId } from '../common/device-id.decorator';
 import {
   AcceptInvitationDto,
   AdminListShopsQuery,
@@ -81,8 +82,8 @@ export class SellerShopsController {
 
   // Any authenticated user can open a shop and instantly become a seller.
   @Post()
-  create(@CurrentUser() user: JwtPayload, @Body() dto: CreateShopDto) {
-    return this.shops.createShop(user.sub, dto);
+  create(@CurrentUser() user: JwtPayload, @Body() dto: CreateShopDto, @DeviceId() deviceId: string | null) {
+    return this.shops.createShop(user.sub, dto, deviceId);
   }
 
   @Get('working-for-me')
@@ -100,8 +101,9 @@ export class SellerShopsController {
     @CurrentUser() user: JwtPayload,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateShopDto,
+    @DeviceId() deviceId: string | null,
   ) {
-    return this.shops.update(user.sub, id, dto);
+    return this.shops.update(user.sub, id, dto, deviceId);
   }
 
   @Post(':id/toggle-open')

@@ -107,6 +107,18 @@ export class Shop {
   @Column({ type: 'int', default: 0 })
   ratingCount!: number;
 
+  /**
+   * Separate from ratingAverage (which measures PRODUCT quality, averaged
+   * from product reviews) — this is the shop/delivery EXPERIENCE, from the
+   * customer explicitly rating the shop after delivery (Review.target='shop').
+   * Kept distinct rather than merged so neither signal dilutes the other.
+   */
+  @Column({ type: 'double precision', nullable: true })
+  serviceRatingAverage!: number | null;
+
+  @Column({ type: 'int', default: 0 })
+  serviceRatingCount!: number;
+
   @Column({ type: 'boolean', default: true })
   isActive!: boolean;
 

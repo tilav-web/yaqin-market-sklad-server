@@ -20,6 +20,7 @@ import type { JwtPayload } from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '../auth/role.enum';
 import { sendXlsx } from '../common/xlsx.util';
+import { DeviceId } from '../common/device-id.decorator';
 import {
   AdminListUsersQuery,
   AdminSetAdminDto,
@@ -66,8 +67,12 @@ export class UsersController {
   }
 
   @Post('addresses')
-  createAddress(@CurrentUser() user: JwtPayload, @Body() dto: CreateAddressDto) {
-    return this.users.createAddress(user.sub, dto);
+  createAddress(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: CreateAddressDto,
+    @DeviceId() deviceId: string | null,
+  ) {
+    return this.users.createAddress(user.sub, dto, deviceId);
   }
 
   @Patch('addresses/:id')
@@ -75,8 +80,9 @@ export class UsersController {
     @CurrentUser() user: JwtPayload,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateAddressDto,
+    @DeviceId() deviceId: string | null,
   ) {
-    return this.users.updateAddress(user.sub, id, dto);
+    return this.users.updateAddress(user.sub, id, dto, deviceId);
   }
 
   @Delete('addresses/:id')

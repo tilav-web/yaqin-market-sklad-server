@@ -2,6 +2,7 @@ import { Body, Controller, Get, HttpCode, HttpStatus, Post, UseGuards } from '@n
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 
 import { AuthService } from './auth.service';
+import { DeviceId } from '../common/device-id.decorator';
 import { CurrentUser } from './decorators/current-user.decorator';
 import type { JwtPayload } from './decorators/current-user.decorator';
 import { Public } from './decorators/public.decorator';
@@ -27,8 +28,8 @@ export class AuthController {
   @Post('verify-otp')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'SMS OTP ni tekshirish va token olish' })
-  verifyOtp(@Body() dto: VerifyOtpDto) {
-    return this.auth.verifyOtp(dto.phone, dto.code);
+  verifyOtp(@Body() dto: VerifyOtpDto, @DeviceId() deviceId: string | null) {
+    return this.auth.verifyOtp(dto.phone, dto.code, deviceId);
   }
 
   @Public()

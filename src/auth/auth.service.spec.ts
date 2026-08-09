@@ -5,6 +5,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 
 import type { EnvironmentVariables } from '../config/configuration';
 import { RedisService } from '../redis/redis.service';
+import { RiskService } from '../risk/risk.service';
 import { SmsService } from '../sms/sms.service';
 import { UsersService } from '../users/users.service';
 import { AuthService } from './auth.service';
@@ -41,6 +42,10 @@ const mockJwtService = () => ({
   verifyAsync: jest.fn(),
 });
 
+const mockRiskService = () => ({
+  linkDevice: jest.fn(),
+});
+
 /** Minimal ConfigService stand-in driven by a plain key→value map. */
 function mockConfigService(overrides: Record<string, unknown> = {}) {
   const defaults: Record<string, unknown> = {
@@ -61,6 +66,7 @@ describe('AuthService', () => {
   let sms: ReturnType<typeof mockSmsService>;
   let jwt: ReturnType<typeof mockJwtService>;
   let config: ReturnType<typeof mockConfigService>;
+  let risk: ReturnType<typeof mockRiskService>;
 
   async function buildModule(configOverrides: Record<string, unknown> = {}) {
     redis = mockRedisClient();
@@ -68,6 +74,7 @@ describe('AuthService', () => {
     sms = mockSmsService();
     jwt = mockJwtService();
     config = mockConfigService(configOverrides);
+    risk = mockRiskService();
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -77,6 +84,7 @@ describe('AuthService', () => {
         { provide: RedisService, useValue: { client: redis } },
         { provide: JwtService, useValue: jwt },
         { provide: ConfigService, useValue: config },
+        { provide: RiskService, useValue: risk },
       ],
     }).compile();
 

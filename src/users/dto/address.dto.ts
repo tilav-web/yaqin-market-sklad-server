@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
 import {
   IsBoolean,
   IsLatitude,
@@ -6,7 +7,10 @@ import {
   IsOptional,
   IsString,
   MaxLength,
+  ValidateNested,
 } from 'class-validator';
+
+import { LocationEvidenceDto } from '../../geo/location-evidence';
 
 export class CreateAddressDto {
   @ApiProperty({ example: 'Uy' })
@@ -61,6 +65,13 @@ export class CreateAddressDto {
   @IsOptional()
   @IsBoolean()
   isDefault?: boolean;
+
+  /** Best-effort device fix at the moment this pin was set (anti-fraud). */
+  @ApiPropertyOptional({ type: LocationEvidenceDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => LocationEvidenceDto)
+  evidence?: LocationEvidenceDto;
 }
 
 export class UpdateAddressDto {
@@ -120,4 +131,11 @@ export class UpdateAddressDto {
   @IsOptional()
   @IsBoolean()
   isDefault?: boolean;
+
+  /** Best-effort device fix at the moment this pin was set (anti-fraud). */
+  @ApiPropertyOptional({ type: LocationEvidenceDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => LocationEvidenceDto)
+  evidence?: LocationEvidenceDto;
 }
