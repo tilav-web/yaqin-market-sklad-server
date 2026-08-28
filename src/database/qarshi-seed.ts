@@ -22,6 +22,7 @@ dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 import { Client as MinioClient } from 'minio';
 import { DataSource } from 'typeorm';
 
+import { TaxCategory } from '../fiscal/entities/tax-category.entity';
 import { Category } from '../categories/entities/category.entity';
 import { InventoryMovement, MovementType } from '../products/entities/inventory-movement.entity';
 import { GlobalProduct, UnitType } from '../products/entities/global-product.entity';
@@ -43,6 +44,7 @@ const AppDataSource = new DataSource({
   database: process.env.POSTGRES_DB ?? 'yaqin_market',
   entities: [
     Category,
+    TaxCategory,
     Shop,
     ShopStaff,
     GlobalProduct,

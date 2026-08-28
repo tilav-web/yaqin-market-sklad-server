@@ -6,9 +6,11 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, IsNull, Repository } from 'typeorm';
 
+import type { EnvironmentVariables } from '../config/configuration';
 import { FiscalService } from '../fiscal/fiscal.service';
 import { Order, PaymentMethod, PaymentStatus, isTerminalOrderStatus } from '../orders/entities/order.entity';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
@@ -56,6 +58,7 @@ export class ClickService {
     private readonly merchant: ClickMerchantService,
     private readonly settings: SettingsService,
     private readonly fiscal: FiscalService,
+    private readonly config: ConfigService<EnvironmentVariables, true>,
   ) {}
 
   /**
@@ -287,10 +290,10 @@ export class ClickService {
   // ── private helpers ──────────────────────────────────────────────────────────
 
   private buildUrl(orderId: string, amount: number): string {
-    const service_id = process.env.CLICK_SERVICE_ID;
-    const merchant_id = process.env.CLICK_MERCHANT_ID;
-    const merchant_user_id = process.env.CLICK_MERCHANT_USER_ID;
-    const returnUrlBase = process.env.CLICK_RETURN_URL;
+    const service_id = this.config.get('CLICK_SERVICE_ID', { infer: true });
+    const merchant_id = this.config.get('CLICK_MERCHANT_ID', { infer: true });
+    const merchant_user_id = this.config.get('CLICK_MERCHANT_USER_ID', { infer: true });
+    const returnUrlBase = this.config.get('CLICK_RETURN_URL', { infer: true });
     if (!service_id || !merchant_id || !merchant_user_id || !returnUrlBase) {
       throw new Error('Click env vars are missing');
     }
@@ -312,8 +315,8 @@ export class ClickService {
   }
 
   private checkConfig(serviceId: string): ClickResponse | null {
-    const expected = process.env.CLICK_SERVICE_ID;
-    const secret = process.env.CLICK_SECRET_KEY;
+    const expected = this.config.get('CLICK_SERVICE_ID', { infer: true });
+    const secret = this.config.get('CLICK_SECRET_KEY', { infer: true });
     if (!expected || !secret) {
       this.logger.error('CLICK_SERVICE_ID or CLICK_SECRET_KEY not set');
       return errRes(ERR.CONFIG_ERROR, 'configuration error');
@@ -332,7 +335,7 @@ export class ClickService {
     sign_time: string;
     sign_string: string;
   }): boolean {
-    const secret = process.env.CLICK_SECRET_KEY ?? '';
+    const secret = this.config.get('CLICK_SECRET_KEY', { infer: true }) ?? '';
     const raw = [
       params.click_trans_id,
       params.service_id,

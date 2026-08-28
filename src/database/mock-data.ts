@@ -35,9 +35,10 @@ import {
   ShopStaff,
 } from '../shops/entities/shop-staff.entity';
 import { Shop, WorkingHourSlot } from '../shops/entities/shop.entity';
-import { StaffInvitation } from '../shops/entities/staff-invitation.entity';
+import { TaxCategory } from '../fiscal/entities/tax-category.entity';
 import { UserAddress } from '../users/entities/user-address.entity';
 import { User, UserStatus } from '../users/entities/user.entity';
+import { StaffInvitation } from '@/shops/entities/staff-invitation.entity';
 
 // ---------------------------------------------------------------------------
 // Connection
@@ -53,6 +54,7 @@ const AppDataSource = new DataSource({
     User,
     UserAddress,
     Category,
+    TaxCategory,
     Shop,
     ShopStaff,
     StaffInvitation,
