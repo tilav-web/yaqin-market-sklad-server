@@ -9,6 +9,7 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 
+import { Public } from '../auth/decorators/public.decorator';
 import { AdminUser } from '../admin-users/entities/admin-user.entity';
 import { AdminAuthService } from './admin-auth.service';
 import { CurrentAdmin } from './decorators/current-admin.decorator';
@@ -25,6 +26,7 @@ import { AdminJwtGuard } from './guards/admin-jwt.guard';
 export class AdminAuthController {
   constructor(private readonly authService: AdminAuthService) {}
 
+  @Public()
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Admin panelga username va parol orqali kirish' })
@@ -32,6 +34,7 @@ export class AdminAuthController {
     return this.authService.login(dto);
   }
 
+  @Public()
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Admin refresh token orqali yangi token olish' })
@@ -48,6 +51,7 @@ export class AdminAuthController {
     return safeAdmin;
   }
 
+  @Public()
   @Post('forgot-password/request')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Parolni unutganda telefon raqamga SMS OTP so\'rash' })
@@ -55,6 +59,7 @@ export class AdminAuthController {
     return this.authService.requestPasswordResetOtp(dto);
   }
 
+  @Public()
   @Post('forgot-password/reset')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'SMS OTP kod orqali parolni yangilash' })
