@@ -128,7 +128,8 @@ export class FiscalController {
   @Get('products/:globalProductId/tasnif-suggest')
   async tasnifSuggest(@Param('globalProductId', ParseUUIDPipe) globalProductId: string) {
     const product = await this.fiscal.getGlobalProduct(globalProductId);
-    return this.tasnif.suggestForProduct({ barcode: product.barcode, name: product.name });
+    const nameStr = typeof product.name === 'object' ? product.name?.uz || '' : product.name;
+    return this.tasnif.suggestForProduct({ barcode: product.barcode, name: nameStr });
   }
 
   /** Taklifni bir bosishda qo'llash: toifa (topilsa mavjudi) + biriktirish. */

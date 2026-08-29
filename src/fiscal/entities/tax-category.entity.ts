@@ -7,6 +7,8 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 
+import type { LocalizedText } from '../../common/types/localized-text.type';
+
 /**
  * Soliq toifasi — MXIK (IKPU) ma'lumotnomasi.
  *
@@ -26,8 +28,8 @@ export class TaxCategory {
   id!: string;
 
   /** Admin uchun tushunarli nom, masalan "Gazlangan ichimliklar (PET)". */
-  @Column({ type: 'varchar', length: 256 })
-  title!: string;
+  @Column({ type: 'jsonb', default: () => "'{\"uz\":\"\",\"kr\":\"\",\"ru\":\"\"}'::jsonb" })
+  title!: LocalizedText;
 
   /** 17 xonali MXIK/IKPU kodi (tasnif.soliq.uz). */
   @Column({ type: 'varchar', length: 32 })

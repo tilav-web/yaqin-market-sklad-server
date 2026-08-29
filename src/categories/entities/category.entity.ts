@@ -13,6 +13,8 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 
+import type { LocalizedText } from '../../common/types/localized-text.type';
+
 @Entity({ name: 'categories' })
 @Tree('materialized-path')
 @Index(['slug'], { unique: true })
@@ -23,13 +25,16 @@ export class Category {
   @Column({ type: 'varchar', length: 128 })
   slug!: string;
 
-  @Column({ type: 'varchar', length: 128 })
+  @Column({ type: 'jsonb', default: () => "'{\"uz\":\"\",\"kr\":\"\",\"ru\":\"\"}'::jsonb" })
+  name!: LocalizedText;
+
+  @Column({ type: 'varchar', length: 128, default: '' })
   nameUzLatn!: string;
 
-  @Column({ type: 'varchar', length: 128 })
+  @Column({ type: 'varchar', length: 128, default: '' })
   nameUzCyrl!: string;
 
-  @Column({ type: 'varchar', length: 128 })
+  @Column({ type: 'varchar', length: 128, default: '' })
   nameRu!: string;
 
   @Column({ type: 'varchar', length: 512, nullable: true })

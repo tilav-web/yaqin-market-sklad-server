@@ -6,14 +6,13 @@ import { Shop } from '../shops/entities/shop.entity';
 import { ShopStaff } from '../shops/entities/shop-staff.entity';
 import { assertShopPermission } from '../shops/shop-access.util';
 import { ChatTemplate } from './entities/chat-template.entity';
+import { toLocalizedText } from '../common/types/localized-text.type';
 
 const SYSTEM_TEMPLATES = [
-  "Buyurtmangizni qabul qildik, tez orada yo'lda bo'lamiz.",
-  '10 daqiqada yetkazib beramiz.',
-  '20 daqiqada yetkazib beramiz.',
-  'Kechirasiz, ushbu mahsulot hozir tugagan.',
-  "Yetkazib beruvchi yo'lda, tez yetib boradi.",
-  'Buyurtmangiz yetkazildi. Xarid uchun rahmat!',
+  "Assalomu alaykum! Buyurtmangiz qabul qilindi, tayyorlayapmiz.",
+  "Kechirasiz, buyurtmangizdagi ayrim mahsulotlar qolmagan. O'rniga boshqasini taklif qilsak bo'ladimi?",
+  "Buyurtmangiz yig'ildi va kuryerga topshirildi.",
+  "Rahmat! Xaridingiz uchun minnatdormiz. Yana kutib qolamiz!",
 ];
 
 @Injectable()
@@ -29,10 +28,10 @@ export class ChatTemplatesService implements OnModuleInit {
 
   async onModuleInit() {
     for (let i = 0; i < SYSTEM_TEMPLATES.length; i++) {
-      const text = SYSTEM_TEMPLATES[i];
-      const exists = await this.repo.findOne({ where: { isSystem: true, text } });
+      const rawText = SYSTEM_TEMPLATES[i];
+      const exists = await this.repo.findOne({ where: { isSystem: true, sortOrder: i } });
       if (!exists) {
-        await this.repo.save(this.repo.create({ shopId: null, text, isSystem: true, sortOrder: i }));
+        await this.repo.save(this.repo.create({ shopId: null, text: toLocalizedText(rawText), isSystem: true, sortOrder: i }));
       }
     }
   }
@@ -64,7 +63,7 @@ export class ChatTemplatesService implements OnModuleInit {
     });
     const tmpl = this.repo.create({
       shopId,
-      text: text.trim(),
+      text: toLocalizedText(text),
       isSystem: false,
       sortOrder: (last?.sortOrder ?? 0) + 1,
     });
@@ -74,7 +73,7 @@ export class ChatTemplatesService implements OnModuleInit {
   async update(userId: string, shopId: string, id: string, text: string): Promise<ChatTemplate> {
     await this.ensureAccess(userId, shopId);
     const tmpl = await this.findOwn(shopId, id);
-    tmpl.text = text.trim();
+    tmpl.text = toLocalizedText(text);
     return this.repo.save(tmpl);
   }
 

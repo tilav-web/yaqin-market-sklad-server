@@ -6,6 +6,7 @@ import { PushService } from '../push/push.service';
 import { User } from '../users/entities/user.entity';
 import { Notification } from './entities/notification.entity';
 import { NotificationTemplate } from './entities/notification-template.entity';
+import { toLocalizedText } from '../common/types/localized-text.type';
 
 export type Audience = 'all' | 'sellers' | 'customers' | 'specific';
 
@@ -114,14 +115,45 @@ export class NotificationsService {
     return this.templates.find({ order: { createdAt: 'DESC' } });
   }
 
-  createTemplate(dto: { name: string; title: string; body: string; richBody?: string; imageUrl?: string }): Promise<NotificationTemplate> {
-    return this.templates.save(this.templates.create(dto));
+  createTemplate(dto: any): Promise<NotificationTemplate> {
+    const title = toLocalizedText(dto.titleI18n || { uz: dto.titleUzLatn, kr: dto.titleUzCyrl, ru: dto.titleRu } || dto.title);
+    const body = toLocalizedText(dto.bodyI18n || { uz: dto.bodyUzLatn, kr: dto.bodyUzCyrl, ru: dto.bodyRu } || dto.body);
+    const t = this.templates.create({
+      name: dto.name,
+      title,
+      body,
+      richBody: dto.richBody,
+      imageUrl: dto.imageUrl,
+    });
+    return this.templates.save(t);
   }
 
-  async updateTemplate(id: string, dto: { name?: string; title?: string; body?: string; richBody?: string; imageUrl?: string }): Promise<NotificationTemplate> {
+  async updateTemplate(id: string, dto: any): Promise<NotificationTemplate> {
     const t = await this.templates.findOne({ where: { id } });
     if (!t) throw new NotFoundException('Shablon topilmadi');
-    Object.assign(t, dto);
+    if (dto.name !== undefined) t.name = dto.name;
+    if (dto.title !== undefined || dto.titleUzLatn !== undefined || dto.titleUzCyrl !== undefined || dto.titleRu !== undefined || dto.titleI18n !== undefined) {
+      const cur = typeof t.title === 'object' ? t.title : { uz: t.title || '', kr: '', ru: '' };
+      t.title = toLocalizedText(
+        dto.titleI18n || {
+          uz: dto.titleUzLatn ?? dto.title ?? cur?.uz,
+          kr: dto.titleUzCyrl ?? cur?.kr,
+          ru: dto.titleRu ?? cur?.ru,
+        },
+      );
+    }
+    if (dto.body !== undefined || dto.bodyUzLatn !== undefined || dto.bodyUzCyrl !== undefined || dto.bodyRu !== undefined || dto.bodyI18n !== undefined) {
+      const cur = typeof t.body === 'object' ? t.body : { uz: t.body || '', kr: '', ru: '' };
+      t.body = toLocalizedText(
+        dto.bodyI18n || {
+          uz: dto.bodyUzLatn ?? dto.body ?? cur?.uz,
+          kr: dto.bodyUzCyrl ?? cur?.kr,
+          ru: dto.bodyRu ?? cur?.ru,
+        },
+      );
+    }
+    if (dto.richBody !== undefined) t.richBody = dto.richBody;
+    if (dto.imageUrl !== undefined) t.imageUrl = dto.imageUrl;
     return this.templates.save(t);
   }
 

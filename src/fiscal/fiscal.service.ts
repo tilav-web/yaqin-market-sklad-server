@@ -23,6 +23,7 @@ import {
 import { TaxCategory } from './entities/tax-category.entity';
 import { FISCAL_PROVIDER } from './fiscal-provider.interface';
 import type { FiscalProvider } from './fiscal-provider.interface';
+import { toLocalizedText } from '../common/types/localized-text.type';
 
 /**
  * Fiskal cheklar — komissioner modeli.
@@ -470,7 +471,7 @@ export class FiscalService {
     if (!tax) {
       tax = await this.taxCategories.save(
         this.taxCategories.create({
-          title: dto.name.slice(0, 256),
+          title: toLocalizedText(dto.name.slice(0, 256)),
           mxikCode: dto.mxikCode,
           unitCode: dto.unitCode ?? null,
           markingRequired: dto.markingRequired ?? false,
@@ -488,31 +489,53 @@ export class FiscalService {
   async rebuildIncompleteSaleForOrder(orderId: string): Promise<void> {
     try {
       const receipt = await this.receipts.findOne({
-        where: { orderId, type: FiscalReceiptType.Sale, status: FiscalReceiptStatus.Incomplete },
+        where: { orderId },
       });
-      if (receipt) await this.rebuildReceipt(receipt.id);
-    } catch (err) {
-      this.logger.warn(`rebuildIncompleteSaleForOrder(${orderId}): ${(err as Error).message}`);
+      if (!receipt || receipt.status !== FiscalReceiptStatus.Incomplete) return;
+      await this.rebuildReceipt(receipt.id);
+    } catch {
+      // Background reconciliation — hesh qachon xato otmaydi.
     }
   }
 
   /* ─── TaxCategory CRUD ─── */
 
   listTaxCategories(): Promise<TaxCategory[]> {
-    return this.taxCategories.find({ order: { title: 'ASC' } });
+    return this.taxCategories.find();
   }
 
-  async createTaxCategory(dto: Partial<TaxCategory>): Promise<TaxCategory> {
-    return this.taxCategories.save(this.taxCategories.create(dto));
+  async createTaxCategory(dto: any): Promise<TaxCategory> {
+    const title = toLocalizedText(dto.titleI18n || { uz: dto.titleUzLatn, kr: dto.titleUzCyrl, ru: dto.titleRu } || dto.title);
+    const cat = this.taxCategories.create({
+      mxikCode: dto.mxikCode,
+      packageCode: dto.packageCode ?? null,
+      unitCode: dto.unitCode ?? null,
+      markingRequired: dto.markingRequired ?? false,
+      title,
+    });
+    return this.taxCategories.save(cat);
   }
 
   async updateTaxCategory(
     id: string,
-    dto: Partial<TaxCategory>,
+    dto: any,
   ): Promise<TaxCategory> {
     const tax = await this.taxCategories.findOne({ where: { id } });
     if (!tax) throw new NotFoundException('Soliq toifasi topilmadi');
-    Object.assign(tax, dto);
+    if (dto.title !== undefined || dto.titleUzLatn !== undefined || dto.titleUzCyrl !== undefined || dto.titleRu !== undefined || dto.titleI18n !== undefined) {
+      const cur = typeof tax.title === 'object' ? tax.title : { uz: tax.title || '', kr: '', ru: '' };
+      tax.title = toLocalizedText(
+        dto.titleI18n || {
+          uz: dto.titleUzLatn ?? dto.title ?? cur?.uz,
+          kr: dto.titleUzCyrl ?? cur?.kr,
+          ru: dto.titleRu ?? cur?.ru,
+        },
+      );
+    }
+    if (dto.mxikCode !== undefined) tax.mxikCode = dto.mxikCode;
+    if (dto.packageCode !== undefined) tax.packageCode = dto.packageCode;
+    if (dto.unitCode !== undefined) tax.unitCode = dto.unitCode;
+    if (dto.markingRequired !== undefined) tax.markingRequired = dto.markingRequired;
     return this.taxCategories.save(tax);
   }
 }

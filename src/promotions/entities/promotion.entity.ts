@@ -14,6 +14,8 @@ import { ProductVariant } from '../../products/entities/product-variant.entity';
 export type PromotionType = 'product_discount' | 'category_discount' | 'free_delivery';
 export type DiscountType = 'percent' | 'fixed';
 
+import type { LocalizedText } from '../../common/types/localized-text.type';
+
 @Entity({ name: 'promotions' })
 @Index(['shopId'])
 @Index(['shopId', 'isActive'])
@@ -24,8 +26,8 @@ export class Promotion {
   @Column({ type: 'uuid' })
   shopId!: string;
 
-  @Column({ type: 'varchar', length: 128 })
-  name!: string;
+  @Column({ type: 'jsonb', default: () => "'{\"uz\":\"\",\"kr\":\"\",\"ru\":\"\"}'::jsonb" })
+  name!: LocalizedText;
 
   @Column({ type: 'varchar', length: 32 })
   type!: PromotionType;

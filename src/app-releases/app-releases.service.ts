@@ -7,6 +7,7 @@ import { Repository } from 'typeorm';
 
 import { UploadsService } from '../uploads/uploads.service';
 import { AppRelease } from './entities/app-release.entity';
+import { toLocalizedText } from '../common/types/localized-text.type';
 
 const APK_CONTENT_TYPE = 'application/vnd.android.package-archive';
 
@@ -58,7 +59,7 @@ export class AppReleasesService {
 
     const release = this.releases.create({
       version,
-      notes: notes ?? null,
+      notes: notes ? toLocalizedText(notes) : null,
       fileKey,
       sizeBytes: file.length,
       isLatest: becomesLatest,

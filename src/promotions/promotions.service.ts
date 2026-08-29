@@ -9,6 +9,7 @@ import { ShopStaff } from '../shops/entities/shop-staff.entity';
 import { assertShopPermission } from '../shops/shop-access.util';
 import { User } from '../users/entities/user.entity';
 import { Promotion } from './entities/promotion.entity';
+import { toLocalizedText } from '../common/types/localized-text.type';
 
 @Injectable()
 export class PromotionsService {
@@ -69,7 +70,7 @@ export class PromotionsService {
     this.validate(dto);
     const promo = this.repo.create({
       shopId,
-      name: dto.name,
+      name: toLocalizedText(dto.name),
       type: dto.type,
       discountType: dto.discountType ?? null,
       discountValue: dto.discountValue ?? null,
@@ -84,7 +85,7 @@ export class PromotionsService {
     const saved = await this.repo.save(promo);
 
     // Sevimli do'kon foydalanuvchilariga notification yuboramiz
-    void this.notifyFavoriteUsers(shopId, saved.name);
+    void this.notifyFavoriteUsers(shopId, typeof saved.name === 'object' ? saved.name?.uz || '' : saved.name);
     return saved;
   }
 

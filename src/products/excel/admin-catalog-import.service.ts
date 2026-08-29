@@ -5,6 +5,7 @@ import { Workbook } from 'exceljs';
 
 import { Category } from '../../categories/entities/category.entity';
 import { GlobalProduct, UnitType } from '../entities/global-product.entity';
+import { toLocalizedText } from '../../common/types/localized-text.type';
 import type {
   AdminCatalogImportConfirmResult,
   AdminCatalogImportPreviewResult,
@@ -184,7 +185,7 @@ export class AdminCatalogImportService {
         }
         await this.globalProducts.save(
           this.globalProducts.create({
-            name: row.name,
+            name: toLocalizedText(row.name),
             barcode: row.barcode ?? null,
             brand: row.brand ?? null,
             categoryId: row.categoryId ?? null,

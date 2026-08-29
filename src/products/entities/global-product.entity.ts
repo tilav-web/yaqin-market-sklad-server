@@ -11,6 +11,7 @@ import {
 
 import { Category } from '../../categories/entities/category.entity';
 import { TaxCategory } from '../../fiscal/entities/tax-category.entity';
+import type { LocalizedText } from '../../common/types/localized-text.type';
 
 export type UnitType = 'piece' | 'kg' | 'liter' | 'gram' | 'pack';
 
@@ -33,17 +34,8 @@ export class GlobalProduct {
   @Column({ type: 'varchar', length: 64, nullable: true })
   barcode!: string | null;
 
-  @Column({ type: 'varchar', length: 256 })
-  name!: string;
-
-  @Column({ type: 'varchar', length: 256, default: '' })
-  nameUzLatn!: string;
-
-  @Column({ type: 'varchar', length: 256, default: '' })
-  nameUzCyrl!: string;
-
-  @Column({ type: 'varchar', length: 256, default: '' })
-  nameRu!: string;
+  @Column({ type: 'jsonb', default: () => "'{\"uz\":\"\",\"kr\":\"\",\"ru\":\"\"}'::jsonb" })
+  name!: LocalizedText;
 
   @Column({ type: 'varchar', length: 128, nullable: true })
   brand!: string | null;
@@ -77,17 +69,8 @@ export class GlobalProduct {
   @Column({ type: 'jsonb', default: () => "'[]'::jsonb" })
   photos!: string[];
 
-  @Column({ type: 'text', nullable: true })
-  description!: string | null;
-
-  @Column({ type: 'text', nullable: true })
-  descriptionUzLatn!: string | null;
-
-  @Column({ type: 'text', nullable: true })
-  descriptionUzCyrl!: string | null;
-
-  @Column({ type: 'text', nullable: true })
-  descriptionRu!: string | null;
+  @Column({ type: 'jsonb', nullable: true })
+  description!: LocalizedText | null;
 
   /** Seller who first created the catalogue entry. */
   @Column({ type: 'uuid', nullable: true })

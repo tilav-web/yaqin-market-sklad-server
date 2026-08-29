@@ -23,6 +23,7 @@ import { Order, OrderStatus, PaymentMethod } from '../orders/entities/order.enti
 import { OrderItem } from '../orders/entities/order-item.entity';
 import { Review } from '../orders/entities/review.entity';
 import { InventoryMovement, MovementType } from '../products/entities/inventory-movement.entity';
+import { toLocalizedText } from '../common/types/localized-text.type';
 import { GlobalProduct, UnitType } from '../products/entities/global-product.entity';
 import { ProductVariant } from '../products/entities/product-variant.entity';
 import { StockBatch } from '../products/entities/stock-batch.entity';
@@ -439,13 +440,13 @@ async function seed() {
       const v = tpl.variants[vi];
       const gp: GlobalProduct = await gpRepo.save(
         gpRepo.create({
-          name: v.label,
+          name: toLocalizedText(v.label),
           brand: tpl.brand ?? null,
           unitType: v.unitType,
           unitSize: v.unitSize,
           categoryId: category?.id ?? null,
           photos: [img(v.label, tpl.bg ?? '0046AD')],
-          description: tpl.desc ?? null,
+          description: tpl.desc ? toLocalizedText(tpl.desc) : null,
           barcode: null,
           isVerified: true,
           isActive: true,
@@ -634,7 +635,8 @@ async function seed() {
       const jitter = 0.92 + (rnd() * 0.16);
       for (const gp of gps) {
         // Find template variant matching this GlobalProduct's name
-        const vtpl = tpl.variants.find((v) => v.label === gp.name) ?? tpl.variants[0];
+        const nameUz = typeof gp.name === 'object' ? gp.name?.uz : gp.name;
+        const vtpl = tpl.variants.find((v) => v.label === nameUz) ?? tpl.variants[0];
         const price = Math.round((vtpl.price * jitter) / 500) * 500;
         const discount = vtpl.discount
           ? Math.round((vtpl.discount * jitter) / 500) * 500
@@ -654,7 +656,7 @@ async function seed() {
           }),
         );
         shopVariants.push(variant);
-        variantNameMap.set(variant.id, gp.name);
+        variantNameMap.set(variant.id, typeof gp.name === 'object' ? gp.name?.uz || '' : gp.name);
         variantCount++;
 
         // FIFO stock batch

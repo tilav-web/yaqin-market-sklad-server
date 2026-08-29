@@ -32,7 +32,9 @@ export class LowStockAlertService {
     if (!rows.length) return new Map();
     const gpIds = [...new Set(rows.map((v) => v.globalProductId))];
     const gps = await this.globalProducts.findBy({ id: In(gpIds) });
-    const gpMap = new Map(gps.map((gp) => [gp.id, gp.name]));
+    const gpMap = new Map(
+      gps.map((gp) => [gp.id, typeof gp.name === 'object' ? gp.name?.uz || '' : (gp.name ?? '')]),
+    );
     return new Map(rows.map((v) => [v.id, gpMap.get(v.globalProductId) ?? '']));
   }
 

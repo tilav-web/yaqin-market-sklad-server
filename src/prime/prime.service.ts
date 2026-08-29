@@ -9,6 +9,7 @@ import { SellerBalance } from '../payments/entities/seller-balance.entity';
 import { SellerTransaction, SellerTxType } from '../payments/entities/seller-transaction.entity';
 import { PushService } from '../push/push.service';
 import { User } from '../users/entities/user.entity';
+import { toLocalizedText, LocalizedText } from '../common/types/localized-text.type';
 import { PrimePlan } from './entities/prime-plan.entity';
 import { SellerSubscription } from './entities/seller-subscription.entity';
 
@@ -35,15 +36,68 @@ export class PrimeService {
     return this.plans.findOne({ where: { id } });
   }
 
-  createPlan(dto: Partial<PrimePlan>): Promise<PrimePlan> {
-    return this.plans.save(this.plans.create(dto));
+  createPlan(dto: any): Promise<PrimePlan> {
+    const name = toLocalizedText(dto.nameI18n || { uz: dto.nameUzLatn, kr: dto.nameUzCyrl, ru: dto.nameRu } || dto.name);
+    const hasDesc = dto.descriptionI18n || dto.descriptionUzLatn || dto.description || dto.descriptionRu;
+    const description = hasDesc
+      ? toLocalizedText(dto.descriptionI18n || { uz: dto.descriptionUzLatn, kr: dto.descriptionUzCyrl, ru: dto.descriptionRu } || dto.description)
+      : null;
+
+    const plan = this.plans.create({
+      monthlyPrice: dto.monthlyPrice,
+      yearlyPrice: dto.yearlyPrice || null,
+      commissionRate: dto.commissionRate,
+      isActive: dto.isActive ?? true,
+      sortOrder: dto.sortOrder ?? 0,
+      name,
+      description,
+    });
+    return this.plans.save(plan);
   }
 
-  async updatePlan(id: string, dto: Partial<PrimePlan>): Promise<PrimePlan> {
-    await this.plans.update(id, dto);
+  async updatePlan(id: string, dto: any): Promise<PrimePlan> {
     const plan = await this.plans.findOne({ where: { id } });
     if (!plan) throw new NotFoundException();
-    return plan;
+
+    if (dto.nameUzLatn !== undefined || dto.name !== undefined || dto.nameRu !== undefined || dto.nameUzCyrl !== undefined || dto.nameI18n !== undefined) {
+      plan.name = toLocalizedText(
+        dto.nameI18n || {
+          uz: dto.nameUzLatn ?? dto.name ?? (typeof plan.name === 'object' ? plan.name?.uz : plan.name),
+          kr: dto.nameUzCyrl ?? (typeof plan.name === 'object' ? plan.name?.kr : undefined),
+          ru: dto.nameRu ?? (typeof plan.name === 'object' ? plan.name?.ru : undefined),
+        },
+      );
+    }
+
+    if (
+      dto.descriptionUzLatn !== undefined ||
+      dto.description !== undefined ||
+      dto.descriptionRu !== undefined ||
+      dto.descriptionUzCyrl !== undefined ||
+      dto.descriptionI18n !== undefined
+    ) {
+      const cur = typeof plan.description === 'object' ? plan.description : { uz: plan.description || '', kr: '', ru: '' };
+      const uz = dto.descriptionUzLatn ?? dto.description ?? cur?.uz;
+      if (uz || dto.descriptionRu || dto.descriptionUzCyrl || dto.descriptionI18n) {
+        plan.description = toLocalizedText(
+          dto.descriptionI18n || {
+            uz,
+            kr: dto.descriptionUzCyrl ?? cur?.kr,
+            ru: dto.descriptionRu ?? cur?.ru,
+          },
+        );
+      } else {
+        plan.description = null;
+      }
+    }
+
+    if (dto.monthlyPrice !== undefined) plan.monthlyPrice = dto.monthlyPrice;
+    if (dto.yearlyPrice !== undefined) plan.yearlyPrice = dto.yearlyPrice;
+    if (dto.commissionRate !== undefined) plan.commissionRate = dto.commissionRate;
+    if (dto.isActive !== undefined) plan.isActive = dto.isActive;
+    if (dto.sortOrder !== undefined) plan.sortOrder = dto.sortOrder;
+
+    return this.plans.save(plan);
   }
 
   async deletePlan(id: string): Promise<void> {
@@ -207,9 +261,10 @@ export class PrimeService {
     const activeSubs = await this.subs.find({ where: { isActive: true }, relations: { plan: true } });
     const byPlanMap = new Map<string, { planId: string; planName: string; activeCount: number; monthlyRecurringValue: number }>();
     for (const s of activeSubs) {
+      const planNameStr = typeof s.plan?.name === 'object' ? s.plan.name?.uz || '' : (s.plan?.name ?? '');
       const entry = byPlanMap.get(s.planId) ?? {
         planId: s.planId,
-        planName: s.plan?.name ?? '',
+        planName: planNameStr,
         activeCount: 0,
         monthlyRecurringValue: 0,
       };

@@ -23,6 +23,7 @@ import { Client as MinioClient } from 'minio';
 import { DataSource } from 'typeorm';
 
 import { TaxCategory } from '../fiscal/entities/tax-category.entity';
+import { toLocalizedText } from '../common/types/localized-text.type';
 import { Category } from '../categories/entities/category.entity';
 import { InventoryMovement, MovementType } from '../products/entities/inventory-movement.entity';
 import { GlobalProduct, UnitType } from '../products/entities/global-product.entity';
@@ -379,13 +380,13 @@ async function seed() {
     for (let vi = 0; vi < tpl.variants.length; vi++) {
       const v = tpl.variants[vi];
       const gp: GlobalProduct = await gpRepo.save(gpRepo.create({
-        name: v.label,
+        name: toLocalizedText(v.label),
         brand: tpl.brand ?? null,
         unitType: v.unitType,
         unitSize: v.unitSize,
         categoryId: category?.id ?? null,
         photos: photo ? [photo] : [],
-        description: tpl.desc ?? null,
+        description: tpl.desc ? toLocalizedText(tpl.desc) : null,
         barcode: null,
         isVerified: true,
         isActive: true,
@@ -478,7 +479,8 @@ async function seed() {
       const jitter = 0.92 + rnd() * 0.16;
 
       for (const gp of gps) {
-        const vtpl = tpl.variants.find((v) => v.label === gp.name) ?? tpl.variants[0];
+        const nameUz = typeof gp.name === 'object' ? gp.name?.uz : gp.name;
+        const vtpl = tpl.variants.find((v) => v.label === nameUz) ?? tpl.variants[0];
         const price = round500(vtpl.price * jitter);
         const discountPrice = vtpl.discount ? round500(vtpl.discount * jitter) : null;
         const stock = randInt(8, 200);

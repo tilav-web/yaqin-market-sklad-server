@@ -6,6 +6,8 @@ import {
   PrimaryGeneratedColumn,
 } from 'typeorm';
 
+import type { LocalizedText } from '../../common/types/localized-text.type';
+
 /** A published Android APK build that customers can download from the site. */
 @Entity({ name: 'app_releases' })
 export class AppRelease {
@@ -22,8 +24,8 @@ export class AppRelease {
   @Column({ type: 'int' })
   sizeBytes!: number;
 
-  @Column({ type: 'text', nullable: true })
-  notes!: string | null;
+  @Column({ type: 'jsonb', nullable: true })
+  notes!: LocalizedText | null;
 
   /** Exactly one release is the "latest" served to the download button. */
   @Index()

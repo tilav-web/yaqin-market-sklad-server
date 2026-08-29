@@ -225,7 +225,9 @@ export class AnalyticsService {
     if (variants.length === 0) return [];
     const gpIds = [...new Set(variants.map((v) => v.globalProductId))];
     const gps = await this.globalProducts.findBy({ id: In(gpIds) });
-    const gpNameMap = new Map(gps.map((gp) => [gp.id, gp.name]));
+    const gpNameMap = new Map(
+      gps.map((gp) => [gp.id, typeof gp.name === 'object' ? gp.name?.uz || '' : (gp.name ?? '')]),
+    );
     const variantNameMap = new Map(variants.map((v) => [v.id, gpNameMap.get(v.globalProductId) ?? '']));
 
     // Units sold per variant over the last 30 days (from the movement ledger).

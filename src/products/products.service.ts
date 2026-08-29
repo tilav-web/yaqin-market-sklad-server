@@ -21,6 +21,7 @@ import { assertShopPermission } from '../shops/shop-access.util';
 import { isShopOpenNow } from '../shops/shop-hours.util';
 import { User } from '../users/entities/user.entity';
 import { latinToCyrillic } from '../common/utils/transliteration.util';
+import { LocalizedText, toLocalizedText, getLocalizedText } from '../common/types/localized-text.type';
 import { GlobalProduct, UnitType } from './entities/global-product.entity';
 import { BrakReasonCode, InventoryMovement, MovementType } from './entities/inventory-movement.entity';
 import { ProductVariant } from './entities/product-variant.entity';
@@ -36,7 +37,7 @@ export interface VariantCost {
 
 /** Display fields from GlobalProduct, flattened onto a variant for API responses. */
 export interface VariantDisplay {
-  name: string;
+  name: LocalizedText | string;
   brand: string | null;
   photos: string[];
   unitType: UnitType;
@@ -266,13 +267,13 @@ export class ProductsService {
         // No barcode → private product for this shop only.
         const gp = await manager.save(
           manager.create(GlobalProduct, {
-            name: dto.name,
+            name: toLocalizedText(dto.name),
             brand: dto.brand ?? null,
             unitType: dto.unitType ?? 'piece',
             unitSize: dto.unitSize ?? 1,
             categoryId: dto.categoryId ?? null,
             photos: dto.photos ?? [],
-            description: dto.description ?? null,
+            description: dto.description ? toLocalizedText(dto.description) : null,
             barcode: null,
             createdBySellerId: userId,
             ownerShopId: shopId,
@@ -335,13 +336,20 @@ export class ProductsService {
     const source = await this.getVariantWithGlobal(variantId);
     await this.ensureShopAccess(userId, source.shopId, 'inventory.product.create');
 
+    const sourceNameStr = typeof source.name === 'object' ? source.name?.uz || '' : source.name;
+    const sourceDescStr = source.globalProduct?.description
+      ? typeof source.globalProduct.description === 'object'
+        ? source.globalProduct.description.uz
+        : source.globalProduct.description
+      : undefined;
+
     return this.createCustomProduct(userId, source.shopId, {
-      name: `${source.name} — nusxa`,
+      name: `${sourceNameStr} — nusxa`,
       brand: source.brand ?? undefined,
       unitType: source.unitType,
       unitSize: source.unitSize,
       photos: source.photos,
-      description: source.globalProduct?.description ?? undefined,
+      description: sourceDescStr,
       categoryId: source.categoryId ?? undefined,
       // barcode intentionally omitted: the duplicate is always private
       // (globalProductId = null), never auto-linked back to the shared entry.
@@ -380,31 +388,23 @@ export class ProductsService {
       if (!existing.photos?.length && data.photos.length) existing.photos = data.photos;
       if (!existing.brand && data.brand) existing.brand = data.brand;
       if (!existing.categoryId && data.categoryId) existing.categoryId = data.categoryId;
-      if (!existing.description && data.description) existing.description = data.description;
+      if (!existing.description && data.description) existing.description = toLocalizedText(data.description);
       await manager.save(existing);
       return existing.id;
     }
-    // INSERT ... ON CONFLICT (barcode) DO NOTHING — if a concurrent scan of
-    // the same new barcode wins the race and creates it first, this is a
-    // silent no-op, NOT a thrown error. That matters: a caught unique-
-    // violation here would otherwise poison the whole transaction (Postgres
-    // marks it "aborted" after any failed statement, so even the fallback
-    // SELECT that used to run in the catch block would itself fail with
-    // "current transaction is aborted" — the previous try/catch version of
-    // this fallback never actually worked).
     await manager
       .createQueryBuilder()
       .insert()
       .into(GlobalProduct)
       .values({
         barcode: data.barcode,
-        name: data.name,
+        name: toLocalizedText(data.name) as any,
         brand: data.brand,
         unitType: data.unitType,
         unitSize: data.unitSize,
         categoryId: data.categoryId,
         photos: data.photos,
-        description: data.description ?? null,
+        description: (data.description ? toLocalizedText(data.description) : null) as any,
         createdBySellerId: userId,
         usageCount: 1,
         isActive: true,
@@ -462,9 +462,9 @@ export class ProductsService {
           'Umumiy katalog mahsulotini tahrirlash mumkin emas. Nom/rasm admin orqali o\'zgartiriladi.',
         );
       }
-      if (dto.name !== undefined) gp.name = dto.name;
+      if (dto.name !== undefined) gp.name = toLocalizedText(dto.name);
       if (dto.photos !== undefined) gp.photos = dto.photos;
-      if (dto.description !== undefined) gp.description = dto.description;
+      if (dto.description !== undefined) gp.description = dto.description ? toLocalizedText(dto.description) : null;
       await this.globalProducts.save(gp);
     }
 
@@ -490,9 +490,10 @@ export class ProductsService {
         where: { id: saved.globalProductId },
         select: { name: true },
       });
+      const nameStr = gp?.name ? (typeof gp.name === 'object' ? gp.name.uz : gp.name) : 'Mahsulot';
       void this.notifyFavoriteShopDiscount(
         saved.shopId,
-        gp?.name ?? 'Mahsulot',
+        nameStr,
         saved.price,
         saved.discountPrice!,
       );
@@ -570,12 +571,13 @@ export class ProductsService {
           where: { id: locked.globalProductId },
           select: { name: true },
         });
+        const nameStr = gp?.name ? (typeof gp.name === 'object' ? gp.name.uz : gp.name) : undefined;
         await consumeFifo(manager, {
           variant: locked,
           quantity: -delta,
           type: MovementType.Adjusted,
           userId,
-          displayName: gp?.name,
+          displayName: nameStr,
           reason: reason ?? 'Qo\'lda tuzatish',
         });
       }
@@ -619,6 +621,7 @@ export class ProductsService {
         where: { id: locked.globalProductId },
         select: { name: true },
       });
+      const nameStr = gp?.name ? (typeof gp.name === 'object' ? gp.name.uz : gp.name) : undefined;
       // InventoryMovement.type only distinguishes expired/damaged (the two
       // spec'd movement kinds) — stolen/other are booked as Damaged too, with
       // the precise cause preserved in brakReasonCode/brakReasonNote.
@@ -628,7 +631,7 @@ export class ProductsService {
         quantity: locked.stock,
         type: movementType,
         userId,
-        displayName: gp?.name,
+        displayName: nameStr,
         reason: `Brak: ${ProductsService.BRAK_REASON_LABEL[reasonCode]}`,
         brakReasonCode: reasonCode,
         brakReasonNote: note ?? null,
@@ -696,11 +699,12 @@ export class ProductsService {
           where: { id: locked.globalProductId },
           select: { name: true },
         });
+        const nameStr = gp?.name ? (typeof gp.name === 'object' ? gp.name.uz : gp.name) : undefined;
         await consumeFifo(manager, {
           variant: locked,
           quantity: -delta,
           type: MovementType.Adjusted,
-          displayName: gp?.name,
+          displayName: nameStr,
           userId,
           reason: 'Inventarizatsiya (kamomad)',
         });
@@ -1392,7 +1396,7 @@ export class ProductsService {
 
     if (opts.q) {
       qb.andWhere(
-        '(gp.name ILIKE :q OR gp.nameUzLatn ILIKE :q OR gp.nameUzCyrl ILIKE :q OR gp.nameRu ILIKE :q OR gp.barcode = :exact OR gp.brand ILIKE :q)',
+        "(gp.name->>'uz' ILIKE :q OR gp.name->>'kr' ILIKE :q OR gp.name->>'ru' ILIKE :q OR (gp.name)::text ILIKE :q OR gp.barcode = :exact OR gp.brand ILIKE :q)",
         {
           q: `%${opts.q}%`,
           exact: opts.q.trim(),
@@ -1434,9 +1438,9 @@ export class ProductsService {
         { header: "Do'konlar soni", key: 'usageCount', width: 14 },
       ],
       rows.map((p) => ({
-        nameUzLatn: p.nameUzLatn || p.name,
-        nameUzCyrl: p.nameUzCyrl || '',
-        nameRu: p.nameRu || '',
+        nameUzLatn: typeof p.name === 'object' ? p.name?.uz : p.name,
+        nameUzCyrl: typeof p.name === 'object' ? p.name?.kr : '',
+        nameRu: typeof p.name === 'object' ? p.name?.ru : '',
         brand: p.brand ?? '',
         barcode: p.barcode ?? '',
         unit: `${p.unitSize} ${p.unitType}`,
@@ -1485,30 +1489,30 @@ export class ProductsService {
       if (!parent) throw new NotFoundException('Asosiy mahsulot topilmadi');
     }
 
-    const nameUzLatn = dto.nameUzLatn?.trim() || dto.name?.trim() || '';
-    const nameUzCyrl = dto.nameUzCyrl?.trim() || (nameUzLatn ? latinToCyrillic(nameUzLatn) : '');
-    const nameRu = dto.nameRu?.trim() || nameUzLatn;
+    const localizedName = toLocalizedText({
+      uz: dto.nameUzLatn || dto.name,
+      kr: dto.nameUzCyrl,
+      ru: dto.nameRu,
+    });
 
-    const descriptionUzLatn = dto.descriptionUzLatn?.trim() || dto.description?.trim() || null;
-    const descriptionUzCyrl =
-      dto.descriptionUzCyrl?.trim() || (descriptionUzLatn ? latinToCyrillic(descriptionUzLatn) : null);
-    const descriptionRu = dto.descriptionRu?.trim() || descriptionUzLatn;
+    const hasDesc = dto.descriptionUzLatn || dto.description || dto.descriptionRu;
+    const localizedDesc = hasDesc
+      ? toLocalizedText({
+          uz: dto.descriptionUzLatn || dto.description,
+          kr: dto.descriptionUzCyrl,
+          ru: dto.descriptionRu,
+        })
+      : null;
 
     const gp = this.globalProducts.create({
-      name: nameUzLatn || nameRu,
-      nameUzLatn,
-      nameUzCyrl,
-      nameRu,
+      name: localizedName,
       barcode: dto.barcode ?? null,
       brand: dto.brand ?? null,
       categoryId: dto.categoryId ?? null,
       unitType: dto.unitType ?? 'piece',
       unitSize: dto.unitSize ?? 1,
       photos: dto.photos ?? [],
-      description: descriptionUzLatn,
-      descriptionUzLatn,
-      descriptionUzCyrl,
-      descriptionRu,
+      description: localizedDesc,
       parentGlobalProductId: dto.parentGlobalProductId ?? null,
       isVerified: dto.isVerified ?? true,
       isActive: true,
@@ -1553,27 +1557,33 @@ export class ProductsService {
       if (!parent) throw new NotFoundException('Asosiy mahsulot topilmadi');
     }
 
-    if (dto.nameUzLatn !== undefined || dto.name !== undefined) {
-      const nameUzLatn = dto.nameUzLatn?.trim() || dto.name?.trim() || '';
-      gp.nameUzLatn = nameUzLatn;
-      gp.name = nameUzLatn;
-      if (!dto.nameUzCyrl && nameUzLatn) {
-        gp.nameUzCyrl = latinToCyrillic(nameUzLatn);
-      }
+    if (dto.nameUzLatn !== undefined || dto.name !== undefined || dto.nameRu !== undefined || dto.nameUzCyrl !== undefined) {
+      const cur = typeof gp.name === 'object' ? gp.name : { uz: gp.name, kr: '', ru: '' };
+      gp.name = toLocalizedText({
+        uz: dto.nameUzLatn ?? dto.name ?? cur?.uz,
+        kr: dto.nameUzCyrl ?? cur?.kr,
+        ru: dto.nameRu ?? cur?.ru,
+      });
     }
-    if (dto.nameUzCyrl !== undefined) gp.nameUzCyrl = dto.nameUzCyrl.trim();
-    if (dto.nameRu !== undefined) gp.nameRu = dto.nameRu.trim();
 
-    if (dto.descriptionUzLatn !== undefined || dto.description !== undefined) {
-      const desc = dto.descriptionUzLatn?.trim() || dto.description?.trim() || null;
-      gp.descriptionUzLatn = desc;
-      gp.description = desc;
-      if (!dto.descriptionUzCyrl && desc) {
-        gp.descriptionUzCyrl = latinToCyrillic(desc);
+    if (
+      dto.descriptionUzLatn !== undefined ||
+      dto.description !== undefined ||
+      dto.descriptionRu !== undefined ||
+      dto.descriptionUzCyrl !== undefined
+    ) {
+      const cur = typeof gp.description === 'object' ? gp.description : { uz: gp.description || '', kr: '', ru: '' };
+      const uz = dto.descriptionUzLatn ?? dto.description ?? cur?.uz;
+      if (uz || dto.descriptionRu || dto.descriptionUzCyrl) {
+        gp.description = toLocalizedText({
+          uz,
+          kr: dto.descriptionUzCyrl ?? cur?.kr,
+          ru: dto.descriptionRu ?? cur?.ru,
+        });
+      } else {
+        gp.description = null;
       }
     }
-    if (dto.descriptionUzCyrl !== undefined) gp.descriptionUzCyrl = dto.descriptionUzCyrl?.trim() || null;
-    if (dto.descriptionRu !== undefined) gp.descriptionRu = dto.descriptionRu?.trim() || null;
 
     if (dto.barcode !== undefined) gp.barcode = dto.barcode;
     if (dto.brand !== undefined) gp.brand = dto.brand;

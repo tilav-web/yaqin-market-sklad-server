@@ -64,7 +64,9 @@ export class DebtsService {
       variantMap = new Map(found.map((v) => [v.id, v]));
       const gpIds = [...new Set(found.map((v) => v.globalProductId))];
       const gps = await this.globalProducts.findBy({ id: In(gpIds) });
-      const gpNameMap = new Map(gps.map((gp) => [gp.id, gp.name]));
+      const gpNameMap = new Map(
+        gps.map((gp) => [gp.id, typeof gp.name === 'object' ? gp.name?.uz || '' : (gp.name ?? '')]),
+      );
       const nameMap = new Map(found.map((v) => [v.id, gpNameMap.get(v.globalProductId) ?? '']));
       for (const input of inputs) {
         const v = variantMap.get(input.variantId);
