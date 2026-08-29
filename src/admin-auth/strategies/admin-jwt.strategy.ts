@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
@@ -21,14 +21,14 @@ export class AdminJwtStrategy extends PassportStrategy(Strategy, 'admin-jwt') {
     });
   }
 
-  async validate(payload: AdminJwtPayload): Promise<AdminUser> {
+  async validate(payload: AdminJwtPayload): Promise<AdminUser | null> {
     if (payload.tokenType !== 'admin_access') {
-      throw new UnauthorizedException('Yaroqsiz admin token');
+      return null;
     }
 
     const admin = await this.adminUsers.findById(payload.sub).catch(() => null);
     if (!admin || !admin.isActive) {
-      throw new UnauthorizedException('Xodim hisobi topilmadi yoki nofaol qilingan');
+      return null;
     }
 
     return admin;

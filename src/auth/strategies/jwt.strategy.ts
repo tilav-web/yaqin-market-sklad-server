@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
@@ -20,10 +20,15 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     });
   }
 
-  async validate(payload: JwtPayload): Promise<JwtPayload> {
+  async validate(payload: JwtPayload & { tokenType?: string }): Promise<JwtPayload | null> {
+    // If the token is an admin token, skip user lookup to allow admin-jwt strategy to handle it
+    if (payload.tokenType === 'admin_access') {
+      return null;
+    }
+
     const user = await this.users.findById(payload.sub);
     if (!user || user.status === 'blocked') {
-      throw new UnauthorizedException('Foydalanuvchi topilmadi yoki bloklangan');
+      return null;
     }
     // Use the CURRENT roles from the DB (not the token) so a revoked admin /
     // staff loses access immediately rather than until the token expires.
