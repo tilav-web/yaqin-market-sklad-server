@@ -13,7 +13,8 @@ import {
 import { User } from '../../users/entities/user.entity';
 import { Shop } from './shop.entity';
 
-export type StaffPreset = 'kassir' | 'menejer' | 'sklad' | 'yetkazib_beruvchi' | 'custom';
+export type StaffRole = 'cashier' | 'storekeeper' | 'courier' | 'manager' | 'custom';
+export type StaffPreset = StaffRole | 'kassir' | 'sklad' | 'yetkazib_beruvchi' | 'menejer' | 'omborchi' | 'kuryer';
 
 export const ALL_STAFF_PERMISSIONS = [
   // inventory
@@ -53,8 +54,8 @@ export const ALL_STAFF_PERMISSIONS = [
 
 export type StaffPermission = (typeof ALL_STAFF_PERMISSIONS)[number];
 
-export const PRESET_PERMISSIONS: Record<Exclude<StaffPreset, 'custom'>, StaffPermission[]> = {
-  kassir: [
+export const ROLE_PERMISSIONS: Record<'cashier' | 'storekeeper' | 'courier' | 'manager', StaffPermission[]> = {
+  cashier: [
     'inventory.view',
     'inventory.product.edit_stock',
     'inventory.barcode.scan',
@@ -66,7 +67,24 @@ export const PRESET_PERMISSIONS: Record<Exclude<StaffPreset, 'custom'>, StaffPer
     'orders.view_customer_contact',
     'debt.manage',
   ],
-  menejer: [
+  storekeeper: [
+    'inventory.view',
+    'inventory.product.create',
+    'inventory.product.edit_info',
+    'inventory.product.edit_stock',
+    'inventory.receive',
+    'inventory.count',
+    'inventory.movement.view',
+    'inventory.low_stock_alerts',
+    'inventory.barcode.scan',
+  ],
+  courier: [
+    'orders.view_assigned',
+    'orders.update_status',
+    'orders.chat',
+    'orders.view_customer_contact',
+  ],
+  manager: [
     'inventory.view',
     'inventory.product.create',
     'inventory.product.edit_info',
@@ -92,35 +110,73 @@ export const PRESET_PERMISSIONS: Record<Exclude<StaffPreset, 'custom'>, StaffPer
     'promotions.view',
     'promotions.manage',
   ],
-  sklad: [
-    'inventory.view',
-    'inventory.product.create',
-    'inventory.product.edit_info',
-    'inventory.product.edit_stock',
-    'inventory.receive',
-    'inventory.count',
-    'inventory.movement.view',
-    'inventory.low_stock_alerts',
-    'inventory.barcode.scan',
-  ],
-  yetkazib_beruvchi: [
-    'orders.view_assigned',
-    'orders.update_status',
-    'orders.chat',
-    'orders.view_customer_contact',
-  ],
 };
+
+export const PRESET_PERMISSIONS: Record<string, StaffPermission[]> = {
+  ...ROLE_PERMISSIONS,
+  kassir: ROLE_PERMISSIONS.cashier,
+  sklad: ROLE_PERMISSIONS.storekeeper,
+  omborchi: ROLE_PERMISSIONS.storekeeper,
+  yetkazib_beruvchi: ROLE_PERMISSIONS.courier,
+  kuryer: ROLE_PERMISSIONS.courier,
+  menejer: ROLE_PERMISSIONS.manager,
+};
+
+export function computePermissionsForRoles(
+  roles: (StaffRole | string)[],
+  customPerms: StaffPermission[] = [],
+): StaffPermission[] {
+  const permSet = new Set<StaffPermission>(customPerms);
+  for (const role of roles) {
+    const perms = PRESET_PERMISSIONS[role] || ROLE_PERMISSIONS[role as keyof typeof ROLE_PERMISSIONS];
+    if (perms) {
+      for (const p of perms) {
+        permSet.add(p);
+      }
+    }
+  }
+  return Array.from(permSet);
+}
+
+export function normalizeToStaffRole(roleOrPreset?: string | null): StaffRole {
+  if (!roleOrPreset) return 'custom';
+  const map: Record<string, StaffRole> = {
+    cashier: 'cashier',
+    kassir: 'cashier',
+    storekeeper: 'storekeeper',
+    sklad: 'storekeeper',
+    omborchi: 'storekeeper',
+    courier: 'courier',
+    kuryer: 'courier',
+    yetkazib_beruvchi: 'courier',
+    manager: 'manager',
+    menejer: 'manager',
+    custom: 'custom',
+  };
+  return map[roleOrPreset] || 'custom';
+}
+
+export function formatRolesDisplayName(roles: (StaffRole | string)[]): string {
+  const map: Record<string, string> = {
+    cashier: 'Kassir',
+    storekeeper: 'Omborchi',
+    courier: 'Kuryer',
+    manager: 'Menejer',
+    kassir: 'Kassir',
+    omborchi: 'Omborchi',
+    sklad: 'Omborchi',
+    kuryer: 'Kuryer',
+    yetkazib_beruvchi: 'Kuryer',
+    menejer: 'Menejer',
+    custom: 'Maxsus',
+  };
+  const names = roles.map((r) => map[r] || r).filter(Boolean);
+  return names.length > 0 ? names.join(', ') : 'Xodim';
+}
 
 /**
  * Business rule: a staff member works for a single owner only (one user
  * cannot be active staff at shops owned by two different sellers at once).
- * There is intentionally no DB-level CHECK/EXCLUDE constraint enforcing
- * this — it spans rows in the `shops` table (via shop.ownerId) and can't be
- * expressed as a simple constraint scoped to this table alone (it would
- * need a cross-table trigger). Race-safety is instead handled at the
- * application level in shops.service.ts#acceptStaffInvitation, which locks
- * the target User row before checking existing memberships so two
- * concurrent invitation-accepts for the same user can't both pass.
  */
 @Entity({ name: 'shop_staff' })
 @Unique(['shopId', 'userId'])
@@ -149,6 +205,9 @@ export class ShopStaff {
 
   @Column({ type: 'varchar', length: 32, default: 'custom' })
   preset!: StaffPreset;
+
+  @Column({ type: 'jsonb', default: () => "'[]'::jsonb" })
+  roles!: StaffRole[];
 
   @Column({ type: 'jsonb', default: () => "'[]'::jsonb" })
   permissions!: StaffPermission[];

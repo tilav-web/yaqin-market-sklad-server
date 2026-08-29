@@ -24,10 +24,15 @@ import { SETTING_KEYS } from '../settings/entities/global-setting.entity';
 import { SettingsService } from '../settings/settings.service';
 import { Shop } from './entities/shop.entity';
 import {
+  computePermissionsForRoles,
+  formatRolesDisplayName,
+  normalizeToStaffRole,
   PRESET_PERMISSIONS,
+  ROLE_PERMISSIONS,
   ShopStaff,
   StaffPermission,
   StaffPreset,
+  StaffRole,
 } from './entities/shop-staff.entity';
 import { ShopStaffPreset } from './entities/shop-staff-preset.entity';
 import { StaffInvitation, StaffInvitationStatus } from './entities/staff-invitation.entity';
@@ -47,6 +52,7 @@ export interface StaffView {
   phone: string;
   customRoleName: string;
   preset: StaffPreset;
+  roles: StaffRole[];
   permissions: StaffPermission[];
   isActive: boolean;
 }
@@ -133,7 +139,7 @@ export class ShopsService {
 
   async listShopsWhereStaff(
     userId: string,
-  ): Promise<{ shop: Shop; role: string; preset: StaffPreset; permissions: StaffPermission[] }[]> {
+  ): Promise<{ shop: Shop; role: string; preset: StaffPreset; roles: StaffRole[]; permissions: StaffPermission[] }[]> {
     const staffRecords = await this.staff.find({
       where: { userId, isActive: true },
       relations: { shop: true },
@@ -142,6 +148,7 @@ export class ShopsService {
       shop: s.shop,
       role: s.customRoleName,
       preset: s.preset,
+      roles: (s.roles && s.roles.length > 0 ? s.roles : (s.preset ? [normalizeToStaffRole(s.preset)] : [])).map(normalizeToStaffRole),
       permissions: s.permissions ?? [],
     }));
   }
@@ -180,50 +187,59 @@ export class ShopsService {
 
   // ---- Staff (QR onboarding) ----------------------------------------------
 
-  /**
-   * Resolves a {preset | customPresetId | permissions} selection (shared by
-   * createStaffInvitation and updateStaff) into a concrete permission set.
-   * Precedence when more than one is given: customPresetId > preset >
-   * permissions — matches the "explicit permissions always win, preset is
-   * just a bulk-fill convenience" behaviour already used by updateStaff.
-   */
   private async resolveGrant(
     shopId: string,
-    input: { preset?: StaffPreset; customPresetId?: string; permissions?: StaffPermission[] },
-  ): Promise<{ preset: StaffPreset; permissions: StaffPermission[]; presetName?: string } | null> {
+    input: { roles?: StaffRole[]; preset?: StaffPreset; customPresetId?: string; permissions?: StaffPermission[] },
+  ): Promise<{ preset: StaffPreset; roles: StaffRole[]; permissions: StaffPermission[]; presetName?: string } | null> {
+    if (input.roles && input.roles.length > 0) {
+      const roles = input.roles.map(normalizeToStaffRole);
+      const perms = computePermissionsForRoles(roles, input.permissions);
+      const presetName = formatRolesDisplayName(roles);
+      const preset = (roles.length === 1 ? roles[0] : 'custom') as StaffPreset;
+      return { preset, roles, permissions: perms, presetName };
+    }
     if (input.customPresetId) {
       const custom = await this.staffPresets.findOne({ where: { id: input.customPresetId, shopId } });
       if (!custom) throw new BadRequestException('Shablon topilmadi');
-      return { preset: 'custom', permissions: [...custom.permissions], presetName: custom.name };
+      return { preset: 'custom', roles: ['custom'], permissions: [...custom.permissions], presetName: custom.name };
     }
     if (input.preset && input.preset !== 'custom') {
       if (!PRESET_PERMISSIONS[input.preset]) throw new BadRequestException(`Noto'g'ri rol: ${input.preset}`);
-      return { preset: input.preset, permissions: [...PRESET_PERMISSIONS[input.preset]] };
+      const normRole = normalizeToStaffRole(input.preset);
+      return {
+        preset: input.preset,
+        roles: [normRole],
+        permissions: [...PRESET_PERMISSIONS[input.preset]],
+        presetName: formatRolesDisplayName([normRole]),
+      };
     }
     if (input.permissions) {
-      return { preset: 'custom', permissions: input.permissions };
+      return { preset: 'custom', roles: ['custom'], permissions: input.permissions };
     }
     return null;
   }
 
-  /**
-   * Owner generates a short-lived QR invite. A preset (system or the
-   * owner's own saved custom one) or an explicit permission list can be
-   * granted right away — if none is given, whoever accepts joins with NO
-   * permissions and the owner grants them afterwards via updateStaff.
-   */
   async createStaffInvitation(
     userId: string,
     shopId: string,
-    dto: { preset?: StaffPreset; customPresetId?: string; permissions?: StaffPermission[]; customRoleName?: string } = {},
+    dto: {
+      roles?: StaffRole[];
+      preset?: StaffPreset;
+      customPresetId?: string;
+      permissions?: StaffPermission[];
+      customRoleName?: string;
+    } = {},
   ): Promise<{ token: string; expiresAt: Date; shopName: string }> {
     const shop = await this.getOwned(userId, shopId);
     const grant = await this.resolveGrant(shopId, dto);
+    const rawRoles = grant?.roles ?? (dto.roles ?? (grant?.preset ? [grant.preset] : []));
+    const roles = rawRoles.map(normalizeToStaffRole);
     const invite = this.invitations.create({
       shopId: shop.id,
       invitedByUserId: userId,
       customRoleName: dto.customRoleName ?? grant?.presetName ?? 'Xodim',
       preset: grant?.preset ?? 'custom',
+      roles,
       permissions: grant?.permissions ?? [],
       qrToken: randomBytes(24).toString('base64url'),
       status: StaffInvitationStatus.Pending,
@@ -233,13 +249,10 @@ export class ShopsService {
     return { token: saved.qrToken, expiresAt: saved.expiresAt, shopName: shop.name };
   }
 
-  /** Scanned by a user — joins them to the shop as staff (idempotent). */
   async acceptStaffInvitation(
     userId: string,
     token: string,
   ): Promise<{ shopId: string; shopName: string }> {
-    // Whole accept flow runs in one transaction with the invite row locked, so
-    // a single QR can't be redeemed twice concurrently.
     return this.dataSource.transaction(async (manager) => {
       const invite = await manager.findOne(StaffInvitation, {
         where: { qrToken: token },
@@ -255,17 +268,8 @@ export class ShopsService {
         throw new BadRequestException('Siz do\'kon egasisiz — o\'zingizni xodim qila olmaysiz');
       }
 
-      // Lock the USER row (not the invite — two different invitations from
-      // two different owners are two different rows) so two concurrent
-      // accept-invitation calls for the same user can't both pass the
-      // cross-owner conflict check below; the second one blocks here until
-      // the first transaction commits its ShopStaff insert, then re-reads
-      // fresh membership data. No dedicated DB constraint is practical for
-      // "one staff, one owner" since it spans shops via Shop.ownerId — this
-      // lock is the race-proofing instead (see also shop-staff.entity.ts).
       await manager.findOne(User, { where: { id: userId }, lock: { mode: 'pessimistic_write' } });
 
-      // Business rule: a staff member works for a single owner only.
       const existingMemberships = await manager.find(ShopStaff, {
         where: { userId, isActive: true },
         relations: { shop: true },
@@ -280,6 +284,8 @@ export class ShopsService {
       let staff = await manager.findOne(ShopStaff, { where: { shopId: invite.shopId, userId } });
       if (staff) {
         staff.isActive = true;
+        if (invite.roles?.length) staff.roles = invite.roles;
+        if (invite.permissions?.length) staff.permissions = invite.permissions;
         await manager.save(staff);
       } else {
         staff = await manager.save(
@@ -288,6 +294,7 @@ export class ShopsService {
             userId,
             customRoleName: invite.customRoleName,
             preset: invite.preset,
+            roles: invite.roles ?? (invite.preset ? [invite.preset] : []),
             permissions: invite.permissions,
             isActive: true,
           }),
@@ -317,6 +324,7 @@ export class ShopsService {
       phone: s.user?.phone ?? '',
       customRoleName: s.customRoleName,
       preset: s.preset,
+      roles: (s.roles && s.roles.length > 0 ? s.roles : (s.preset ? [normalizeToStaffRole(s.preset)] : [])).map(normalizeToStaffRole),
       permissions: s.permissions ?? [],
       isActive: s.isActive,
     }));
@@ -327,6 +335,7 @@ export class ShopsService {
     shopId: string,
     staffId: string,
     dto: {
+      roles?: StaffRole[];
       permissions?: StaffPermission[];
       preset?: StaffPreset;
       customPresetId?: string;
@@ -337,26 +346,35 @@ export class ShopsService {
     await this.getOwned(userId, shopId);
     const staff = await this.staff.findOne({ where: { id: staffId, shopId }, relations: { user: true } });
     if (!staff) throw new NotFoundException('Xodim topilmadi');
-    // Selecting a preset (system or the owner's own saved custom one)
-    // bulk-applies its permission set; explicitly passing `permissions`
-    // always wins and switches the role label to "custom".
-    if (dto.customPresetId !== undefined) {
+
+    if (dto.roles && dto.roles.length > 0) {
+      const roles = dto.roles.map(normalizeToStaffRole);
+      staff.roles = roles;
+      staff.permissions = computePermissionsForRoles(roles, dto.permissions);
+      staff.preset = (roles.length === 1 ? roles[0] : 'custom') as StaffPreset;
+      if (dto.customRoleName === undefined) {
+        staff.customRoleName = formatRolesDisplayName(roles);
+      }
+    } else if (dto.customPresetId !== undefined) {
       const custom = await this.staffPresets.findOne({ where: { id: dto.customPresetId, shopId } });
       if (!custom) throw new BadRequestException('Shablon topilmadi');
       staff.preset = 'custom';
+      staff.roles = ['custom'];
       staff.permissions = [...custom.permissions];
       if (dto.customRoleName === undefined) staff.customRoleName = custom.name;
     } else if (dto.preset !== undefined) {
-      // Defensive: the DTO already validates `preset` against known values,
-      // but never let an unrecognised one reach the PRESET_PERMISSIONS
-      // lookup (which would throw an uncaught TypeError / 500).
       if (dto.preset !== 'custom' && !PRESET_PERMISSIONS[dto.preset]) {
         throw new BadRequestException(`Noto'g'ri rol: ${String(dto.preset)}`);
       }
       staff.preset = dto.preset;
-      if (dto.preset !== 'custom') staff.permissions = [...PRESET_PERMISSIONS[dto.preset]];
+      const normRole = normalizeToStaffRole(dto.preset);
+      staff.roles = [normRole];
+      if (dto.preset !== 'custom') {
+        staff.permissions = [...PRESET_PERMISSIONS[dto.preset]];
+        if (dto.customRoleName === undefined) staff.customRoleName = formatRolesDisplayName([normRole]);
+      }
     }
-    if (dto.permissions !== undefined) {
+    if (dto.permissions !== undefined && !dto.roles) {
       staff.permissions = dto.permissions;
       staff.preset = 'custom';
     }
@@ -370,6 +388,7 @@ export class ShopsService {
       phone: staff.user?.phone ?? '',
       customRoleName: saved.customRoleName,
       preset: saved.preset,
+      roles: (saved.roles && saved.roles.length > 0 ? saved.roles : (saved.preset ? [normalizeToStaffRole(saved.preset)] : [])).map(normalizeToStaffRole),
       permissions: saved.permissions ?? [],
       isActive: saved.isActive,
     };

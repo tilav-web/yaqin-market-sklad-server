@@ -109,11 +109,24 @@ export class AdminSetActiveDto {
   reason?: string;
 }
 
-import { ALL_STAFF_PERMISSIONS } from '../entities/shop-staff.entity';
+import { ALL_STAFF_PERMISSIONS, StaffRole } from '../entities/shop-staff.entity';
 import type { StaffPermission, StaffPreset } from '../entities/shop-staff.entity';
 import type { DeliveryPricingType, Holiday, WorkingHourSlot } from '../entities/shop.entity';
 
-const STAFF_PRESETS: StaffPreset[] = ['kassir', 'menejer', 'sklad', 'yetkazib_beruvchi', 'custom'];
+const STAFF_ROLES: StaffRole[] = ['cashier', 'storekeeper', 'courier', 'manager', 'custom'];
+const STAFF_PRESETS: StaffPreset[] = [
+  'cashier',
+  'storekeeper',
+  'courier',
+  'manager',
+  'kassir',
+  'omborchi',
+  'kuryer',
+  'menejer',
+  'sklad',
+  'yetkazib_beruvchi',
+  'custom',
+];
 
 export class WorkingHourSlotDto implements WorkingHourSlot {
   @ApiProperty({ minimum: 0, maximum: 6 })
@@ -307,6 +320,12 @@ export class UpdateStaffDto {
   @IsIn(STAFF_PRESETS)
   preset?: StaffPreset;
 
+  @ApiPropertyOptional({ enum: STAFF_ROLES, isArray: true, description: 'Multi-roles: kassir, omborchi, kuryer, menejer' })
+  @IsOptional()
+  @IsArray()
+  @IsIn(STAFF_ROLES, { each: true })
+  roles?: StaffRole[];
+
   /** Apply a seller-saved custom preset's permissions (see ShopStaffPreset) instead of a system preset. */
   @ApiPropertyOptional()
   @IsOptional()
@@ -330,6 +349,12 @@ export class CreateInvitationDto {
   @IsOptional()
   @IsIn(STAFF_PRESETS)
   preset?: StaffPreset;
+
+  @ApiPropertyOptional({ enum: STAFF_ROLES, isArray: true, description: 'Multi-roles: kassir, omborchi, kuryer, menejer' })
+  @IsOptional()
+  @IsArray()
+  @IsIn(STAFF_ROLES, { each: true })
+  roles?: StaffRole[];
 
   /** A seller-saved custom preset's permissions (see ShopStaffPreset) — alternative to `preset`. */
   @ApiPropertyOptional()

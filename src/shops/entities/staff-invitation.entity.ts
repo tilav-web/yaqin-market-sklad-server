@@ -9,7 +9,7 @@ import {
 } from 'typeorm';
 
 import { Shop } from './shop.entity';
-import type { StaffPermission, StaffPreset } from './shop-staff.entity';
+import type { StaffPermission, StaffPreset, StaffRole } from './shop-staff.entity';
 
 export enum StaffInvitationStatus {
   Pending = 'pending',
@@ -40,6 +40,9 @@ export class StaffInvitation {
 
   @Column({ type: 'varchar', length: 32 })
   preset!: StaffPreset;
+
+  @Column({ type: 'jsonb', default: () => "'[]'::jsonb" })
+  roles!: StaffRole[];
 
   @Column({ type: 'jsonb', default: () => "'[]'::jsonb" })
   permissions!: StaffPermission[];
