@@ -121,9 +121,14 @@ export class ProductsService {
     const map = new Map(gps.map((g) => [g.id, g]));
     return items.map((v) => {
       const gp = map.get(v.globalProductId) ?? ({} as GlobalProduct);
+      const nameStr = (typeof gp.name === 'object' ? (gp.name?.uz || gp.name?.ru || gp.name?.kr) : gp.name) || '';
       return {
         ...v,
-        name: gp.name ?? '',
+        name: nameStr,
+        nameI18n: typeof gp.name === 'object' ? gp.name : { uz: nameStr, kr: '', ru: '' },
+        nameUzLatn: typeof gp.name === 'object' ? (gp.name?.uz || '') : nameStr,
+        nameUzCyrl: typeof gp.name === 'object' ? (gp.name?.kr || '') : '',
+        nameRu: typeof gp.name === 'object' ? (gp.name?.ru || '') : '',
         brand: gp.brand ?? null,
         photos: gp.photos ?? [],
         unitType: gp.unitType ?? 'piece',
@@ -903,17 +908,25 @@ export class ProductsService {
   private buildVariantWithGlobal(
     variants: (ProductVariant & { globalProduct?: GlobalProduct })[],
   ): VariantWithGlobal[] {
-    return variants.map((v: any) => ({
-      ...v,
-      name: v.globalProduct?.name ?? '',
-      brand: v.globalProduct?.brand ?? null,
-      photos: v.globalProduct?.photos ?? [],
-      unitType: v.globalProduct?.unitType ?? 'piece',
-      unitSize: v.globalProduct?.unitSize ?? 1,
-      barcode: v.globalProduct?.barcode ?? null,
-      isVerified: v.globalProduct?.isVerified ?? false,
-      categoryId: v.globalProduct?.categoryId ?? null,
-    }));
+    return variants.map((v: any) => {
+      const gp = v.globalProduct ?? {};
+      const nameStr = (typeof gp.name === 'object' ? (gp.name?.uz || gp.name?.ru || gp.name?.kr) : gp.name) || '';
+      return {
+        ...v,
+        name: nameStr,
+        nameI18n: typeof gp.name === 'object' ? gp.name : { uz: nameStr, kr: '', ru: '' },
+        nameUzLatn: typeof gp.name === 'object' ? (gp.name?.uz || '') : nameStr,
+        nameUzCyrl: typeof gp.name === 'object' ? (gp.name?.kr || '') : '',
+        nameRu: typeof gp.name === 'object' ? (gp.name?.ru || '') : '',
+        brand: gp.brand ?? null,
+        photos: gp.photos ?? [],
+        unitType: gp.unitType ?? 'piece',
+        unitSize: gp.unitSize ?? 1,
+        barcode: gp.barcode ?? null,
+        isVerified: gp.isVerified ?? false,
+        categoryId: gp.categoryId ?? null,
+      };
+    });
   }
 
   async getVariantDetail(variantId: string) {
