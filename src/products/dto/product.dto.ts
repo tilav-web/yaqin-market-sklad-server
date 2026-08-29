@@ -302,10 +302,29 @@ export class BulkPriceUpdateDto {
 
 /** Admin: create a shared-catalogue product (global_products row). */
 export class AdminCreateGlobalProductDto {
-  @ApiProperty()
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsString()
   @MaxLength(256)
-  name!: string;
+  name?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(256)
+  nameUzLatn?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(256)
+  nameUzCyrl?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(256)
+  nameRu?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -349,6 +368,21 @@ export class AdminCreateGlobalProductDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @IsString()
+  descriptionUzLatn?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  descriptionUzCyrl?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  descriptionRu?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsUUID()
   parentGlobalProductId?: string;
 
@@ -365,6 +399,24 @@ export class AdminUpdateGlobalProductDto {
   @IsString()
   @MaxLength(256)
   name?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(256)
+  nameUzLatn?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(256)
+  nameUzCyrl?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(256)
+  nameRu?: string;
 
   @ApiPropertyOptional({ nullable: true })
   @IsOptional()
@@ -405,6 +457,21 @@ export class AdminUpdateGlobalProductDto {
   @IsOptional()
   @IsString()
   description?: string | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  @IsOptional()
+  @IsString()
+  descriptionUzLatn?: string | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  @IsOptional()
+  @IsString()
+  descriptionUzCyrl?: string | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  @IsOptional()
+  @IsString()
+  descriptionRu?: string | null;
 
   @ApiPropertyOptional({ nullable: true })
   @IsOptional()

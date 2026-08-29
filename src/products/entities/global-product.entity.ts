@@ -36,6 +36,15 @@ export class GlobalProduct {
   @Column({ type: 'varchar', length: 256 })
   name!: string;
 
+  @Column({ type: 'varchar', length: 256, default: '' })
+  nameUzLatn!: string;
+
+  @Column({ type: 'varchar', length: 256, default: '' })
+  nameUzCyrl!: string;
+
+  @Column({ type: 'varchar', length: 256, default: '' })
+  nameRu!: string;
+
   @Column({ type: 'varchar', length: 128, nullable: true })
   brand!: string | null;
 
@@ -70,6 +79,15 @@ export class GlobalProduct {
 
   @Column({ type: 'text', nullable: true })
   description!: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  descriptionUzLatn!: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  descriptionUzCyrl!: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  descriptionRu!: string | null;
 
   /** Seller who first created the catalogue entry. */
   @Column({ type: 'uuid', nullable: true })

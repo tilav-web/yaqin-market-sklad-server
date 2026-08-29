@@ -20,6 +20,7 @@ import { ShopStaff, StaffPermission } from '../shops/entities/shop-staff.entity'
 import { assertShopPermission } from '../shops/shop-access.util';
 import { isShopOpenNow } from '../shops/shop-hours.util';
 import { User } from '../users/entities/user.entity';
+import { latinToCyrillic } from '../common/utils/transliteration.util';
 import { GlobalProduct, UnitType } from './entities/global-product.entity';
 import { BrakReasonCode, InventoryMovement, MovementType } from './entities/inventory-movement.entity';
 import { ProductVariant } from './entities/product-variant.entity';
@@ -1390,10 +1391,13 @@ export class ProductsService {
       .addOrderBy('gp.createdAt', 'DESC');
 
     if (opts.q) {
-      qb.andWhere('(gp.name ILIKE :q OR gp.barcode = :exact OR gp.brand ILIKE :q)', {
-        q: `%${opts.q}%`,
-        exact: opts.q.trim(),
-      });
+      qb.andWhere(
+        '(gp.name ILIKE :q OR gp.nameUzLatn ILIKE :q OR gp.nameUzCyrl ILIKE :q OR gp.nameRu ILIKE :q OR gp.barcode = :exact OR gp.brand ILIKE :q)',
+        {
+          q: `%${opts.q}%`,
+          exact: opts.q.trim(),
+        },
+      );
     }
     if (opts.activeOnly) qb.andWhere('gp.isActive = true');
     if (opts.categoryId) qb.andWhere('gp.categoryId = :categoryId', { categoryId: opts.categoryId });
@@ -1419,7 +1423,9 @@ export class ProductsService {
     return buildXlsxBuffer(
       'Katalog',
       [
-        { header: 'Nomi', key: 'name', width: 32 },
+        { header: 'Nomi (UZ Lotin)', key: 'nameUzLatn', width: 32 },
+        { header: 'Nomi (UZ Kirill)', key: 'nameUzCyrl', width: 32 },
+        { header: 'Nomi (RU)', key: 'nameRu', width: 32 },
         { header: 'Brend', key: 'brand', width: 20 },
         { header: 'Barkod', key: 'barcode', width: 18 },
         { header: 'Birlik', key: 'unit', width: 12 },
@@ -1428,7 +1434,9 @@ export class ProductsService {
         { header: "Do'konlar soni", key: 'usageCount', width: 14 },
       ],
       rows.map((p) => ({
-        name: p.name,
+        nameUzLatn: p.nameUzLatn || p.name,
+        nameUzCyrl: p.nameUzCyrl || '',
+        nameRu: p.nameRu || '',
         brand: p.brand ?? '',
         barcode: p.barcode ?? '',
         unit: `${p.unitSize} ${p.unitType}`,
@@ -1451,7 +1459,10 @@ export class ProductsService {
   }
 
   async adminCreateGlobalProduct(dto: {
-    name: string;
+    name?: string;
+    nameUzLatn?: string;
+    nameUzCyrl?: string;
+    nameRu?: string;
     barcode?: string;
     brand?: string;
     categoryId?: string;
@@ -1459,6 +1470,9 @@ export class ProductsService {
     unitSize?: number;
     photos?: string[];
     description?: string;
+    descriptionUzLatn?: string;
+    descriptionUzCyrl?: string;
+    descriptionRu?: string;
     parentGlobalProductId?: string;
     isVerified?: boolean;
   }): Promise<GlobalProduct> {
@@ -1470,15 +1484,31 @@ export class ProductsService {
       const parent = await this.globalProducts.findOne({ where: { id: dto.parentGlobalProductId } });
       if (!parent) throw new NotFoundException('Asosiy mahsulot topilmadi');
     }
+
+    const nameUzLatn = dto.nameUzLatn?.trim() || dto.name?.trim() || '';
+    const nameUzCyrl = dto.nameUzCyrl?.trim() || (nameUzLatn ? latinToCyrillic(nameUzLatn) : '');
+    const nameRu = dto.nameRu?.trim() || nameUzLatn;
+
+    const descriptionUzLatn = dto.descriptionUzLatn?.trim() || dto.description?.trim() || null;
+    const descriptionUzCyrl =
+      dto.descriptionUzCyrl?.trim() || (descriptionUzLatn ? latinToCyrillic(descriptionUzLatn) : null);
+    const descriptionRu = dto.descriptionRu?.trim() || descriptionUzLatn;
+
     const gp = this.globalProducts.create({
-      name: dto.name,
+      name: nameUzLatn || nameRu,
+      nameUzLatn,
+      nameUzCyrl,
+      nameRu,
       barcode: dto.barcode ?? null,
       brand: dto.brand ?? null,
       categoryId: dto.categoryId ?? null,
       unitType: dto.unitType ?? 'piece',
       unitSize: dto.unitSize ?? 1,
       photos: dto.photos ?? [],
-      description: dto.description ?? null,
+      description: descriptionUzLatn,
+      descriptionUzLatn,
+      descriptionUzCyrl,
+      descriptionRu,
       parentGlobalProductId: dto.parentGlobalProductId ?? null,
       isVerified: dto.isVerified ?? true,
       isActive: true,
@@ -1491,6 +1521,9 @@ export class ProductsService {
     id: string,
     dto: Partial<{
       name: string;
+      nameUzLatn: string;
+      nameUzCyrl: string;
+      nameRu: string;
       barcode: string | null;
       brand: string | null;
       categoryId: string | null;
@@ -1498,6 +1531,9 @@ export class ProductsService {
       unitSize: number;
       photos: string[];
       description: string | null;
+      descriptionUzLatn: string | null;
+      descriptionUzCyrl: string | null;
+      descriptionRu: string | null;
       parentGlobalProductId: string | null;
       isVerified: boolean;
       isActive: boolean;
@@ -1516,7 +1552,39 @@ export class ProductsService {
       const parent = await this.globalProducts.findOne({ where: { id: dto.parentGlobalProductId } });
       if (!parent) throw new NotFoundException('Asosiy mahsulot topilmadi');
     }
-    Object.assign(gp, dto);
+
+    if (dto.nameUzLatn !== undefined || dto.name !== undefined) {
+      const nameUzLatn = dto.nameUzLatn?.trim() || dto.name?.trim() || '';
+      gp.nameUzLatn = nameUzLatn;
+      gp.name = nameUzLatn;
+      if (!dto.nameUzCyrl && nameUzLatn) {
+        gp.nameUzCyrl = latinToCyrillic(nameUzLatn);
+      }
+    }
+    if (dto.nameUzCyrl !== undefined) gp.nameUzCyrl = dto.nameUzCyrl.trim();
+    if (dto.nameRu !== undefined) gp.nameRu = dto.nameRu.trim();
+
+    if (dto.descriptionUzLatn !== undefined || dto.description !== undefined) {
+      const desc = dto.descriptionUzLatn?.trim() || dto.description?.trim() || null;
+      gp.descriptionUzLatn = desc;
+      gp.description = desc;
+      if (!dto.descriptionUzCyrl && desc) {
+        gp.descriptionUzCyrl = latinToCyrillic(desc);
+      }
+    }
+    if (dto.descriptionUzCyrl !== undefined) gp.descriptionUzCyrl = dto.descriptionUzCyrl?.trim() || null;
+    if (dto.descriptionRu !== undefined) gp.descriptionRu = dto.descriptionRu?.trim() || null;
+
+    if (dto.barcode !== undefined) gp.barcode = dto.barcode;
+    if (dto.brand !== undefined) gp.brand = dto.brand;
+    if (dto.categoryId !== undefined) gp.categoryId = dto.categoryId;
+    if (dto.unitType !== undefined) gp.unitType = dto.unitType;
+    if (dto.unitSize !== undefined) gp.unitSize = dto.unitSize;
+    if (dto.photos !== undefined) gp.photos = dto.photos;
+    if (dto.parentGlobalProductId !== undefined) gp.parentGlobalProductId = dto.parentGlobalProductId;
+    if (dto.isVerified !== undefined) gp.isVerified = dto.isVerified;
+    if (dto.isActive !== undefined) gp.isActive = dto.isActive;
+
     return this.globalProducts.save(gp);
   }
 
