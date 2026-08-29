@@ -188,6 +188,20 @@ export class AdminUsersService implements OnApplicationBootstrap {
       }
     }
 
+    if (dto.username !== undefined) {
+      const cleanUsername = dto.username.toLowerCase().trim().replace(/\s+/g, '');
+      if (!cleanUsername) {
+        throw new BadRequestException("Username bo'sh bo'lishi mumkin emas");
+      }
+      if (cleanUsername !== admin.username) {
+        const existing = await this.repo.findOne({ where: { username: cleanUsername } });
+        if (existing && existing.id !== id) {
+          throw new ConflictException(`'${cleanUsername}' nomli username allaqachon mavjud`);
+        }
+        admin.username = cleanUsername;
+      }
+    }
+
     if (dto.firstName !== undefined) admin.firstName = dto.firstName.trim();
     if (dto.lastName !== undefined) admin.lastName = dto.lastName.trim();
     if (dto.email !== undefined) admin.email = dto.email?.trim() || null;

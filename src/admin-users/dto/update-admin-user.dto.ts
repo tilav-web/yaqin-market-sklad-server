@@ -12,6 +12,12 @@ import { AdminRole } from '../entities/admin-user.entity';
 export class UpdateAdminUserDto {
   @IsString()
   @IsOptional()
+  @MinLength(3, { message: 'Username kamida 3 ta belgidan iborat bo\'lishi kerak' })
+  @MaxLength(64)
+  username?: string;
+
+  @IsString()
+  @IsOptional()
   @MaxLength(64)
   firstName?: string;
 
