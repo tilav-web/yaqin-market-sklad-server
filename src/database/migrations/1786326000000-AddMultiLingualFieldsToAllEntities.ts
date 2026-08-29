@@ -101,15 +101,37 @@ export class AddMultiLingualFieldsToAllEntities1786326000000 implements Migratio
       );
     `);
 
-    // 8. tax_categories: title to jsonb
+    // 8. tax_categories: create table if not exists, otherwise alter title to jsonb
     await queryRunner.query(`
-      ALTER TABLE "tax_categories"
-      ALTER COLUMN "title" TYPE jsonb USING (
-        CASE
-          WHEN jsonb_typeof(to_jsonb("title")) = 'object' THEN "title"::jsonb
-          ELSE jsonb_build_object('uz', "title"::text, 'kr', "title"::text, 'ru', "title"::text)
-        END
+      CREATE TABLE IF NOT EXISTS "tax_categories" (
+        "id" uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+        "title" jsonb NOT NULL DEFAULT '{"uz":"","kr":"","ru":""}'::jsonb,
+        "mxikCode" varchar(32) NOT NULL,
+        "packageCode" varchar(32),
+        "unitCode" varchar(32),
+        "markingRequired" boolean NOT NULL DEFAULT false,
+        "isActive" boolean NOT NULL DEFAULT true,
+        "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+        "updatedAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
       );
+
+      CREATE INDEX IF NOT EXISTS "IDX_tax_categories_mxik" ON "tax_categories" ("mxikCode");
+
+      DO $$
+      BEGIN
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_name = 'tax_categories' AND column_name = 'title' AND data_type != 'jsonb'
+        ) THEN
+          ALTER TABLE "tax_categories"
+          ALTER COLUMN "title" TYPE jsonb USING (
+            CASE
+              WHEN jsonb_typeof(to_jsonb("title")) = 'object' THEN "title"::jsonb
+              ELSE jsonb_build_object('uz', "title"::text, 'kr', "title"::text, 'ru', "title"::text)
+            END
+          );
+        END IF;
+      END $$;
     `);
   }
 
