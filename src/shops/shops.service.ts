@@ -37,7 +37,7 @@ import {
 import { ShopStaffPreset } from './entities/shop-staff-preset.entity';
 import { StaffInvitation, StaffInvitationStatus } from './entities/staff-invitation.entity';
 import { assertShopPermission } from './shop-access.util';
-import { isShopOpenNow } from './shop-hours.util';
+import { isDeliveryOpenNow, isShopOpenNow } from './shop-hours.util';
 import { CreateShopDto, UpdateShopDto } from './dto/shop.dto';
 
 const INVITE_TTL_MS = 10 * 60 * 1000; // QR invite valid for 10 minutes (per spec)
@@ -132,6 +132,10 @@ export class ShopsService {
         longitude: dto.longitude,
         description: dto.description ?? null,
         photos: dto.photos ?? [],
+        phone: dto.phone ?? null,
+        isDeliveryEnabled: dto.isDeliveryEnabled ?? true,
+        isPickupEnabled: dto.isPickupEnabled ?? true,
+        deliveryHours: dto.deliveryHours ?? [],
         pinEvidence: buildEvidence(dto.evidence, { deviceId: deviceId ?? null, actorUserId: userId, actorRole: 'shop' }),
       }),
     );
@@ -510,7 +514,16 @@ export class ShopsService {
     latitude: number,
     longitude: number,
     limit = 50,
-  ): Promise<Array<Shop & { distanceKm: number; deliveryFeeAtUser: number; isWithinZone: boolean }>> {
+  ): Promise<
+    Array<
+      Shop & {
+        distanceKm: number;
+        deliveryFeeAtUser: number;
+        isWithinZone: boolean;
+        isDeliveryOpenNow: boolean;
+      }
+    >
+  > {
     // Pre-filter by a generous bounding box in SQL so we never load every shop.
     const box = boundingBox(latitude, longitude, MAX_DELIVERY_RADIUS_KM);
     const all = await this.shops.find({
@@ -523,7 +536,8 @@ export class ShopsService {
     const enriched = all
       .map((s) => {
         const distanceKm = haversineKm(latitude, longitude, s.latitude, s.longitude);
-        const isWithinZone = distanceKm <= s.deliveryZone.maxKm;
+        const hasDelivery = s.isDeliveryEnabled !== false;
+        const isWithinZone = hasDelivery && (s.deliveryZone?.maxKm ? distanceKm <= s.deliveryZone.maxKm : true);
         const deliveryFeeAtUser = isWithinZone
           ? calcDeliveryFee({
               distanceKm,
@@ -532,16 +546,15 @@ export class ShopsService {
               pricePerStep: s.deliveryZone.pricePerStep,
             })
           : 0;
-        // Override the open flag with the schedule-aware state so the map dims
-        // shops that are closed by working hours / holidays too.
+        // Override open & delivery flags with schedule-aware calculations
         return Object.assign({}, s, {
           distanceKm,
           deliveryFeeAtUser,
           isWithinZone,
           isOpenManual: isShopOpenNow(s),
+          isDeliveryOpenNow: isDeliveryOpenNow(s),
         });
       })
-      .filter((s) => s.isWithinZone)
       .sort((a, b) => {
         // SPEC.md §31.4: among shops at (roughly) the same distance and
         // rating, the more "complete" profile ranks higher. Distance is
@@ -564,7 +577,14 @@ export class ShopsService {
     shopId: string,
     latitude?: number,
     longitude?: number,
-  ): Promise<Shop & { distanceKm?: number; deliveryFeeAtUser?: number; isWithinZone?: boolean }> {
+  ): Promise<
+    Shop & {
+      distanceKm?: number;
+      deliveryFeeAtUser?: number;
+      isWithinZone?: boolean;
+      isDeliveryOpenNow?: boolean;
+    }
+  > {
     // Mirror findNearbyShops/order-creation: an admin-deactivated shop must
     // not be reachable via direct link either.
     const shop = await this.shops.findOne({ where: { id: shopId, isActive: true } });
@@ -576,9 +596,13 @@ export class ShopsService {
       shop.minOrderPrice ?? 0,
       this.settings.getNumber(SETTING_KEYS.MIN_ORDER_TOTAL, 0),
     );
+    const isOpen = isShopOpenNow(shop);
+    const isDeliveryOpen = isDeliveryOpenNow(shop);
+
     if (latitude !== undefined && longitude !== undefined) {
       const distanceKm = haversineKm(latitude, longitude, shop.latitude, shop.longitude);
-      const isWithinZone = distanceKm <= shop.deliveryZone.maxKm;
+      const hasDelivery = shop.isDeliveryEnabled !== false;
+      const isWithinZone = hasDelivery && (shop.deliveryZone?.maxKm ? distanceKm <= shop.deliveryZone.maxKm : true);
       const deliveryFeeAtUser = isWithinZone
         ? calcDeliveryFee({
             distanceKm,
@@ -591,10 +615,14 @@ export class ShopsService {
         distanceKm,
         isWithinZone,
         deliveryFeeAtUser,
-        isOpenManual: isShopOpenNow(shop),
+        isOpenManual: isOpen,
+        isDeliveryOpenNow: isDeliveryOpen,
       });
     }
-    return Object.assign({}, shop, { isOpenManual: isShopOpenNow(shop) });
+    return Object.assign({}, shop, {
+      isOpenManual: isOpen,
+      isDeliveryOpenNow: isDeliveryOpen,
+    });
   }
 
   async updateDeliveryZones(

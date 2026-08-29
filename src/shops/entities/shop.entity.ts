@@ -84,6 +84,25 @@ export class Shop {
   @Column({ type: 'boolean', default: true })
   isOpenManual!: boolean;
 
+  /** Whether the shop offers online delivery (false = showcase / in-store only). */
+  @Column({ type: 'boolean', default: true })
+  isDeliveryEnabled!: boolean;
+
+  /** Whether customer can visit or pick up orders in-store (samovivoz). */
+  @Column({ type: 'boolean', default: true })
+  isPickupEnabled!: boolean;
+
+  /**
+   * Independent delivery schedule (e.g. 24/7 shop but delivery only 09:00-21:00).
+   * If empty, defaults to inheriting workingHours.
+   */
+  @Column({ type: 'jsonb', default: () => "'[]'::jsonb" })
+  deliveryHours!: WorkingHourSlot[];
+
+  /** Contact phone for customer inquiries (especially for in-store showcase shops). */
+  @Column({ type: 'varchar', length: 32, nullable: true })
+  phone!: string | null;
+
   @Column({ type: 'int', default: 0 })
   minOrderPrice!: number;
 

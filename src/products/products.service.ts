@@ -18,7 +18,7 @@ import { PushService } from '../push/push.service';
 import { Shop } from '../shops/entities/shop.entity';
 import { ShopStaff, StaffPermission } from '../shops/entities/shop-staff.entity';
 import { assertShopPermission } from '../shops/shop-access.util';
-import { isShopOpenNow } from '../shops/shop-hours.util';
+import { isDeliveryOpenNow, isShopOpenNow } from '../shops/shop-hours.util';
 import { User } from '../users/entities/user.entity';
 import { Category } from '../categories/entities/category.entity';
 import { latinToCyrillic } from '../common/utils/transliteration.util';
@@ -60,6 +60,10 @@ export type FeedProduct = VariantWithGlobal & {
     distanceKm: number;
     deliveryFeeAtUser: number;
     isOpen: boolean;
+    isDeliveryOpen?: boolean;
+    isDeliveryEnabled?: boolean;
+    isPickupEnabled?: boolean;
+    phone?: string | null;
     photos: string[];
   };
 };
@@ -1144,7 +1148,7 @@ export class ProductsService {
       },
     });
     const reachableShops = allShops
-      .filter((s) => isShopOpenNow(s))
+      .filter((s) => isDeliveryOpenNow(s))
       .map((s) => {
         const distanceKm = haversineKm(opts.latitude, opts.longitude, s.latitude, s.longitude);
         return { shop: s, distanceKm };
@@ -1153,7 +1157,7 @@ export class ProductsService {
         if (shop.deliveryPolygon) {
           return pointInPolygon(opts.latitude, opts.longitude, shop.deliveryPolygon);
         }
-        return distanceKm <= shop.deliveryZone.maxKm;
+        return distanceKm <= (shop.deliveryZone?.maxKm ?? 2);
       });
 
     if (reachableShops.length === 0) {
@@ -1244,6 +1248,10 @@ export class ProductsService {
           distanceKm,
           deliveryFeeAtUser,
           isOpen: shop ? isShopOpenNow(shop) : false,
+          isDeliveryOpen: shop ? isDeliveryOpenNow(shop) : false,
+          isDeliveryEnabled: shop?.isDeliveryEnabled ?? true,
+          isPickupEnabled: shop?.isPickupEnabled ?? true,
+          phone: shop?.phone ?? null,
           photos: shop?.photos ?? [],
         },
       } as FeedProduct;

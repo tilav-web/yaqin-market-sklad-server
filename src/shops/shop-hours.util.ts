@@ -103,3 +103,42 @@ export function isShopOpenNow(
 
   return false;
 }
+
+/**
+ * Whether a shop currently has active delivery operations:
+ *   1. Must have isDeliveryEnabled = true (not a showcase/in-store only shop).
+ *   2. Must be physically open (isShopOpenNow).
+ *   3. If custom `deliveryHours` are configured (non-empty), must fall within deliveryHours slot.
+ *   4. If `deliveryHours` is empty, inherits physical shop open state.
+ */
+export function isDeliveryOpenNow(
+  shop: Pick<Shop, 'isOpenManual' | 'workingHours' | 'holidays'> & {
+    isDeliveryEnabled?: boolean;
+    deliveryHours?: WorkingHourSlot[];
+  },
+  now: Date = new Date(),
+): boolean {
+  if (shop.isDeliveryEnabled === false) return false;
+  if (!isShopOpenNow(shop, now)) return false;
+
+  const delHours = shop.deliveryHours ?? [];
+  // If no separate delivery hours specified, it matches shop open hours
+  if (delHours.length === 0) return true;
+
+  const holidays = shop.holidays ?? [];
+  const { date, time, dayOfWeek } = tzNow(now);
+  if (holidays.some((h) => h.date === date)) return false;
+
+  const todaySlot = delHours.find((h) => h.dayOfWeek === dayOfWeek);
+  if (todaySlot?.isOpen && timeWithinSameDay(time, todaySlot)) return true;
+
+  const yesterday = tzNow(new Date(now.getTime() - 24 * 60 * 60 * 1000));
+  if (holidays.some((h) => h.date === yesterday.date)) return false;
+  const yesterdaySlot = delHours.find((h) => h.dayOfWeek === yesterday.dayOfWeek);
+  if (yesterdaySlot?.isOpen && yesterdaySlot.closeTime < yesterdaySlot.openTime && time <= yesterdaySlot.closeTime) {
+    return true;
+  }
+
+  return false;
+}
+

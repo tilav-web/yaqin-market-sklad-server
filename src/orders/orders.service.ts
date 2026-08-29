@@ -35,7 +35,7 @@ import { SettingsService } from '../settings/settings.service';
 import { Shop } from '../shops/entities/shop.entity';
 import { ShopStaff, StaffPermission } from '../shops/entities/shop-staff.entity';
 import { assertShopPermission } from '../shops/shop-access.util';
-import { isShopOpenNow } from '../shops/shop-hours.util';
+import { isDeliveryOpenNow, isShopOpenNow } from '../shops/shop-hours.util';
 import { UserAddress } from '../users/entities/user-address.entity';
 import { User } from '../users/entities/user.entity';
 import { ChatMessage } from './entities/chat-message.entity';
@@ -353,8 +353,14 @@ export class OrdersService {
   ): Promise<Order> {
     const shop = await this.shops.findOne({ where: { id: dto.shopId, isActive: true } });
     if (!shop) throw new NotFoundException('Do\'kon topilmadi');
+    if (shop.isDeliveryEnabled === false) {
+      throw new BadRequestException('Ushbu do\'konda yetkazib berish xizmati mavjud emas. Mahsulotlarni faqat do\'kondan xarid qilish mumkin.');
+    }
     if (!isShopOpenNow(shop)) {
       throw new BadRequestException('Do\'kon hozir yopiq — buyurtma qabul qilmaydi');
+    }
+    if (!isDeliveryOpenNow(shop)) {
+      throw new BadRequestException('Do\'konda ayni vaqtda yetkazib berish xizmati ishlamayapti');
     }
     if (shop.blockedUserIds.includes(userId)) {
       throw new ForbiddenException('Bu do\'kon sizdan buyurtma qabul qila olmaydi');

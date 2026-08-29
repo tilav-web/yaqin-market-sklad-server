@@ -214,6 +214,29 @@ export class CreateShopDto {
   @IsString({ each: true })
   photos?: string[];
 
+  @ApiPropertyOptional({ description: 'Contact phone for customer inquiries' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(32)
+  phone?: string;
+
+  @ApiPropertyOptional({ description: 'Whether shop supports online delivery (default true)' })
+  @IsOptional()
+  @IsBoolean()
+  isDeliveryEnabled?: boolean;
+
+  @ApiPropertyOptional({ description: 'Whether in-store pickup / walk-in is supported (default true)' })
+  @IsOptional()
+  @IsBoolean()
+  isPickupEnabled?: boolean;
+
+  @ApiPropertyOptional({ type: [WorkingHourSlotDto], description: 'Independent delivery schedule' })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => WorkingHourSlotDto)
+  deliveryHours?: WorkingHourSlotDto[];
+
   /** Best-effort device fix at the moment this pin was set (anti-fraud). */
   @ApiPropertyOptional({ type: LocationEvidenceDto })
   @IsOptional()
@@ -240,6 +263,29 @@ export class UpdateShopDto {
   @ArrayMaxSize(5)
   @IsString({ each: true })
   photos?: string[];
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(32)
+  phone?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isDeliveryEnabled?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isPickupEnabled?: boolean;
+
+  @ApiPropertyOptional({ type: [WorkingHourSlotDto] })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => WorkingHourSlotDto)
+  deliveryHours?: WorkingHourSlotDto[];
 
   @ApiPropertyOptional()
   @IsOptional()
