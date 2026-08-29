@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 
-import { User } from '../users/entities/user.entity';
+import { AdminUser } from '../admin-users/entities/admin-user.entity';
 import { AdminAuditLog, AuditAction } from './entities/admin-audit-log.entity';
 
 export interface AuditLogEntry {
@@ -18,7 +18,7 @@ export interface AuditLogEntry {
 export class AuditLogService {
   constructor(
     @InjectRepository(AdminAuditLog) private readonly logs: Repository<AdminAuditLog>,
-    @InjectRepository(User) private readonly users: Repository<User>,
+    @InjectRepository(AdminUser) private readonly adminUsers: Repository<AdminUser>,
   ) {}
 
   /** Fire-and-forget from the caller's perspective — never blocks or fails the
@@ -46,7 +46,12 @@ export class AuditLogService {
     action?: AuditAction;
     limit?: number;
     offset?: number;
-  }): Promise<{ items: (AdminAuditLog & { admin: { id: string; name: string | null; phone: string } | null })[]; total: number }> {
+  }): Promise<{
+    items: (AdminAuditLog & {
+      admin: { id: string; username: string; firstName: string; lastName: string; phone: string | null } | null;
+    })[];
+    total: number;
+  }> {
     const where: Record<string, unknown> = {};
     if (opts.targetType) where.targetType = opts.targetType;
     if (opts.action) where.action = opts.action;
@@ -60,7 +65,10 @@ export class AuditLogService {
 
     const adminIds = [...new Set(items.map((l) => l.adminUserId))];
     const admins = adminIds.length
-      ? await this.users.find({ where: { id: In(adminIds) }, select: { id: true, name: true, phone: true } })
+      ? await this.adminUsers.find({
+          where: { id: In(adminIds) },
+          select: { id: true, username: true, firstName: true, lastName: true, phone: true },
+        })
       : [];
     const byId = new Map(admins.map((a) => [a.id, a]));
 

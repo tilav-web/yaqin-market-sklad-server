@@ -15,6 +15,7 @@
     "seed": "ts-node --transpile-only -P tsconfig.seed.json src/database/mock-data.ts",
     "seed:mock": "ts-node --transpile-only -P tsconfig.seed.json src/database/mock-data.ts",
     "seed:qarshi": "ts-node --transpile-only -P tsconfig.seed.json src/database/qarshi-seed.ts",
+    "seed:admin": "ts-node --transpile-only -P tsconfig.seed.json src/database/seed-admin.ts",
     "deploy": "git pull origin master && npm install && npm run build && npm run migration:run && systemctl restart yaqin-server",
     "typeorm": "typeorm-ts-node-commonjs",
     "migration:generate": "npm run typeorm -- migration:generate -d src/database/data-source.ts",
