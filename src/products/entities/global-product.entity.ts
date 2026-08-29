@@ -24,12 +24,16 @@ export type UnitType = 'piece' | 'kg' | 'liter' | 'gram' | 'pack';
  */
 @Entity({ name: 'global_products' })
 @Index(['barcode'], { unique: true })
+@Index(['slug'], { unique: true })
 @Index(['isActive', 'usageCount'])
 @Index(['parentGlobalProductId'])
 @Index(['ownerShopId'])
 export class GlobalProduct {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
+
+  @Column({ type: 'varchar', length: 256, nullable: true })
+  slug!: string;
 
   @Column({ type: 'varchar', length: 64, nullable: true })
   barcode!: string | null;

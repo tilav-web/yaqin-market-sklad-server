@@ -273,6 +273,20 @@ export class CatalogController {
       excludeShopId,
     );
   }
+
+  /** Look up GlobalProduct by SEO slug (for public web pages & indexing). */
+  @Public()
+  @Get('global-products/by-slug/:slug')
+  globalProductBySlug(@Param('slug') slug: string) {
+    return this.products.lookupGlobalBySlug(slug);
+  }
+
+  /** SEO Sitemap data for dynamic Next.js sitemap generation. */
+  @Public()
+  @Get('seo/sitemap-data')
+  sitemapData() {
+    return this.products.getSitemapData();
+  }
 }
 
 // ─── Seller: katalog + kengaytirilgan sklad operatsiyalari ───────────────────

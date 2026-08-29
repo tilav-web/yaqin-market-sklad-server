@@ -25,6 +25,15 @@ export class CategoriesService {
     return this.categories.findOne({ where: { id } });
   }
 
+  async findBySlug(slug: string): Promise<Category> {
+    const cat = await this.categories.findOne({
+      where: { slug, isActive: true },
+      relations: { children: true, parent: true },
+    });
+    if (!cat) throw new NotFoundException('Kategoriya topilmadi');
+    return cat;
+  }
+
   async create(dto: {
     slug: string;
     nameUzLatn: string;

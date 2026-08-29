@@ -20,7 +20,9 @@ import { ShopStaff, StaffPermission } from '../shops/entities/shop-staff.entity'
 import { assertShopPermission } from '../shops/shop-access.util';
 import { isShopOpenNow } from '../shops/shop-hours.util';
 import { User } from '../users/entities/user.entity';
+import { Category } from '../categories/entities/category.entity';
 import { latinToCyrillic } from '../common/utils/transliteration.util';
+import { slugify } from '../common/utils/slug.util';
 import { LocalizedText, toLocalizedText, getLocalizedText } from '../common/types/localized-text.type';
 import { GlobalProduct, UnitType } from './entities/global-product.entity';
 import { BrakReasonCode, InventoryMovement, MovementType } from './entities/inventory-movement.entity';
@@ -1462,7 +1464,28 @@ export class ProductsService {
     return { total, verified, active };
   }
 
+  async ensureUniqueSlug(rawNameOrSlug: string, excludeId?: string): Promise<string> {
+    let base = slugify(rawNameOrSlug);
+    if (!base) base = 'product';
+    let candidate = base;
+    let counter = 1;
+
+    while (true) {
+      const qb = this.globalProducts.createQueryBuilder('gp').where('gp.slug = :candidate', { candidate });
+      if (excludeId) {
+        qb.andWhere('gp.id != :excludeId', { excludeId });
+      }
+      const existing = await qb.getOne();
+      if (!existing) return candidate;
+      counter += 1;
+      candidate = `${base}-${counter}`;
+    }
+  }
+
   async adminCreateGlobalProduct(dto: {
+    slug?: string;
+    nameI18n?: any;
+    descriptionI18n?: any;
     name?: string;
     nameUzLatn?: string;
     nameUzCyrl?: string;
@@ -1489,22 +1512,30 @@ export class ProductsService {
       if (!parent) throw new NotFoundException('Asosiy mahsulot topilmadi');
     }
 
-    const localizedName = toLocalizedText({
-      uz: dto.nameUzLatn || dto.name,
-      kr: dto.nameUzCyrl,
-      ru: dto.nameRu,
-    });
+    const localizedName = toLocalizedText(
+      dto.nameI18n || {
+        uz: dto.nameUzLatn || dto.name,
+        kr: dto.nameUzCyrl,
+        ru: dto.nameRu,
+      },
+    );
 
-    const hasDesc = dto.descriptionUzLatn || dto.description || dto.descriptionRu;
+    const hasDesc = dto.descriptionI18n || dto.descriptionUzLatn || dto.description || dto.descriptionRu;
     const localizedDesc = hasDesc
-      ? toLocalizedText({
-          uz: dto.descriptionUzLatn || dto.description,
-          kr: dto.descriptionUzCyrl,
-          ru: dto.descriptionRu,
-        })
+      ? toLocalizedText(
+          dto.descriptionI18n || {
+            uz: dto.descriptionUzLatn || dto.description,
+            kr: dto.descriptionUzCyrl,
+            ru: dto.descriptionRu,
+          },
+        )
       : null;
 
+    const rawSlug = dto.slug || localizedName.uz || localizedName.ru || 'product';
+    const slug = await this.ensureUniqueSlug(rawSlug);
+
     const gp = this.globalProducts.create({
+      slug,
       name: localizedName,
       barcode: dto.barcode ?? null,
       brand: dto.brand ?? null,
@@ -1524,6 +1555,9 @@ export class ProductsService {
   async adminUpdateGlobalProduct(
     id: string,
     dto: Partial<{
+      slug: string;
+      nameI18n: any;
+      descriptionI18n: any;
       name: string;
       nameUzLatn: string;
       nameUzCyrl: string;
@@ -1557,32 +1591,44 @@ export class ProductsService {
       if (!parent) throw new NotFoundException('Asosiy mahsulot topilmadi');
     }
 
-    if (dto.nameUzLatn !== undefined || dto.name !== undefined || dto.nameRu !== undefined || dto.nameUzCyrl !== undefined) {
+    if (dto.nameUzLatn !== undefined || dto.name !== undefined || dto.nameRu !== undefined || dto.nameUzCyrl !== undefined || dto.nameI18n !== undefined) {
       const cur = typeof gp.name === 'object' ? gp.name : { uz: gp.name, kr: '', ru: '' };
-      gp.name = toLocalizedText({
-        uz: dto.nameUzLatn ?? dto.name ?? cur?.uz,
-        kr: dto.nameUzCyrl ?? cur?.kr,
-        ru: dto.nameRu ?? cur?.ru,
-      });
+      gp.name = toLocalizedText(
+        dto.nameI18n || {
+          uz: dto.nameUzLatn ?? dto.name ?? cur?.uz,
+          kr: dto.nameUzCyrl ?? cur?.kr,
+          ru: dto.nameRu ?? cur?.ru,
+        },
+      );
     }
 
     if (
       dto.descriptionUzLatn !== undefined ||
       dto.description !== undefined ||
       dto.descriptionRu !== undefined ||
-      dto.descriptionUzCyrl !== undefined
+      dto.descriptionUzCyrl !== undefined ||
+      dto.descriptionI18n !== undefined
     ) {
       const cur = typeof gp.description === 'object' ? gp.description : { uz: gp.description || '', kr: '', ru: '' };
       const uz = dto.descriptionUzLatn ?? dto.description ?? cur?.uz;
-      if (uz || dto.descriptionRu || dto.descriptionUzCyrl) {
-        gp.description = toLocalizedText({
-          uz,
-          kr: dto.descriptionUzCyrl ?? cur?.kr,
-          ru: dto.descriptionRu ?? cur?.ru,
-        });
+      if (dto.descriptionI18n || uz || dto.descriptionRu || dto.descriptionUzCyrl) {
+        gp.description = toLocalizedText(
+          dto.descriptionI18n || {
+            uz,
+            kr: dto.descriptionUzCyrl ?? cur?.kr,
+            ru: dto.descriptionRu ?? cur?.ru,
+          },
+        );
       } else {
         gp.description = null;
       }
+    }
+
+    if (dto.slug !== undefined && dto.slug.trim()) {
+      gp.slug = await this.ensureUniqueSlug(dto.slug, id);
+    } else if (!gp.slug) {
+      const nameUz = typeof gp.name === 'object' ? gp.name?.uz : gp.name;
+      gp.slug = await this.ensureUniqueSlug(nameUz || 'product', id);
     }
 
     if (dto.barcode !== undefined) gp.barcode = dto.barcode;
@@ -1596,6 +1642,76 @@ export class ProductsService {
     if (dto.isActive !== undefined) gp.isActive = dto.isActive;
 
     return this.globalProducts.save(gp);
+  }
+
+  async lookupGlobalBySlug(slug: string) {
+    const gp = await this.globalProducts.findOne({
+      where: { slug, isActive: true },
+      relations: { category: true },
+    });
+    if (!gp) throw new NotFoundException('Mahsulot topilmadi');
+
+    const variants = await this.variants.find({
+      where: { globalProductId: gp.id, isActive: true },
+      relations: { shop: true },
+      order: { price: 'ASC' },
+    });
+
+    const prices = variants.map((v) => v.price).filter((p) => typeof p === 'number' && p > 0);
+    const minPrice = prices.length > 0 ? Math.min(...prices) : null;
+    const maxPrice = prices.length > 0 ? Math.max(...prices) : null;
+    const inStock = variants.some((v) => v.stock > 0);
+
+    let siblings: GlobalProduct[] = [];
+    const parentId = gp.parentGlobalProductId ?? gp.id;
+    if (parentId) {
+      siblings = await this.globalProducts.find({
+        where: [
+          { id: parentId, isActive: true },
+          { parentGlobalProductId: parentId, isActive: true },
+        ],
+      });
+    }
+
+    return {
+      ...gp,
+      minPrice,
+      maxPrice,
+      inStock,
+      availableOffersCount: variants.length,
+      offers: variants.slice(0, 10).map((v) => ({
+        variantId: v.id,
+        shopId: v.shopId,
+        shopName: v.shop?.name ?? '',
+        shopAddress: v.shop?.address ?? '',
+        price: v.price,
+        discountPrice: v.discountPrice,
+        stock: v.stock,
+      })),
+      siblings: siblings.filter((s) => s.id !== gp.id),
+    };
+  }
+
+  async getSitemapData() {
+    const categoryRepo = this.dataSource.getRepository(Category);
+    const [products, categories] = await Promise.all([
+      this.globalProducts.find({
+        where: { isActive: true },
+        select: { id: true, slug: true, updatedAt: true },
+        order: { updatedAt: 'DESC' },
+        take: 5000,
+      }),
+      categoryRepo.find({
+        where: { isActive: true },
+        select: { id: true, slug: true, updatedAt: true },
+        order: { sortOrder: 'ASC' },
+      }),
+    ]);
+
+    return {
+      products: products.map((p) => ({ slug: p.slug, updatedAt: p.updatedAt })),
+      categories: categories.map((c) => ({ slug: c.slug, updatedAt: c.updatedAt })),
+    };
   }
 
   async adminGetGlobalProductStats(id: string) {

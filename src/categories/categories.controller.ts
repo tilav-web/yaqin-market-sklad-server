@@ -29,6 +29,12 @@ export class CategoriesController {
     return this.categories.findActiveTree();
   }
 
+  @Public()
+  @Get('by-slug/:slug')
+  bySlug(@Param('slug') slug: string) {
+    return this.categories.findBySlug(slug);
+  }
+
   @Roles(Role.Admin)
   @ApiBearerAuth()
   @Get('admin/all')

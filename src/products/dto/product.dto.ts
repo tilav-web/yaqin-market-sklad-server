@@ -306,6 +306,20 @@ export class AdminCreateGlobalProductDto {
   @IsOptional()
   @IsString()
   @MaxLength(256)
+  slug?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  nameI18n?: any;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  descriptionI18n?: any;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(256)
   name?: string;
 
   @ApiPropertyOptional()
@@ -394,6 +408,20 @@ export class AdminCreateGlobalProductDto {
 
 /** Admin: patch a shared-catalogue product. All fields optional. */
 export class AdminUpdateGlobalProductDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(256)
+  slug?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  nameI18n?: any;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  descriptionI18n?: any;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
