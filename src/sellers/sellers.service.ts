@@ -48,9 +48,9 @@ export class SellersService {
       return {
         stir: '313296455',
         companyName: '"TILAV" MCHJ',
-        legalName: 'Tilavov Sardor',
+        legalName: '',
         entityType: 'MChJ',
-        legalAddress: "Qashqadaryo viloyati, Qarshi shahri, Mustaqillik shox ko'chasi",
+        legalAddress: 'Qashqadaryo viloyati, Qarshi shahri',
         region: 'Qashqadaryo viloyati',
         status: 'active',
         vatPayer: true,
@@ -58,23 +58,23 @@ export class SellersService {
     }
 
     // Soliq region codes mapping (Uzbekistan State Tax Committee standard)
-    const regions: Record<string, { name: string; city: string; street: string }> = {
-      '10': { name: 'Toshkent shahri', city: 'Toshkent shahri, Yunusobod tumani', street: 'Amir Temur shox ko\'chasi, 45-uy' },
-      '11': { name: 'Toshkent viloyati', city: 'Chirchiq shahri', street: 'Navoiy ko\'chasi, 18-uy' },
-      '12': { name: 'Andijon viloyati', city: 'Andijon shahri', street: 'Bobur shox ko\'chasi, 12-uy' },
-      '13': { name: 'Buxoro viloyati', city: 'Buxoro shahri', street: 'Ibn Sino ko\'chasi, 8-uy' },
-      '14': { name: 'Jizzax viloyati', city: 'Jizzax shahri', street: 'Sharof Rashidov shox ko\'chasi, 24-uy' },
-      '15': { name: 'Qashqadaryo viloyati', city: 'Qarshi shahri', street: 'Mustaqillik shox ko\'chasi, 15-uy' },
-      '16': { name: 'Navoiy viloyati', city: 'Navoiy shahri', street: 'G\'alaba shox ko\'chasi, 3-uy' },
-      '17': { name: 'Namangan viloyati', city: 'Namangan shahri', street: 'Uychi ko\'chasi, 56-uy' },
-      '18': { name: 'Samarqand viloyati', city: 'Samarqand shahri', street: 'Registon ko\'chasi, 9-uy' },
-      '19': { name: 'Surxondaryo viloyati', city: 'Termiz shahri', street: 'At-Termiziy ko\'chasi, 14-uy' },
-      '20': { name: 'Sirdaryo viloyati', city: 'Guliston shahri', street: 'Buyuk Kelajak ko\'chasi, 2-uy' },
-      '21': { name: 'Toshkent shahri', city: 'Toshkent shahri, Chilonzor tumani', street: 'Bunyodkor shox ko\'chasi, 10-uy' },
-      '22': { name: 'Farg\'ona viloyati', city: 'Farg\'ona shahri', street: 'Al-Farg\'oniy ko\'chasi, 33-uy' },
-      '23': { name: 'Xorazm viloyati', city: 'Urganch shahri', street: 'Al-Xorazmiy ko\'chasi, 7-uy' },
-      '24': { name: 'Qoraqalpog\'iston Respublikasi', city: 'Nukus shahri', street: 'Qoraqalpog\'iston ko\'chasi, 1-uy' },
-      '31': { name: 'Qashqadaryo viloyati', city: 'Qarshi shahri', street: 'Mustaqillik shox ko\'chasi, 15-uy' },
+    const regions: Record<string, { name: string; city: string }> = {
+      '10': { name: 'Toshkent shahri', city: 'Toshkent shahri' },
+      '11': { name: 'Toshkent viloyati', city: 'Toshkent viloyati' },
+      '12': { name: 'Andijon viloyati', city: 'Andijon shahri' },
+      '13': { name: 'Buxoro viloyati', city: 'Buxoro shahri' },
+      '14': { name: 'Jizzax viloyati', city: 'Jizzax shahri' },
+      '15': { name: 'Qashqadaryo viloyati', city: 'Qashqadaryo viloyati, Qarshi shahri' },
+      '16': { name: 'Navoiy viloyati', city: 'Navoiy shahri' },
+      '17': { name: 'Namangan viloyati', city: 'Namangan shahri' },
+      '18': { name: 'Samarqand viloyati', city: 'Samarqand shahri' },
+      '19': { name: 'Surxondaryo viloyati', city: 'Termiz shahri' },
+      '20': { name: 'Sirdaryo viloyati', city: 'Guliston shahri' },
+      '21': { name: 'Toshkent shahri', city: 'Toshkent shahri' },
+      '22': { name: 'Farg\'ona viloyati', city: 'Farg\'ona shahri' },
+      '23': { name: 'Xorazm viloyati', city: 'Urganch shahri' },
+      '24': { name: 'Qoraqalpog\'iston Respublikasi', city: 'Nukus shahri' },
+      '31': { name: 'Qashqadaryo viloyati', city: 'Qashqadaryo viloyati, Qarshi shahri' },
     };
 
     // Determine entity type: 2xx, 3xx are Legal Entities (MChJ/XK/OK/AJ); 4xx, 5xx, 6xx are Individual Entrepreneurs (YaTT)
@@ -84,52 +84,17 @@ export class SellersService {
 
     // Extract region from STIR prefix or hash
     const regionCode = cleanStir.slice(0, 2);
-    const regionInfo = regions[regionCode] || regions['15']; // Default Qashqadaryo / Qarshi
-
-    const directors = [
-      'Jasur Karimov Baxtiyorovich',
-      'Bobur Aliyev Rustamovich',
-      'Dilshod Rahimov Anvarovich',
-      'Sardor Rustamov Shuhratovich',
-      'Sherzod Qodirov Akromovich',
-      'Alisher Valiyev Zokirovich',
-      'Nodirbek Mahmudov Ilhomovich',
-      'Ulug\'bek Saidov Farhodovich',
-      'Javohir Toshmatov Otabekovich',
-    ];
-
-    const companyPrefixes = [
-      'PREMIUM SAVDO',
-      'YANGI DAVR INVEST',
-      'BARAKA TRADE GROUP',
-      'ASR SMART SERVIS',
-      'GOLD COMMERCE',
-      'ORIENT EXPORT IMPORT',
-      'GLOBAL MARKET LOGISTIK',
-      'VODIY SAVDO PLYUS',
-      'NASAF MEGA TRADE',
-    ];
-
-    const numSeed = parseInt(cleanStir.slice(2, 6) || '1234', 10);
-    const dirIndex = (numSeed + parseInt(cleanStir.slice(-1), 10)) % directors.length;
-    const compIndex = (numSeed * 7 + parseInt(cleanStir.slice(-2), 10)) % companyPrefixes.length;
-
-    const legalName = directors[dirIndex];
-    const companyName = isLegalEntity
-      ? `"${companyPrefixes[compIndex]}" MCHJ`
-      : `YATT ${legalName.toUpperCase()}`;
-
-    const vatPayer = isLegalEntity && (parseInt(cleanStir.slice(-1), 10) % 2 === 0);
+    const regionInfo = regions[regionCode] || regions['15'];
 
     return {
       stir: cleanStir,
-      companyName,
-      legalName,
+      companyName: '',
+      legalName: '',
       entityType,
-      legalAddress: `${regionInfo.city}, ${regionInfo.street}`,
+      legalAddress: regionInfo.city,
       region: regionInfo.name,
       status: 'active',
-      vatPayer,
+      vatPayer: isLegalEntity,
     };
   }
 
