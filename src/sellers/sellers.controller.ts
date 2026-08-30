@@ -12,6 +12,7 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { JwtPayload } from '../auth/decorators/current-user.decorator';
+import { Public } from '../auth/decorators/public.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '../auth/role.enum';
 import { SellerApplicationStatus } from './entities/seller-application.entity';
@@ -31,21 +32,25 @@ export class SellersController {
   constructor(private readonly sellers: SellersService) {}
 
   // Customer side
+  @Public()
   @Get('platform-info')
   platformInfo() {
     return this.sellers.getPlatformInfo();
   }
 
+  @Public()
   @Get('platform-config')
   platformConfig() {
     return this.sellers.getPlatformConfig();
   }
 
+  @Public()
   @Get('lookup-stir/:stir')
   lookupStir(@Param('stir') stir: string) {
     return this.sellers.lookupStir(stir);
   }
 
+  @Public()
   @Get('check-commissioner/:stir')
   checkCommissioner(@Param('stir') stir: string) {
     return this.sellers.checkCommissionerAttachment(stir);
