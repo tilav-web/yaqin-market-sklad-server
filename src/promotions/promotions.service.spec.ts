@@ -15,7 +15,7 @@ function makePromo(overrides: Partial<Promotion> = {}): Promotion {
   return {
     id: 'promo-1',
     shopId: 'shop-1',
-    name: 'Test aksiya',
+    name: { uz: 'Test aksiya', ru: 'Тест акция' },
     type: 'product_discount',
     discountType: 'percent',
     discountValue: 10,

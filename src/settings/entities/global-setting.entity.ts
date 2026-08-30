@@ -27,12 +27,14 @@ export const SETTING_KEYS = {
   CLICK_FEE_PERCENT: 'click_fee_percent', // Click ekvayring % (shartnomadan), e.g. "3.00"
   PAYOUT_FEE_PERCENT: 'payout_fee_percent', // sellerga karta o'tkazma % , e.g. "1.00"
   MIN_ORDER_TOTAL: 'min_order_total', // so'm; "0" = cheklov yo'q
-  // ---- Soliq / fiskalizatsiya ----
+  // ---- Soliq / fiskalizatsiya / Didox ----
   VAT_RATE_PERCENT: 'vat_rate_percent', // QQS standart stavkasi, e.g. "12"
   FISCAL_MODE: 'fiscal_mode', // off | collect | live
   PLATFORM_LEGAL_NAME: 'platform_legal_name', // operator (MChJ) nomi — cheklar uchun
   PLATFORM_STIR: 'platform_stir', // operator STIRi — cheklar uchun
   DELIVERY_MXIK_CODE: 'delivery_mxik_code', // yetkazish xizmati MXIK (tasnif: Kuryerlik xizmati)
+  DIDOX_USER_KEY: 'didox_user_key', // Didox API user-key (token)
+  DIDOX_API_URL: 'didox_api_url', // e.g. "https://api.didox.uz"
   // ---- Anti-fraud / lokatsiya risk qoidalari ----
   RISK_DELIVERED_MAX_DISTANCE_M: 'risk_delivered_max_distance_m', // "Yetkazildi" bosilgan joy manzildan uzoqligi (metr)
   RISK_EVIDENCE_MAX_ACCURACY_M: 'risk_evidence_max_accuracy_m', // GPS aniqligi bundan yomon bo'lsa masofa qoidasi ishlamaydi (metr)
@@ -57,9 +59,11 @@ export const STRING_SETTING_KEYS: Record<
   string,
   { allowedValues?: string[]; pattern?: RegExp; patternHint?: string }
 > = {
-    [SETTING_KEYS.FISCAL_MODE]: { allowedValues: ['off', 'collect', 'live'] },
-    [SETTING_KEYS.PLATFORM_LEGAL_NAME]: {},
-    // Yuridik shaxs STIRi (INN) — O'zbekistonda 9 xonali raqam.
-    [SETTING_KEYS.PLATFORM_STIR]: { pattern: /^\d{9}$/, patternHint: '9 xonali raqam' },
-    [SETTING_KEYS.DELIVERY_MXIK_CODE]: {},
-  };
+  [SETTING_KEYS.FISCAL_MODE]: { allowedValues: ['off', 'collect', 'live'] },
+  [SETTING_KEYS.PLATFORM_LEGAL_NAME]: {},
+  // Yuridik shaxs STIRi (INN) — O'zbekistonda 9 xonali raqam.
+  [SETTING_KEYS.PLATFORM_STIR]: { pattern: /^\d{9}$/, patternHint: '9 xonali raqam' },
+  [SETTING_KEYS.DELIVERY_MXIK_CODE]: {},
+  [SETTING_KEYS.DIDOX_USER_KEY]: {},
+  [SETTING_KEYS.DIDOX_API_URL]: {},
+};

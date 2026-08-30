@@ -70,6 +70,14 @@ const DEFAULTS: Record<string, { value: string; description: string }> = {
     value: '10105001002000000',
     description: "Yetkazib berish xizmati MXIK kodi (tasnif: 'Kuryerlik xizmati')",
   },
+  [SETTING_KEYS.DIDOX_USER_KEY]: {
+    value: '',
+    description: "Didox API kaliti (user-key) — Soliq ma'lumotlarini avtomatik tekshirish uchun",
+  },
+  [SETTING_KEYS.DIDOX_API_URL]: {
+    value: 'https://api.didox.uz',
+    description: "Didox API asosiy manzili (masalan: https://api.didox.uz)",
+  },
   [SETTING_KEYS.RISK_DELIVERED_MAX_DISTANCE_M]: {
     value: '300',
     description: '"Yetkazildi" tugmasi bosilgan joy manzildan qancha uzoq bo\'lsa flag (metr)',
@@ -306,5 +314,69 @@ export class SettingsService implements OnModuleInit {
       },
       warnings,
     };
+  }
+
+  /**
+   * Super Admin Didox API kalitini kiritganda ulanishni tekshirish uchun.
+   */
+  async testDidox(userKey?: string, tin = '313296455'): Promise<{
+    success: boolean;
+    status: number;
+    data?: any;
+    error?: string;
+    message: string;
+  }> {
+    const key = (userKey || this.get(SETTING_KEYS.DIDOX_USER_KEY) || process.env.DIDOX_USER_KEY || '').trim();
+    if (!key) {
+      return {
+        success: false,
+        status: 400,
+        message: 'Didox API kaliti kiritilmagan. Iltimos, Didox kabinetingizdagi user-key ni kiriting.',
+      };
+    }
+    const apiUrl = (this.get(SETTING_KEYS.DIDOX_API_URL) || 'https://api.didox.uz').replace(/\/+$/, '');
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 8000);
+      const res = await fetch(`${apiUrl}/v1/profile/info?tin=${tin}`, {
+        signal: controller.signal,
+        headers: {
+          'user-key': key,
+          'Accept': 'application/json',
+          'User-Agent': 'YaqinMarket/1.0',
+        },
+      });
+      clearTimeout(timeout);
+      const text = await res.text();
+      let json: any;
+      try {
+        json = JSON.parse(text);
+      } catch {
+        json = { raw: text };
+      }
+
+      if (res.ok) {
+        return {
+          success: true,
+          status: res.status,
+          data: json,
+          message: "Didox & Soliq API ga muvaffaqiyatli ulandi! Ma'lumotlar to'g'ri qabul qilinmoqda.",
+        };
+      } else {
+        return {
+          success: false,
+          status: res.status,
+          error: json?.message || json?.error || text,
+          message: `Didox xatolik qaytardi (${res.status}): ${json?.message || json?.error || 'Token noto\'g\'ri yoki muddati o\'tgan'}`,
+        };
+      }
+    } catch (err: any) {
+      return {
+        success: false,
+        status: 500,
+        error: err.message,
+        message: `Didox serveriga ulanishda xatolik: ${err.message}`,
+      };
+    }
   }
 }

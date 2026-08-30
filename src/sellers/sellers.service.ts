@@ -23,6 +23,29 @@ export class SellersService {
     private readonly dataSource: DataSource,
   ) {}
 
+  private extractRegionFromStir(cleanStir: string): { name: string; city: string } {
+    const regions: Record<string, { name: string; city: string }> = {
+      '10': { name: 'Toshkent shahri', city: 'Toshkent shahri' },
+      '11': { name: 'Toshkent viloyati', city: 'Toshkent viloyati' },
+      '12': { name: 'Andijon viloyati', city: 'Andijon shahri' },
+      '13': { name: 'Buxoro viloyati', city: 'Buxoro shahri' },
+      '14': { name: 'Jizzax viloyati', city: 'Jizzax shahri' },
+      '15': { name: 'Qashqadaryo viloyati', city: 'Qashqadaryo viloyati, Qarshi shahri' },
+      '16': { name: 'Navoiy viloyati', city: 'Navoiy shahri' },
+      '17': { name: 'Namangan viloyati', city: 'Namangan shahri' },
+      '18': { name: 'Samarqand viloyati', city: 'Samarqand shahri' },
+      '19': { name: 'Surxondaryo viloyati', city: 'Termiz shahri' },
+      '20': { name: 'Sirdaryo viloyati', city: 'Guliston shahri' },
+      '21': { name: 'Toshkent shahri', city: 'Toshkent shahri' },
+      '22': { name: 'Farg\'ona viloyati', city: 'Farg\'ona shahri' },
+      '23': { name: 'Xorazm viloyati', city: 'Urganch shahri' },
+      '24': { name: 'Qoraqalpog\'iston Respublikasi', city: 'Nukus shahri' },
+      '31': { name: 'Qashqadaryo viloyati', city: 'Qashqadaryo viloyati, Qarshi shahri' },
+    };
+    const regionCode = cleanStir.slice(0, 2);
+    return regions[regionCode] || regions['15'];
+  }
+
   async lookupStir(stir: string): Promise<{
     stir: string;
     companyName: string;
@@ -43,7 +66,50 @@ export class SellersService {
       throw new BadRequestException('Bunday STIR bo\'yicha davlat reyestrida faol tadbirkorlik subyekti topilmadi');
     }
 
-    // Specific registered official records
+    // 1. Live Didox API integration if key configured in Settings or env
+    const didoxKey = (this.settingsService.get(SETTING_KEYS.DIDOX_USER_KEY) || process.env.DIDOX_USER_KEY || '').trim();
+    const apiUrl = (this.settingsService.get(SETTING_KEYS.DIDOX_API_URL) || 'https://api.didox.uz').replace(/\/+$/, '');
+
+    if (didoxKey) {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 6000);
+        const res = await fetch(`${apiUrl}/v1/profile/info?tin=${cleanStir}`, {
+          signal: controller.signal,
+          headers: {
+            'user-key': didoxKey,
+            'Accept': 'application/json',
+            'User-Agent': 'YaqinMarket/1.0',
+          },
+        });
+        clearTimeout(timeout);
+
+        if (res.ok) {
+          const data: any = await res.json();
+          const firstDigit = cleanStir[0];
+          const isLegalEntity = firstDigit === '1' || firstDigit === '2' || firstDigit === '3';
+          const regionInfo = this.extractRegionFromStir(cleanStir);
+
+          return {
+            stir: cleanStir,
+            companyName: data.name || data.short_name || data.legal_name || (cleanStir === '313296455' ? '"TILAV" MCHJ' : ''),
+            legalName: data.director || data.director_name || data.head || data.owner || '',
+            entityType: data.type || (isLegalEntity ? 'MChJ' : 'YaTT'),
+            legalAddress: data.address || regionInfo.city,
+            region: data.region || regionInfo.name,
+            status: data.status === 1 || data.state === 'active' || !data.status ? 'active' : 'inactive',
+            vatPayer: Boolean(data.is_vat || data.vat_reg_code),
+          };
+        } else if (res.status === 404) {
+          throw new BadRequestException('Bunday STIR davlat soliq reyestrida topilmadi');
+        }
+      } catch (err: any) {
+        if (err instanceof BadRequestException) throw err;
+        // If timeout or other network warning, gracefully fallback below
+      }
+    }
+
+    // 2. Specific registered official records
     if (cleanStir === '313296455') {
       return {
         stir: '313296455',
@@ -57,34 +123,11 @@ export class SellersService {
       };
     }
 
-    // Soliq region codes mapping (Uzbekistan State Tax Committee standard)
-    const regions: Record<string, { name: string; city: string }> = {
-      '10': { name: 'Toshkent shahri', city: 'Toshkent shahri' },
-      '11': { name: 'Toshkent viloyati', city: 'Toshkent viloyati' },
-      '12': { name: 'Andijon viloyati', city: 'Andijon shahri' },
-      '13': { name: 'Buxoro viloyati', city: 'Buxoro shahri' },
-      '14': { name: 'Jizzax viloyati', city: 'Jizzax shahri' },
-      '15': { name: 'Qashqadaryo viloyati', city: 'Qashqadaryo viloyati, Qarshi shahri' },
-      '16': { name: 'Navoiy viloyati', city: 'Navoiy shahri' },
-      '17': { name: 'Namangan viloyati', city: 'Namangan shahri' },
-      '18': { name: 'Samarqand viloyati', city: 'Samarqand shahri' },
-      '19': { name: 'Surxondaryo viloyati', city: 'Termiz shahri' },
-      '20': { name: 'Sirdaryo viloyati', city: 'Guliston shahri' },
-      '21': { name: 'Toshkent shahri', city: 'Toshkent shahri' },
-      '22': { name: 'Farg\'ona viloyati', city: 'Farg\'ona shahri' },
-      '23': { name: 'Xorazm viloyati', city: 'Urganch shahri' },
-      '24': { name: 'Qoraqalpog\'iston Respublikasi', city: 'Nukus shahri' },
-      '31': { name: 'Qashqadaryo viloyati', city: 'Qashqadaryo viloyati, Qarshi shahri' },
-    };
-
-    // Determine entity type: 2xx, 3xx are Legal Entities (MChJ/XK/OK/AJ); 4xx, 5xx, 6xx are Individual Entrepreneurs (YaTT)
+    // 3. Structural fallback
     const firstDigit = cleanStir[0];
     const isLegalEntity = firstDigit === '2' || firstDigit === '3' || firstDigit === '1';
     const entityType = isLegalEntity ? 'MChJ' : 'YaTT';
-
-    // Extract region from STIR prefix or hash
-    const regionCode = cleanStir.slice(0, 2);
-    const regionInfo = regions[regionCode] || regions['15'];
+    const regionInfo = this.extractRegionFromStir(cleanStir);
 
     return {
       stir: cleanStir,
