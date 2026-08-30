@@ -44,9 +44,33 @@ export class SellerApplication {
   @Column({ type: 'varchar', length: 16, nullable: true })
   stir!: string | null;
 
+  /** Tashkilot nomi (masalan: YATT KARIMOV JASUR yoki "BARAKA" MCHJ) */
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  companyName!: string | null;
+
   /** YaTT, MChJ, AJ... — soliq rejimini tushunish uchun arizada so'raladi. */
   @Column({ type: 'varchar', length: 64, nullable: true })
   entityType!: string | null;
+
+  /** Yuridik manzil */
+  @Column({ type: 'varchar', length: 512, nullable: true })
+  legalAddress!: string | null;
+
+  /** 16 xonali Uzcard / Humo karta raqami */
+  @Column({ type: 'varchar', length: 32, nullable: true })
+  bankCardNumber!: string | null;
+
+  /** Karta egasining to'liq F.I.SH. */
+  @Column({ type: 'varchar', length: 128, nullable: true })
+  bankCardHolderName!: string | null;
+
+  /** my.soliq.uz da TILAV MChJ ni komissioner qilib qo'shganini tasdiqlagan */
+  @Column({ type: 'boolean', default: false })
+  soliqConfirmed!: boolean;
+
+  /** TILAV MChJ ommaviy ofertasiga rozilik bildirgan */
+  @Column({ type: 'boolean', default: false })
+  ofertaAccepted!: boolean;
 
   @Column({ type: 'text', nullable: true })
   note!: string | null;

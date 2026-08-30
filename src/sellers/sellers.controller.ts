@@ -31,6 +31,26 @@ export class SellersController {
   constructor(private readonly sellers: SellersService) {}
 
   // Customer side
+  @Get('platform-info')
+  platformInfo() {
+    return this.sellers.getPlatformInfo();
+  }
+
+  @Get('platform-config')
+  platformConfig() {
+    return this.sellers.getPlatformConfig();
+  }
+
+  @Get('lookup-stir/:stir')
+  lookupStir(@Param('stir') stir: string) {
+    return this.sellers.lookupStir(stir);
+  }
+
+  @Get('check-commissioner/:stir')
+  checkCommissioner(@Param('stir') stir: string) {
+    return this.sellers.checkCommissionerAttachment(stir);
+  }
+
   @Post('apply')
   apply(
     @CurrentUser() user: JwtPayload,
