@@ -383,7 +383,8 @@ export class SettingsService implements OnModuleInit {
             "Didox & Soliq API ga muvaffaqiyatli ulandi! Ma'lumotlar to'g'ri qabul qilinmoqda.",
         };
       } else {
-        const errorMsg = String(json.message || json.error || text);
+        const str = (v: unknown): string => (typeof v === 'string' ? v : '');
+        const errorMsg = str(json.message) || str(json.error) || text;
         return {
           success: false,
           status: res.status,

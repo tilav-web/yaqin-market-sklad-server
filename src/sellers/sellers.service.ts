@@ -118,12 +118,30 @@ export class SellersService {
             firstDigit === '1' || firstDigit === '2' || firstDigit === '3';
           const regionInfo = this.extractRegionFromStir(cleanStir);
 
-          const companyName = String(data.name || data.short_name || data.legal_name || (cleanStir === '313296455' ? '"TILAV" MCHJ' : ''));
-          const legalName = String(data.director || data.director_name || data.head || data.owner || '');
-          const entityType = String(data.type || (isLegalEntity ? 'MChJ' : 'YaTT'));
-          const legalAddress = String(data.address || regionInfo.city);
-          const region = String(data.region || regionInfo.name);
-          const status = data.status === 1 || data.state === 'active' || data.status === undefined ? 'active' : 'inactive';
+          const str = (v: unknown): string =>
+            typeof v === 'string' ? v : typeof v === 'number' ? String(v) : '';
+
+          const companyName =
+            str(data.name) ||
+            str(data.short_name) ||
+            str(data.legal_name) ||
+            (cleanStir === '313296455' ? '"TILAV" MCHJ' : '');
+          const legalName =
+            str(data.director) ||
+            str(data.director_name) ||
+            str(data.head) ||
+            str(data.owner) ||
+            '';
+          const entityType =
+            str(data.type) || (isLegalEntity ? 'MChJ' : 'YaTT');
+          const legalAddress = str(data.address) || regionInfo.city;
+          const region = str(data.region) || regionInfo.name;
+          const status =
+            data.status === 1 ||
+            data.state === 'active' ||
+            data.status === undefined
+              ? 'active'
+              : 'inactive';
           const vatPayer = Boolean(data.is_vat || data.vat_reg_code);
 
           return {
@@ -180,14 +198,14 @@ export class SellersService {
     };
   }
 
-  async getPlatformConfig(): Promise<{
+  getPlatformConfig(): {
     platformStir: string;
     platformName: string;
     commissionRate: number;
     ofertaTitle: string;
     ofertaUrl: string;
     supportPhone: string;
-  }> {
+  } {
     const stir = this.settingsService.get(SETTING_KEYS.PLATFORM_STIR);
     const name = this.settingsService.get(SETTING_KEYS.PLATFORM_LEGAL_NAME);
     const comm = this.settingsService.get(SETTING_KEYS.COMMISSION_RATE_DEFAULT);
@@ -215,7 +233,7 @@ export class SellersService {
     attachedAt?: string;
     message: string;
   }> {
-    const config = await this.getPlatformConfig();
+    const config = this.getPlatformConfig();
     const cleanStir = (stir || '').replace(/\D/g, '');
     if (cleanStir.length !== 9) {
       throw new BadRequestException(
@@ -232,14 +250,6 @@ export class SellersService {
         platformName: config.platformName,
         message: `my3.soliq.uz kabinetida '${config.platformStir}' (${config.platformName}) komissioner sifatida topilmadi. Iltimos, soliq kabinetingizda saqlang.`,
       };
-    }
-
-    // In production with SOLIQ_API_TOKEN, execute remote DSQ verification
-    const soliqToken = process.env.SOLIQ_API_TOKEN;
-    if (soliqToken) {
-      try {
-        // e.g. await axios.get(`https://api.soliq.uz/v1/ecommerce/commissioners?tin=${cleanStir}`)
-      } catch {}
     }
 
     // Verified attachment

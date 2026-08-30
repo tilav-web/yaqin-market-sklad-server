@@ -138,7 +138,7 @@ export const PRESET_PERMISSIONS: Record<string, StaffPermission[]> = {
 };
 
 export function computePermissionsForRoles(
-  roles: (StaffRole | string)[],
+  roles: string[],
   customPerms: StaffPermission[] = [],
 ): StaffPermission[] {
   const permSet = new Set<StaffPermission>(customPerms);
@@ -173,7 +173,7 @@ export function normalizeToStaffRole(roleOrPreset?: string | null): StaffRole {
   return map[roleOrPreset] || 'custom';
 }
 
-export function formatRolesDisplayName(roles: (StaffRole | string)[]): string {
+export function formatRolesDisplayName(roles: string[]): string {
   const map: Record<string, string> = {
     cashier: 'Kassir',
     storekeeper: 'Omborchi',

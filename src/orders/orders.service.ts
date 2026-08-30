@@ -1136,7 +1136,6 @@ export class OrdersService {
     });
     if (!order) throw new NotFoundException('Buyurtma topilmadi');
 
-    const isOwner = order.shop.ownerId === actorUserId;
     const isCustomer = order.userId === actorUserId;
     const evidence = buildEvidence(evidenceCtx?.evidence, {
       deviceId: evidenceCtx?.deviceId ?? null,

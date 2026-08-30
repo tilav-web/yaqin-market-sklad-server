@@ -41,7 +41,7 @@ export class SmsService {
       return;
     }
 
-    if (env !== 'production') {
+    if (String(env) !== 'production') {
       this.logger.log(`[DEV-SMS-real] to ${phone}: ${message}`);
     }
 

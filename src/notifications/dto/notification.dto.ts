@@ -8,7 +8,6 @@ import {
   IsUrl,
   IsUUID,
   MaxLength,
-  ValidateIf,
 } from 'class-validator';
 
 export class BroadcastDto {

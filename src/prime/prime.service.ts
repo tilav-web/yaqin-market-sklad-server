@@ -16,10 +16,7 @@ import {
 } from '../payments/entities/seller-transaction.entity';
 import { PushService } from '../push/push.service';
 import { User } from '../users/entities/user.entity';
-import {
-  toLocalizedText,
-  LocalizedText,
-} from '../common/types/localized-text.type';
+import { toLocalizedText } from '../common/types/localized-text.type';
 import { PrimePlan } from './entities/prime-plan.entity';
 import { SellerSubscription } from './entities/seller-subscription.entity';
 

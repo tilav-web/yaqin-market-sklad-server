@@ -375,7 +375,11 @@ export class UsersService {
     const user = await this.users.findOne({ where: { id: userId } });
     if (!user) throw new NotFoundException();
     const ids = new Set(user.favoriteShopIds ?? []);
-    add ? ids.add(shopId) : ids.delete(shopId);
+    if (add) {
+      ids.add(shopId);
+    } else {
+      ids.delete(shopId);
+    }
     user.favoriteShopIds = [...ids];
     await this.users.save(user);
     return { shopIds: user.favoriteShopIds };
@@ -389,7 +393,11 @@ export class UsersService {
     const user = await this.users.findOne({ where: { id: userId } });
     if (!user) throw new NotFoundException();
     const ids = new Set(user.favoriteProductIds ?? []);
-    add ? ids.add(productId) : ids.delete(productId);
+    if (add) {
+      ids.add(productId);
+    } else {
+      ids.delete(productId);
+    }
     user.favoriteProductIds = [...ids];
     await this.users.save(user);
     return { productIds: user.favoriteProductIds };

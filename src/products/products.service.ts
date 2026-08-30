@@ -29,12 +29,10 @@ import { assertShopPermission } from '../shops/shop-access.util';
 import { isDeliveryOpenNow, isShopOpenNow } from '../shops/shop-hours.util';
 import { User } from '../users/entities/user.entity';
 import { Category } from '../categories/entities/category.entity';
-import { latinToCyrillic } from '../common/utils/transliteration.util';
 import { slugify } from '../common/utils/slug.util';
 import {
   LocalizedText,
   toLocalizedText,
-  getLocalizedText,
 } from '../common/types/localized-text.type';
 import { GlobalProduct, UnitType } from './entities/global-product.entity';
 import {

@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Between, In, Repository } from 'typeorm';
+import { Between, In, MoreThanOrEqual, Repository } from 'typeorm';
 
 import { GlobalProduct } from '../products/entities/global-product.entity';
 import {
@@ -420,13 +420,13 @@ export class AnalyticsService {
       this.orders.count({
         where: {
           status: OrderStatus.Delivered,
-          createdAt: require('typeorm').MoreThanOrEqual(startOfDay),
+          createdAt: MoreThanOrEqual(startOfDay),
         },
       }),
       this.orders.count({
         where: {
           status: OrderStatus.Delivered,
-          createdAt: require('typeorm').MoreThanOrEqual(start7d),
+          createdAt: MoreThanOrEqual(start7d),
         },
       }),
     ]);

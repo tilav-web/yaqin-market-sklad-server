@@ -7,7 +7,6 @@ import { AuditLogService } from '../audit-log/audit-log.service';
 import { ComplaintsService } from '../complaints/complaints.service';
 import { PushService } from '../push/push.service';
 import { User } from '../users/entities/user.entity';
-import { SETTING_KEYS } from '../settings/entities/global-setting.entity';
 import { SettingsService } from '../settings/settings.service';
 import { Shop } from '../shops/entities/shop.entity';
 import { SellerBalance } from './entities/seller-balance.entity';
@@ -98,7 +97,6 @@ describe('PaymentsService', () => {
   let balances: jest.Mocked<Repository<SellerBalance>>;
   let txs: jest.Mocked<Repository<SellerTransaction>>;
   let withdrawals: jest.Mocked<Repository<WithdrawalRequest>>;
-  let shops: jest.Mocked<Repository<Shop>>;
   let settings: { getNumber: jest.Mock };
   let dataSource: { transaction: jest.Mock };
   let push: { sendToUser: jest.Mock };
@@ -159,7 +157,6 @@ describe('PaymentsService', () => {
     balances = module.get(getRepositoryToken(SellerBalance));
     txs = module.get(getRepositoryToken(SellerTransaction));
     withdrawals = module.get(getRepositoryToken(WithdrawalRequest));
-    shops = module.get(getRepositoryToken(Shop));
   });
 
   afterEach(() => jest.clearAllMocks());

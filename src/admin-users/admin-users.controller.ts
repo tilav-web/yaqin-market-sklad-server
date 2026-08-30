@@ -23,7 +23,7 @@ import {
   ResetAdminPasswordDto,
   UpdateAdminUserDto,
 } from './dto/update-admin-user.dto';
-import { AdminRole, AdminUser } from './entities/admin-user.entity';
+import { AdminRole } from './entities/admin-user.entity';
 
 @ApiTags('Admin Staff Management')
 @Controller('admin/staff')

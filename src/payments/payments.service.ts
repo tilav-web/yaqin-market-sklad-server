@@ -317,7 +317,7 @@ export class PaymentsService {
             type: SellerTxType.DebtRepaid,
             amount: String(-debtRepaid),
             status: 'settled',
-            description: `Yechib olishdan qarz so\'ndirildi: ${debtRepaid.toLocaleString()} so'm`,
+            description: `Yechib olishdan qarz so'ndirildi: ${debtRepaid.toLocaleString()} so'm`,
           }),
         );
       }
@@ -343,7 +343,7 @@ export class PaymentsService {
           type: SellerTxType.WithdrawalRequested,
           amount: String(-payout),
           status: 'settled',
-          description: `Yechib olish so\'rovi: ${payout.toLocaleString()} so'm`,
+          description: `Yechib olish so'rovi: ${payout.toLocaleString()} so'm`,
         }),
       );
 

@@ -8,7 +8,6 @@ import {
   HttpStatus,
   NotFoundException,
   Param,
-  ParseFloatPipe,
   ParseUUIDPipe,
   Patch,
   Post,

@@ -174,7 +174,7 @@ export function latinToCyrillic(text: string): string {
   let res = text;
 
   // 1. So'z boshidagi 'E' / 'e' larni 'Э' / 'э' ga o'girish
-  res = res.replace(/(^|\s|[.,!?;:«"(\[])[Ee]/g, (match, prefix) => {
+  res = res.replace(/(^|\s|[.,!?;:«"(]|\[)[Ee]/g, (match, prefix) => {
     const char = match.slice(prefix.length);
     return prefix + (char === 'E' ? 'Э' : 'э');
   });
@@ -209,7 +209,7 @@ export function cyrillicToLatin(text: string): string {
     // So'z boshidagi 'Е' / 'е' -> 'Ye' / 'ye'
     if (
       (char === 'е' || char === 'Е') &&
-      (i === 0 || /\s|[.,!?;:«"(\[]/.test(text[i - 1]))
+      (i === 0 || /\s|[.,!?;:«"(]|\[/.test(text[i - 1]))
     ) {
       out += char === 'Е' ? 'Ye' : 'ye';
     } else if (CYRILLIC_TO_LATIN_MAP[char] !== undefined) {

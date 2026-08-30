@@ -3,7 +3,6 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
 
-import type { EnvironmentVariables } from '../config/configuration';
 import { RedisService } from '../redis/redis.service';
 import { RiskService } from '../risk/risk.service';
 import { SmsService } from '../sms/sms.service';

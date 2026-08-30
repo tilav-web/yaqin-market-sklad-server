@@ -24,7 +24,7 @@ import {
   haversineKm,
   pointInPolygon,
 } from '../geo/geo.util';
-import { LocationEvidenceDto, buildEvidence } from '../geo/location-evidence';
+import { buildEvidence } from '../geo/location-evidence';
 import { RiskService } from '../risk/risk.service';
 import { SETTING_KEYS } from '../settings/entities/global-setting.entity';
 import { SettingsService } from '../settings/settings.service';
@@ -34,7 +34,6 @@ import {
   formatRolesDisplayName,
   normalizeToStaffRole,
   PRESET_PERMISSIONS,
-  ROLE_PERMISSIONS,
   ShopStaff,
   StaffPermission,
   StaffPreset,
@@ -540,9 +539,15 @@ export class ShopsService {
           permissions: dto.permissions,
         }),
       );
-    } catch (e: any) {
-      if (e?.code === '23505')
+    } catch (e: unknown) {
+      if (
+        typeof e === 'object' &&
+        e !== null &&
+        'code' in e &&
+        (e as { code: string }).code === '23505'
+      ) {
         throw new ConflictException('Shu nomli shablon allaqachon mavjud');
+      }
       throw e;
     }
   }
@@ -562,9 +567,15 @@ export class ShopsService {
     if (dto.permissions !== undefined) preset.permissions = dto.permissions;
     try {
       return await this.staffPresets.save(preset);
-    } catch (e: any) {
-      if (e?.code === '23505')
+    } catch (e: unknown) {
+      if (
+        typeof e === 'object' &&
+        e !== null &&
+        'code' in e &&
+        (e as { code: string }).code === '23505'
+      ) {
         throw new ConflictException('Shu nomli shablon allaqachon mavjud');
+      }
       throw e;
     }
   }
@@ -820,7 +831,7 @@ export class ShopsService {
       freeDeliveryPolygon?: GeoJsonPolygon | null;
     },
   ): Promise<Shop> {
-    const shop = await this.getOwned(userId, shopId);
+    await this.getOwned(userId, shopId);
 
     if (dto.freeDeliveryPolygon && dto.deliveryPolygon) {
       const ring = dto.freeDeliveryPolygon.coordinates[0];
