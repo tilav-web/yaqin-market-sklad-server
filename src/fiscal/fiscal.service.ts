@@ -102,7 +102,9 @@ export class FiscalService {
         ? this.settings.getNumber(SETTING_KEYS.VAT_RATE_PERCENT, 12)
         : 0;
       const platformStir = this.settings.get(SETTING_KEYS.PLATFORM_STIR);
-      const platformLegalName = this.settings.get(SETTING_KEYS.PLATFORM_LEGAL_NAME);
+      const platformLegalName = this.settings.get(
+        SETTING_KEYS.PLATFORM_LEGAL_NAME,
+      );
       const missing: string[] = [];
       if (!profile?.stir) missing.push('seller:stir');
       if (profile && profile.komissionerStatus !== 'confirmed')
@@ -153,7 +155,10 @@ export class FiscalService {
       // summaga teng bo'lishi shart). MXIK: tasnif "Kuryerlik xizmati",
       // sozlamadan olinadi (delivery_mxik_code).
       if (order.deliveryFee > 0) {
-        const deliveryMxik = this.settings.get(SETTING_KEYS.DELIVERY_MXIK_CODE, '');
+        const deliveryMxik = this.settings.get(
+          SETTING_KEYS.DELIVERY_MXIK_CODE,
+          '',
+        );
         if (!deliveryMxik) missing.push('delivery:mxik');
         lines.push({
           orderItemId: 'delivery',
@@ -454,7 +459,9 @@ export class FiscalService {
   }
 
   async getGlobalProduct(globalProductId: string): Promise<GlobalProduct> {
-    const product = await this.globalProducts.findOne({ where: { id: globalProductId } });
+    const product = await this.globalProducts.findOne({
+      where: { id: globalProductId },
+    });
     if (!product) throw new NotFoundException('Mahsulot topilmadi');
     return product;
   }
@@ -465,9 +472,16 @@ export class FiscalService {
    */
   async applyTasnifSuggestion(
     globalProductId: string,
-    dto: { mxikCode: string; name: string; unitCode?: string | null; markingRequired?: boolean },
+    dto: {
+      mxikCode: string;
+      name: string;
+      unitCode?: string | null;
+      markingRequired?: boolean;
+    },
   ): Promise<GlobalProduct> {
-    let tax = await this.taxCategories.findOne({ where: { mxikCode: dto.mxikCode } });
+    let tax = await this.taxCategories.findOne({
+      where: { mxikCode: dto.mxikCode },
+    });
     if (!tax) {
       tax = await this.taxCategories.save(
         this.taxCategories.create({
@@ -505,7 +519,14 @@ export class FiscalService {
   }
 
   async createTaxCategory(dto: any): Promise<TaxCategory> {
-    const title = toLocalizedText(dto.titleI18n || { uz: dto.titleUzLatn, kr: dto.titleUzCyrl, ru: dto.titleRu } || dto.title);
+    const title = toLocalizedText(
+      dto.titleI18n || {
+          uz: dto.titleUzLatn,
+          kr: dto.titleUzCyrl,
+          ru: dto.titleRu,
+        } ||
+        dto.title,
+    );
     const cat = this.taxCategories.create({
       mxikCode: dto.mxikCode,
       packageCode: dto.packageCode ?? null,
@@ -516,14 +537,20 @@ export class FiscalService {
     return this.taxCategories.save(cat);
   }
 
-  async updateTaxCategory(
-    id: string,
-    dto: any,
-  ): Promise<TaxCategory> {
+  async updateTaxCategory(id: string, dto: any): Promise<TaxCategory> {
     const tax = await this.taxCategories.findOne({ where: { id } });
     if (!tax) throw new NotFoundException('Soliq toifasi topilmadi');
-    if (dto.title !== undefined || dto.titleUzLatn !== undefined || dto.titleUzCyrl !== undefined || dto.titleRu !== undefined || dto.titleI18n !== undefined) {
-      const cur = typeof tax.title === 'object' ? tax.title : { uz: tax.title || '', kr: '', ru: '' };
+    if (
+      dto.title !== undefined ||
+      dto.titleUzLatn !== undefined ||
+      dto.titleUzCyrl !== undefined ||
+      dto.titleRu !== undefined ||
+      dto.titleI18n !== undefined
+    ) {
+      const cur =
+        typeof tax.title === 'object'
+          ? tax.title
+          : { uz: tax.title || '', kr: '', ru: '' };
       tax.title = toLocalizedText(
         dto.titleI18n || {
           uz: dto.titleUzLatn ?? dto.title ?? cur?.uz,
@@ -535,7 +562,8 @@ export class FiscalService {
     if (dto.mxikCode !== undefined) tax.mxikCode = dto.mxikCode;
     if (dto.packageCode !== undefined) tax.packageCode = dto.packageCode;
     if (dto.unitCode !== undefined) tax.unitCode = dto.unitCode;
-    if (dto.markingRequired !== undefined) tax.markingRequired = dto.markingRequired;
+    if (dto.markingRequired !== undefined)
+      tax.markingRequired = dto.markingRequired;
     return this.taxCategories.save(tax);
   }
 }

@@ -126,10 +126,16 @@ export class FiscalController {
 
   /** Mahsulot uchun taklif: barcode bo'yicha aniq, bo'lmasa nomi bo'yicha. */
   @Get('products/:globalProductId/tasnif-suggest')
-  async tasnifSuggest(@Param('globalProductId', ParseUUIDPipe) globalProductId: string) {
+  async tasnifSuggest(
+    @Param('globalProductId', ParseUUIDPipe) globalProductId: string,
+  ) {
     const product = await this.fiscal.getGlobalProduct(globalProductId);
-    const nameStr = typeof product.name === 'object' ? product.name?.uz || '' : product.name;
-    return this.tasnif.suggestForProduct({ barcode: product.barcode, name: nameStr });
+    const nameStr =
+      typeof product.name === 'object' ? product.name?.uz || '' : product.name;
+    return this.tasnif.suggestForProduct({
+      barcode: product.barcode,
+      name: nameStr,
+    });
   }
 
   /** Taklifni bir bosishda qo'llash: toifa (topilsa mavjudi) + biriktirish. */

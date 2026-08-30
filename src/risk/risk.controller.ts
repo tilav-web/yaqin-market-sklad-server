@@ -1,4 +1,14 @@
-import { BadRequestException, Body, Controller, Get, NotFoundException, Param, ParseUUIDPipe, Patch, Query } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  NotFoundException,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Query,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 import { AuditLogService } from '../audit-log/audit-log.service';
@@ -37,7 +47,10 @@ export class AdminRiskController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: ReviewRiskFlagDto,
   ) {
-    const status = dto.status === 'confirmed' ? RiskFlagStatus.Confirmed : RiskFlagStatus.Dismissed;
+    const status =
+      dto.status === 'confirmed'
+        ? RiskFlagStatus.Confirmed
+        : RiskFlagStatus.Dismissed;
     const flag = await this.risk.review(id, status, admin.sub, dto.note);
     if (!flag) throw new NotFoundException('Signal topilmadi');
     void this.auditLog.record({

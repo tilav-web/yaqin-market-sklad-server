@@ -25,7 +25,10 @@ export class Category {
   @Column({ type: 'varchar', length: 128 })
   slug!: string;
 
-  @Column({ type: 'jsonb', default: () => "'{\"uz\":\"\",\"kr\":\"\",\"ru\":\"\"}'::jsonb" })
+  @Column({
+    type: 'jsonb',
+    default: () => '\'{"uz":"","kr":"","ru":""}\'::jsonb',
+  })
   name!: LocalizedText;
 
   @Column({ type: 'varchar', length: 128, default: '' })

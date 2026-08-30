@@ -6,9 +6,13 @@
  * ClickPaymentTransaction.errorCode/errorNote for the history).
  */
 const CLICK_ERROR_MESSAGES: Record<number, string> = {
-  [-125]: "To'lov tizimi hozircha ushbu do'kon uchun faol emas, administratorga murojaat qiling",
+  [-125]:
+    "To'lov tizimi hozircha ushbu do'kon uchun faol emas, administratorga murojaat qiling",
 };
 
-export function mapClickErrorMessage(errorCode: number, errorNote: string): string {
+export function mapClickErrorMessage(
+  errorCode: number,
+  errorNote: string,
+): string {
   return CLICK_ERROR_MESSAGES[errorCode] ?? errorNote ?? 'Click xatosi';
 }

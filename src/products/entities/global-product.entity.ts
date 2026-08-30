@@ -38,7 +38,10 @@ export class GlobalProduct {
   @Column({ type: 'varchar', length: 64, nullable: true })
   barcode!: string | null;
 
-  @Column({ type: 'jsonb', default: () => "'{\"uz\":\"\",\"kr\":\"\",\"ru\":\"\"}'::jsonb" })
+  @Column({
+    type: 'jsonb',
+    default: () => '\'{"uz":"","kr":"","ru":""}\'::jsonb',
+  })
   name!: LocalizedText;
 
   @Column({ type: 'varchar', length: 128, nullable: true })

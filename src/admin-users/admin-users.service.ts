@@ -12,7 +12,10 @@ import { Repository } from 'typeorm';
 import { AdminRole, AdminUser } from './entities/admin-user.entity';
 import { CreateAdminUserDto } from './dto/create-admin-user.dto';
 import { ListAdminUsersQueryDto } from './dto/list-admin-users.dto';
-import { ResetAdminPasswordDto, UpdateAdminUserDto } from './dto/update-admin-user.dto';
+import {
+  ResetAdminPasswordDto,
+  UpdateAdminUserDto,
+} from './dto/update-admin-user.dto';
 
 @Injectable()
 export class AdminUsersService implements OnApplicationBootstrap {
@@ -33,8 +36,11 @@ export class AdminUsersService implements OnApplicationBootstrap {
    */
   async ensureRootSuperAdmin(): Promise<void> {
     try {
-      const rootUsername = (process.env.DEFAULT_ADMIN_USERNAME || 'superadmin').toLowerCase().trim();
-      const defaultPassword = process.env.DEFAULT_ADMIN_PASSWORD || 'YaqinAdmin2026!';
+      const rootUsername = (process.env.DEFAULT_ADMIN_USERNAME || 'superadmin')
+        .toLowerCase()
+        .trim();
+      const defaultPassword =
+        process.env.DEFAULT_ADMIN_PASSWORD || 'YaqinAdmin2026!';
       const defaultPhone = process.env.DEFAULT_ADMIN_PHONE || '+998900000000';
 
       const existing = await this.repo.findOne({
@@ -56,29 +62,42 @@ export class AdminUsersService implements OnApplicationBootstrap {
           isProtected: true,
         });
         await this.repo.save(rootAdmin);
-        this.logger.log(`✅ Root SuperAdmin yaratildi: username='${rootUsername}'`);
+        this.logger.log(
+          `✅ Root SuperAdmin yaratildi: username='${rootUsername}'`,
+        );
       } else if (!existing.isProtected) {
         existing.isProtected = true;
         await this.repo.save(existing);
       }
     } catch (e) {
-      this.logger.warn(`Root SuperAdmin tekshirishda xatolik (ehtimol DB migratsiyasi bajarilmoqda): ${e}`);
+      this.logger.warn(
+        `Root SuperAdmin tekshirishda xatolik (ehtimol DB migratsiyasi bajarilmoqda): ${e}`,
+      );
     }
   }
 
-  async create(dto: CreateAdminUserDto, createdByAdminId?: string): Promise<AdminUser> {
+  async create(
+    dto: CreateAdminUserDto,
+    createdByAdminId?: string,
+  ): Promise<AdminUser> {
     const existingUsername = await this.repo.findOne({
       where: { username: dto.username.toLowerCase().trim() },
     });
     if (existingUsername) {
-      throw new ConflictException(`'${dto.username}' nomli username allaqachon mavjud`);
+      throw new ConflictException(
+        `'${dto.username}' nomli username allaqachon mavjud`,
+      );
     }
 
     if (dto.phone) {
       const formattedPhone = this.normalizePhone(dto.phone);
-      const existingPhone = await this.repo.findOne({ where: { phone: formattedPhone } });
+      const existingPhone = await this.repo.findOne({
+        where: { phone: formattedPhone },
+      });
       if (existingPhone) {
-        throw new ConflictException(`'${dto.phone}' telefon raqami boshqa xodimga biriktirilgan`);
+        throw new ConflictException(
+          `'${dto.phone}' telefon raqami boshqa xodimga biriktirilgan`,
+        );
       }
       dto.phone = formattedPhone;
     }
@@ -168,19 +187,27 @@ export class AdminUsersService implements OnApplicationBootstrap {
 
     if (admin.isProtected) {
       if (dto.role !== undefined && dto.role !== AdminRole.SuperAdmin) {
-        throw new BadRequestException("Asosiy (Root) SuperAdmin rolini o'zgartirib bo'lmaydi");
+        throw new BadRequestException(
+          "Asosiy (Root) SuperAdmin rolini o'zgartirib bo'lmaydi",
+        );
       }
       if (dto.isActive === false) {
-        throw new BadRequestException("Asosiy (Root) SuperAdminni nofaol qilib bo'lmaydi");
+        throw new BadRequestException(
+          "Asosiy (Root) SuperAdminni nofaol qilib bo'lmaydi",
+        );
       }
     }
 
     if (dto.phone !== undefined) {
       if (dto.phone) {
         const formatted = this.normalizePhone(dto.phone);
-        const existing = await this.repo.findOne({ where: { phone: formatted } });
+        const existing = await this.repo.findOne({
+          where: { phone: formatted },
+        });
         if (existing && existing.id !== id) {
-          throw new ConflictException(`'${dto.phone}' telefon raqami boshqa xodimga biriktirilgan`);
+          throw new ConflictException(
+            `'${dto.phone}' telefon raqami boshqa xodimga biriktirilgan`,
+          );
         }
         admin.phone = formatted;
       } else {
@@ -189,14 +216,21 @@ export class AdminUsersService implements OnApplicationBootstrap {
     }
 
     if (dto.username !== undefined) {
-      const cleanUsername = dto.username.toLowerCase().trim().replace(/\s+/g, '');
+      const cleanUsername = dto.username
+        .toLowerCase()
+        .trim()
+        .replace(/\s+/g, '');
       if (!cleanUsername) {
         throw new BadRequestException("Username bo'sh bo'lishi mumkin emas");
       }
       if (cleanUsername !== admin.username) {
-        const existing = await this.repo.findOne({ where: { username: cleanUsername } });
+        const existing = await this.repo.findOne({
+          where: { username: cleanUsername },
+        });
         if (existing && existing.id !== id) {
-          throw new ConflictException(`'${cleanUsername}' nomli username allaqachon mavjud`);
+          throw new ConflictException(
+            `'${cleanUsername}' nomli username allaqachon mavjud`,
+          );
         }
         admin.username = cleanUsername;
       }
@@ -207,20 +241,29 @@ export class AdminUsersService implements OnApplicationBootstrap {
     if (dto.email !== undefined) admin.email = dto.email?.trim() || null;
     if (dto.role !== undefined) admin.role = dto.role;
     if (dto.permissions !== undefined) admin.permissions = dto.permissions;
-    if (dto.isActive !== undefined && !admin.isProtected) admin.isActive = dto.isActive;
+    if (dto.isActive !== undefined && !admin.isProtected)
+      admin.isActive = dto.isActive;
 
     return this.repo.save(admin);
   }
 
-  async setStatus(id: string, isActive: boolean, currentAdminId: string): Promise<AdminUser> {
+  async setStatus(
+    id: string,
+    isActive: boolean,
+    currentAdminId: string,
+  ): Promise<AdminUser> {
     const admin = await this.findById(id);
 
     if (admin.isProtected && !isActive) {
-      throw new BadRequestException("Asosiy (Root) SuperAdminni nofaol qilib bo'lmaydi");
+      throw new BadRequestException(
+        "Asosiy (Root) SuperAdminni nofaol qilib bo'lmaydi",
+      );
     }
 
     if (id === currentAdminId && !isActive) {
-      throw new BadRequestException("O'zingizning hisobingizni nofaol qila olmaysiz");
+      throw new BadRequestException(
+        "O'zingizning hisobingizni nofaol qila olmaysiz",
+      );
     }
 
     admin.isActive = isActive;

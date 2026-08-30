@@ -9,10 +9,16 @@ import { Category } from '../../categories/entities/category.entity';
 import { Order, OrderStatus } from '../../orders/entities/order.entity';
 import { RedisService } from '../../redis/redis.service';
 import { Shop } from '../../shops/entities/shop.entity';
-import { ShopStaff, StaffPermission } from '../../shops/entities/shop-staff.entity';
+import {
+  ShopStaff,
+  StaffPermission,
+} from '../../shops/entities/shop-staff.entity';
 import { assertShopPermission } from '../../shops/shop-access.util';
 import { GlobalProduct, UnitType } from '../entities/global-product.entity';
-import { InventoryMovement, MovementType } from '../entities/inventory-movement.entity';
+import {
+  InventoryMovement,
+  MovementType,
+} from '../entities/inventory-movement.entity';
 import { ProductVariant } from '../entities/product-variant.entity';
 import { ProductsService } from '../products.service';
 import type { ImportRowDto } from './dto/excel.dto';
@@ -20,7 +26,8 @@ import type { ImportRowDto } from './dto/excel.dto';
 /** How long a confirmImport result is cached under its content fingerprint (see confirmImport). */
 const IMPORT_IDEMPOTENCY_TTL_SEC = 5 * 60;
 
-const XLSX_CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+const XLSX_CONTENT_TYPE =
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
 const STATUS_LABEL: Record<OrderStatus, string> = {
   [OrderStatus.New]: 'Yangi',
@@ -37,10 +44,10 @@ const MOVEMENT_LABEL: Record<MovementType, string> = {
   [MovementType.In]: 'Kirim',
   [MovementType.Sold]: 'Sotuv',
   [MovementType.Returned]: 'Qaytarish',
-  [MovementType.Expired]: 'Brak (muddati o\'tgan)',
+  [MovementType.Expired]: "Brak (muddati o'tgan)",
   [MovementType.Adjusted]: "Qo'lda tuzatish",
   [MovementType.Damaged]: 'Brak (shikastlangan/boshqa)',
-  [MovementType.PriceChanged]: 'Narx o\'zgartirildi',
+  [MovementType.PriceChanged]: "Narx o'zgartirildi",
 };
 
 const UNIT_LABEL_TO_TYPE: Record<string, UnitType> = {
@@ -111,8 +118,18 @@ export class ExcelService {
     private readonly redis: RedisService,
   ) {}
 
-  private ensureAccess(userId: string, shopId: string, permission: StaffPermission) {
-    return assertShopPermission(this.shops, this.staff, userId, shopId, permission);
+  private ensureAccess(
+    userId: string,
+    shopId: string,
+    permission: StaffPermission,
+  ) {
+    return assertShopPermission(
+      this.shops,
+      this.staff,
+      userId,
+      shopId,
+      permission,
+    );
   }
 
   // ─── Export ─────────────────────────────────────────────────────────────
@@ -129,14 +146,27 @@ export class ExcelService {
       .innerJoinAndSelect('v.globalProduct', 'gp')
       .where('v.shopId = :shopId', { shopId })
       .andWhere('v.isActive = true');
-    if (filters.categoryId) qb.andWhere('gp.categoryId = :categoryId', { categoryId: filters.categoryId });
+    if (filters.categoryId)
+      qb.andWhere('gp.categoryId = :categoryId', {
+        categoryId: filters.categoryId,
+      });
     if (filters.stockStatus === 'zero') qb.andWhere('v.stock = 0');
-    else if (filters.stockStatus === 'low') qb.andWhere('v.stock > 0 AND v.stock <= v."lowStockThreshold"');
-    else if (filters.stockStatus === 'ok') qb.andWhere('v.stock > v."lowStockThreshold"');
+    else if (filters.stockStatus === 'low')
+      qb.andWhere('v.stock > 0 AND v.stock <= v."lowStockThreshold"');
+    else if (filters.stockStatus === 'ok')
+      qb.andWhere('v.stock > v."lowStockThreshold"');
     const rows = await qb.orderBy('gp.name', 'ASC').getMany();
 
-    const categoryIds = [...new Set(rows.map((v) => v.globalProduct?.categoryId).filter((v): v is string => !!v))];
-    const categories = categoryIds.length ? await this.categories.findBy({ id: In(categoryIds) }) : [];
+    const categoryIds = [
+      ...new Set(
+        rows
+          .map((v) => v.globalProduct?.categoryId)
+          .filter((v): v is string => !!v),
+      ),
+    ];
+    const categories = categoryIds.length
+      ? await this.categories.findBy({ id: In(categoryIds) })
+      : [];
     const categoryName = new Map(categories.map((c) => [c.id, c.nameUzLatn]));
 
     const wb = new Workbook();
@@ -157,7 +187,9 @@ export class ExcelService {
         price: v.price,
         discountPrice: v.discountPrice ?? '',
         stock: v.stock,
-        category: v.globalProduct?.categoryId ? (categoryName.get(v.globalProduct.categoryId) ?? '') : '',
+        category: v.globalProduct?.categoryId
+          ? (categoryName.get(v.globalProduct.categoryId) ?? '')
+          : '',
         updatedAt: formatDateTime(v.updatedAt),
       });
     }
@@ -165,7 +197,12 @@ export class ExcelService {
     return toBuffer(wb);
   }
 
-  async exportOrders(userId: string, shopId: string, from: string, to: string): Promise<Buffer> {
+  async exportOrders(
+    userId: string,
+    shopId: string,
+    from: string,
+    to: string,
+  ): Promise<Buffer> {
     await this.ensureAccess(userId, shopId, 'orders.view_all');
     const { fromDate, toDate } = parseRange(from, to);
 
@@ -199,7 +236,12 @@ export class ExcelService {
     return toBuffer(wb);
   }
 
-  async exportMovements(userId: string, shopId: string, from: string, to: string): Promise<Buffer> {
+  async exportMovements(
+    userId: string,
+    shopId: string,
+    from: string,
+    to: string,
+  ): Promise<Buffer> {
     await this.ensureAccess(userId, shopId, 'inventory.movement.view');
     const { fromDate, toDate } = parseRange(from, to);
 
@@ -208,7 +250,10 @@ export class ExcelService {
       .innerJoinAndSelect('m.productVariant', 'v')
       .innerJoinAndSelect('v.globalProduct', 'gp')
       .where('v.shopId = :shopId', { shopId })
-      .andWhere('m.createdAt BETWEEN :from AND :to', { from: fromDate, to: toDate })
+      .andWhere('m.createdAt BETWEEN :from AND :to', {
+        from: fromDate,
+        to: toDate,
+      })
       .orderBy('m.createdAt', 'ASC')
       .getMany();
 
@@ -259,7 +304,11 @@ export class ExcelService {
       { header: 'qoldiq', key: 'qoldiq', width: 10 },
       { header: 'olchov_birligi', key: 'olchov_birligi', width: 14 },
       { header: 'olchov_hajmi', key: 'olchov_hajmi', width: 14 },
-      { header: 'ogohlantirish_chegarasi', key: 'ogohlantirish_chegarasi', width: 22 },
+      {
+        header: 'ogohlantirish_chegarasi',
+        key: 'ogohlantirish_chegarasi',
+        width: 22,
+      },
       { header: 'kritik_chegara', key: 'kritik_chegara', width: 16 },
       { header: 'yaroqlilik_muddati', key: 'yaroqlilik_muddati', width: 18 },
     ];
@@ -271,7 +320,11 @@ export class ExcelService {
 
   private static readonly REQUIRED_COLUMNS = ['nom', 'narx', 'qoldiq'];
 
-  async previewImport(userId: string, shopId: string, buffer: Buffer): Promise<ImportPreviewResult> {
+  async previewImport(
+    userId: string,
+    shopId: string,
+    buffer: Buffer,
+  ): Promise<ImportPreviewResult> {
     await this.ensureAccess(userId, shopId, 'inventory.product.create');
 
     const wb = new Workbook();
@@ -280,9 +333,13 @@ export class ExcelService {
       // (built against @types/node ^14), which structurally conflicts with
       // the real Node Buffer type from this project's newer @types/node —
       // a known exceljs/typings incompatibility. Cast at this one boundary.
-      await wb.xlsx.load(buffer as unknown as Parameters<typeof wb.xlsx.load>[0]);
+      await wb.xlsx.load(
+        buffer as unknown as Parameters<typeof wb.xlsx.load>[0],
+      );
     } catch {
-      throw new BadRequestException('Excel fayl o\'qib bo\'lmadi — .xlsx formatida ekanini tekshiring');
+      throw new BadRequestException(
+        "Excel fayl o'qib bo'lmadi — .xlsx formatida ekanini tekshiring",
+      );
     }
     const ws = wb.worksheets[0];
     if (!ws) throw new BadRequestException('Excel faylda varaq topilmadi');
@@ -310,7 +367,9 @@ export class ExcelService {
     };
 
     // Preload lookup tables once instead of per-row queries.
-    const categories = await this.categories.find({ select: { id: true, slug: true } });
+    const categories = await this.categories.find({
+      select: { id: true, slug: true },
+    });
     const categoryBySlug = new Map(categories.map((c) => [c.slug, c.id]));
 
     const errors: ImportError[] = [];
@@ -333,13 +392,19 @@ export class ExcelService {
 
       const price = Number(priceRaw);
       if (isBlank(priceRaw) || !Number.isFinite(price) || price < 0) {
-        errors.push({ row: r, message: '"narx" 0 yoki musbat son bo\'lishi kerak' });
+        errors.push({
+          row: r,
+          message: '"narx" 0 yoki musbat son bo\'lishi kerak',
+        });
         hasError = true;
       }
 
       const stock = Number(stockRaw);
       if (isBlank(stockRaw) || !Number.isFinite(stock) || stock < 0) {
-        errors.push({ row: r, message: '"qoldiq" manfiy bo\'lmagan son bo\'lishi kerak' });
+        errors.push({
+          row: r,
+          message: '"qoldiq" manfiy bo\'lmagan son bo\'lishi kerak',
+        });
         hasError = true;
       }
 
@@ -350,7 +415,10 @@ export class ExcelService {
       if (!isBlank(discountRaw)) {
         discountPrice = Number(discountRaw);
         if (!Number.isFinite(discountPrice) || discountPrice < 0) {
-          errors.push({ row: r, message: '"chegirma_narxi" son bo\'lishi kerak' });
+          errors.push({
+            row: r,
+            message: '"chegirma_narxi" son bo\'lishi kerak',
+          });
           hasError = true;
         }
       }
@@ -361,7 +429,9 @@ export class ExcelService {
         const key = String(unitRaw).trim().toLowerCase();
         unitType = UNIT_LABEL_TO_TYPE[key];
         if (!unitType) {
-          warnings.push(`Noma'lum o'lchov birligi "${String(unitRaw)}" — "dona" qo'llanildi`);
+          warnings.push(
+            `Noma'lum o'lchov birligi "${String(unitRaw)}" — "dona" qo'llanildi`,
+          );
           unitType = 'piece';
         }
       }
@@ -370,19 +440,29 @@ export class ExcelService {
       const unitSize = !isBlank(unitSizeRaw) ? Number(unitSizeRaw) : undefined;
 
       const warnThresholdRaw = cell(r, 'ogohlantirish_chegarasi');
-      const lowStockThreshold = !isBlank(warnThresholdRaw) ? Number(warnThresholdRaw) : undefined;
+      const lowStockThreshold = !isBlank(warnThresholdRaw)
+        ? Number(warnThresholdRaw)
+        : undefined;
 
       const critThresholdRaw = cell(r, 'kritik_chegara');
-      const criticalThreshold = !isBlank(critThresholdRaw) ? Number(critThresholdRaw) : undefined;
+      const criticalThreshold = !isBlank(critThresholdRaw)
+        ? Number(critThresholdRaw)
+        : undefined;
 
       const expiryRaw = cell(r, 'yaroqlilik_muddati');
-      const expiryDate = !isBlank(expiryRaw) ? normalizeDate(expiryRaw) : undefined;
+      const expiryDate = !isBlank(expiryRaw)
+        ? normalizeDate(expiryRaw)
+        : undefined;
 
       const barcodeRaw = cell(r, 'barcode');
-      const barcode = !isBlank(barcodeRaw) ? String(barcodeRaw).trim() : undefined;
+      const barcode = !isBlank(barcodeRaw)
+        ? String(barcodeRaw).trim()
+        : undefined;
       let globalProductId: string | undefined;
       if (barcode) {
-        const existing = await this.globalProducts.findOne({ where: { barcode } });
+        const existing = await this.globalProducts.findOne({
+          where: { barcode },
+        });
         if (existing) globalProductId = existing.id;
       }
 
@@ -435,10 +515,13 @@ export class ExcelService {
     // would silently create every one of them twice. Cache the result under
     // a fingerprint of the exact row content so a retry within a few
     // minutes replays the same outcome instead of re-importing.
-    const fingerprint = createHash('sha256').update(JSON.stringify(rows)).digest('hex');
+    const fingerprint = createHash('sha256')
+      .update(JSON.stringify(rows))
+      .digest('hex');
     const idempotencyKey = `excel-import:${shopId}:${fingerprint}`;
     const cached = await this.redis.client.get(idempotencyKey);
-    if (cached) return JSON.parse(cached) as { created: number; failed: ImportError[] };
+    if (cached)
+      return JSON.parse(cached) as { created: number; failed: ImportError[] };
 
     let created = 0;
     const failed: ImportError[] = [];
@@ -471,11 +554,18 @@ export class ExcelService {
         }
         created++;
       } catch (e) {
-        failed.push({ row: row.rowNumber, message: e instanceof Error ? e.message : 'Xatolik yuz berdi' });
+        failed.push({
+          row: row.rowNumber,
+          message: e instanceof Error ? e.message : 'Xatolik yuz berdi',
+        });
       }
     }
     const result = { created, failed };
-    await this.redis.client.setex(idempotencyKey, IMPORT_IDEMPOTENCY_TTL_SEC, JSON.stringify(result));
+    await this.redis.client.setex(
+      idempotencyKey,
+      IMPORT_IDEMPOTENCY_TTL_SEC,
+      JSON.stringify(result),
+    );
     return result;
   }
 }
@@ -495,13 +585,16 @@ function normalizeDate(value: unknown): string {
   return String(value).trim();
 }
 
-function parseRange(from: string, to: string): { fromDate: Date; toDate: Date } {
+function parseRange(
+  from: string,
+  to: string,
+): { fromDate: Date; toDate: Date } {
   const fromDate = new Date(from);
   const toDate = new Date(to);
   // Make `to` inclusive of the whole day when given a bare date (no time part).
   if (/^\d{4}-\d{2}-\d{2}$/.test(to)) toDate.setHours(23, 59, 59, 999);
   if (Number.isNaN(fromDate.getTime()) || Number.isNaN(toDate.getTime())) {
-    throw new BadRequestException('Sana oralig\'i noto\'g\'ri');
+    throw new BadRequestException("Sana oralig'i noto'g'ri");
   }
   return { fromDate, toDate };
 }

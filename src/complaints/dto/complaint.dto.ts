@@ -1,6 +1,15 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsEnum, IsInt, IsOptional, IsString, IsUUID, Max, MaxLength, Min } from 'class-validator';
+import {
+  IsEnum,
+  IsInt,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Max,
+  MaxLength,
+  Min,
+} from 'class-validator';
 
 import { ComplaintStatus } from '../entities/order-complaint.entity';
 
@@ -18,7 +27,7 @@ export class CreateComplaintDto {
 }
 
 export class ResolveComplaintDto {
-  @ApiProperty({ example: 'Xaridorga to\'liq qaytarish amalga oshirildi' })
+  @ApiProperty({ example: "Xaridorga to'liq qaytarish amalga oshirildi" })
   @IsString()
   @MaxLength(2000)
   resolution!: string;

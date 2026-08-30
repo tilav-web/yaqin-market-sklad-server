@@ -43,10 +43,15 @@ import { UsersModule } from './users/users.module';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true, cache: true, validate: validateEnv }),
+    ConfigModule.forRoot({
+      isGlobal: true,
+      cache: true,
+      validate: validateEnv,
+    }),
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
-      useFactory: (config: ConfigService<EnvironmentVariables, true>) => buildTypeOrmOptions(config),
+      useFactory: (config: ConfigService<EnvironmentVariables, true>) =>
+        buildTypeOrmOptions(config),
     }),
     ThrottlerModule.forRoot({
       throttlers: [{ ttl: 60_000, limit: 60 }],

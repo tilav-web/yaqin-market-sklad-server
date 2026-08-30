@@ -8,7 +8,12 @@ import { Order } from '../orders/entities/order.entity';
 import { SETTING_KEYS } from '../settings/entities/global-setting.entity';
 import { SettingsService } from '../settings/settings.service';
 import { DeviceAccount } from './entities/device-account.entity';
-import { RiskFlagStatus, RiskRule, RiskSeverity, RiskSubjectType } from './entities/risk-flag.entity';
+import {
+  RiskFlagStatus,
+  RiskRule,
+  RiskSeverity,
+  RiskSubjectType,
+} from './entities/risk-flag.entity';
 import { RiskFlagsService } from './risk-flags.service';
 import { RiskHandshakeService } from './risk-handshake.service';
 import { RiskPingService } from './risk-ping.service';
@@ -25,12 +30,16 @@ export class RiskService {
     private readonly ping: RiskPingService,
     private readonly handshake: RiskHandshakeService,
     private readonly settings: SettingsService,
-    @InjectRepository(DeviceAccount) private readonly deviceAccounts: Repository<DeviceAccount>,
+    @InjectRepository(DeviceAccount)
+    private readonly deviceAccounts: Repository<DeviceAccount>,
     @InjectRepository(Order) private readonly orders: Repository<Order>,
   ) {}
 
   private accuracyOk(evidence: LocationEvidence): boolean {
-    const limit = this.settings.getNumber(SETTING_KEYS.RISK_EVIDENCE_MAX_ACCURACY_M, 150);
+    const limit = this.settings.getNumber(
+      SETTING_KEYS.RISK_EVIDENCE_MAX_ACCURACY_M,
+      150,
+    );
     return evidence.accuracy == null || evidence.accuracy <= limit;
   }
 
@@ -39,7 +48,10 @@ export class RiskService {
     return evidence.source !== 'last_known' && this.accuracyOk(evidence);
   }
 
-  private async raiseMockedIfNeeded(evidence: LocationEvidence, orderId: string): Promise<void> {
+  private async raiseMockedIfNeeded(
+    evidence: LocationEvidence,
+    orderId: string,
+  ): Promise<void> {
     if (!evidence.mocked) return;
     await this.flags.raise({
       rule: RiskRule.MockedLocation,
@@ -47,8 +59,14 @@ export class RiskService {
       subjectType: RiskSubjectType.User,
       subjectId: evidence.actorUserId,
       orderId,
-      summary: "GPS mock-app orqali soxtalashtirilgan bo'lishi mumkin (Android)",
-      details: { orderId, source: evidence.source, latitude: evidence.latitude, longitude: evidence.longitude },
+      summary:
+        "GPS mock-app orqali soxtalashtirilgan bo'lishi mumkin (Android)",
+      details: {
+        orderId,
+        source: evidence.source,
+        latitude: evidence.latitude,
+        longitude: evidence.longitude,
+      },
       dedupeKey: `${RiskRule.MockedLocation}:${evidence.actorUserId}:${isoWeekKey(new Date())}`,
     });
   }
@@ -76,8 +94,17 @@ export class RiskService {
       await this.raiseMockedIfNeeded(input.evidence, input.orderId);
       if (!this.reliableForDistance(input.evidence)) return;
 
-      const distM = haversineKm(input.evidence.latitude, input.evidence.longitude, input.shop.latitude, input.shop.longitude) * M_PER_KM;
-      const maxM = this.settings.getNumber(SETTING_KEYS.RISK_PICKUP_MAX_DISTANCE_M, 400);
+      const distM =
+        haversineKm(
+          input.evidence.latitude,
+          input.evidence.longitude,
+          input.shop.latitude,
+          input.shop.longitude,
+        ) * M_PER_KM;
+      const maxM = this.settings.getNumber(
+        SETTING_KEYS.RISK_PICKUP_MAX_DISTANCE_M,
+        400,
+      );
       if (distM > maxM) {
         await this.flags.raise({
           rule: RiskRule.PickupFarFromShop,
@@ -91,7 +118,9 @@ export class RiskService {
         });
       }
     } catch (err) {
-      this.logger.error(`onOrderDispatched failed for order ${input.orderId}: ${(err as Error).message}`);
+      this.logger.error(
+        `onOrderDispatched failed for order ${input.orderId}: ${(err as Error).message}`,
+      );
     }
   }
 
@@ -113,7 +142,10 @@ export class RiskService {
               input.deliveryAddress.latitude,
               input.deliveryAddress.longitude,
             ) * M_PER_KM;
-          const maxM = this.settings.getNumber(SETTING_KEYS.RISK_DELIVERED_MAX_DISTANCE_M, 300);
+          const maxM = this.settings.getNumber(
+            SETTING_KEYS.RISK_DELIVERED_MAX_DISTANCE_M,
+            300,
+          );
           if (distM > maxM) {
             await this.flags.raise({
               rule: RiskRule.DeliveredFarFromAddress,
@@ -122,7 +154,11 @@ export class RiskService {
               subjectId: input.evidence.actorUserId,
               orderId: input.orderId,
               summary: `"Yetkazildi" manzildan ~${Math.round(distM)}m uzoqda bosildi`,
-              details: { distanceM: Math.round(distM), maxM, actorRole: input.evidence.actorRole },
+              details: {
+                distanceM: Math.round(distM),
+                maxM,
+                actorRole: input.evidence.actorRole,
+              },
               dedupeKey: `${RiskRule.DeliveredFarFromAddress}:${input.orderId}`,
             });
           }
@@ -139,13 +175,15 @@ export class RiskService {
           subjectType: RiskSubjectType.User,
           subjectId: input.deliveredByUserId,
           orderId: input.orderId,
-          summary: "Kuryer joylashuv dalilisiz \"Yetkazildi\" bosdi",
+          summary: 'Kuryer joylashuv dalilisiz "Yetkazildi" bosdi',
           details: { orderId: input.orderId },
           dedupeKey: `${RiskRule.DeliveredWithoutEvidence}:${input.deliveredByUserId}:${isoWeekKey(new Date())}`,
         });
       }
     } catch (err) {
-      this.logger.error(`onOrderDelivered failed for order ${input.orderId}: ${(err as Error).message}`);
+      this.logger.error(
+        `onOrderDelivered failed for order ${input.orderId}: ${(err as Error).message}`,
+      );
     }
   }
 
@@ -153,7 +191,11 @@ export class RiskService {
 
   /** True if this order already carries a GPS-mismatch flag — used to escalate a complaint/low-rating into `corroborated_false_delivery`. */
   private async hasGpsMismatch(orderId: string): Promise<boolean> {
-    const { total } = await this.flags.list({ orderId, rule: RiskRule.DeliveredFarFromAddress, limit: 1 });
+    const { total } = await this.flags.list({
+      orderId,
+      rule: RiskRule.DeliveredFarFromAddress,
+      limit: 1,
+    });
     return total > 0;
   }
 
@@ -174,7 +216,7 @@ export class RiskService {
         subjectType: RiskSubjectType.User,
         subjectId: input.courierUserId,
         orderId: input.orderId,
-        summary: "Mijoz \"mahsulot yetkazilmadi\" deb shikoyat qildi",
+        summary: 'Mijoz "mahsulot yetkazilmadi" deb shikoyat qildi',
         details: { orderId: input.orderId, reason: input.reason },
         dedupeKey: `${RiskRule.NotReceivedComplaint}:${input.orderId}`,
       });
@@ -186,19 +228,29 @@ export class RiskService {
           subjectType: RiskSubjectType.User,
           subjectId: input.courierUserId,
           orderId: input.orderId,
-          summary: "Shikoyat VA GPS nomuvofiqligi bir buyurtmada — soxta yetkazish ehtimoli yuqori",
+          summary:
+            'Shikoyat VA GPS nomuvofiqligi bir buyurtmada — soxta yetkazish ehtimoli yuqori',
           details: { orderId: input.orderId, source: 'complaint' },
           dedupeKey: `${RiskRule.CorroboratedFalseDelivery}:${input.orderId}`,
         });
       }
     } catch (err) {
-      this.logger.error(`onComplaintFiled failed for order ${input.orderId}: ${(err as Error).message}`);
+      this.logger.error(
+        `onComplaintFiled failed for order ${input.orderId}: ${(err as Error).message}`,
+      );
     }
   }
 
-  async onCourierRated(input: { orderId: string; courierUserId: string; stars: number }): Promise<void> {
+  async onCourierRated(input: {
+    orderId: string;
+    courierUserId: string;
+    stars: number;
+  }): Promise<void> {
     try {
-      const threshold = this.settings.getNumber(SETTING_KEYS.RISK_LOW_RATING_THRESHOLD, 2);
+      const threshold = this.settings.getNumber(
+        SETTING_KEYS.RISK_LOW_RATING_THRESHOLD,
+        2,
+      );
       if (input.stars > threshold) return;
 
       await this.flags.raise({
@@ -219,13 +271,20 @@ export class RiskService {
           subjectType: RiskSubjectType.User,
           subjectId: input.courierUserId,
           orderId: input.orderId,
-          summary: "Past baho VA GPS nomuvofiqligi bir buyurtmada — soxta yetkazish ehtimoli yuqori",
-          details: { orderId: input.orderId, source: 'rating', stars: input.stars },
+          summary:
+            'Past baho VA GPS nomuvofiqligi bir buyurtmada — soxta yetkazish ehtimoli yuqori',
+          details: {
+            orderId: input.orderId,
+            source: 'rating',
+            stars: input.stars,
+          },
           dedupeKey: `${RiskRule.CorroboratedFalseDelivery}:${input.orderId}`,
         });
       }
     } catch (err) {
-      this.logger.error(`onCourierRated failed for order ${input.orderId}: ${(err as Error).message}`);
+      this.logger.error(
+        `onCourierRated failed for order ${input.orderId}: ${(err as Error).message}`,
+      );
     }
   }
 
@@ -238,11 +297,20 @@ export class RiskService {
     evidence: LocationEvidence | null;
   }): Promise<void> {
     try {
-      const maxM = this.settings.getNumber(SETTING_KEYS.RISK_ADDRESS_PIN_MAX_DISTANCE_M, 0);
+      const maxM = this.settings.getNumber(
+        SETTING_KEYS.RISK_ADDRESS_PIN_MAX_DISTANCE_M,
+        0,
+      );
       if (maxM <= 0) return; // shipped disabled — enable only after watching the real distribution
       if (!input.evidence || !this.reliableForDistance(input.evidence)) return;
 
-      const distM = haversineKm(input.evidence.latitude, input.evidence.longitude, input.pin.latitude, input.pin.longitude) * M_PER_KM;
+      const distM =
+        haversineKm(
+          input.evidence.latitude,
+          input.evidence.longitude,
+          input.pin.latitude,
+          input.pin.longitude,
+        ) * M_PER_KM;
       if (distM > maxM) {
         await this.flags.raise({
           rule: RiskRule.AddressFarFromDevice,
@@ -255,7 +323,9 @@ export class RiskService {
         });
       }
     } catch (err) {
-      this.logger.error(`onAddressPinned failed for user ${input.userId}: ${(err as Error).message}`);
+      this.logger.error(
+        `onAddressPinned failed for user ${input.userId}: ${(err as Error).message}`,
+      );
     }
   }
 
@@ -267,8 +337,17 @@ export class RiskService {
   }): Promise<void> {
     try {
       if (!input.previous || !input.hasDeliveredOrders) return;
-      const maxM = this.settings.getNumber(SETTING_KEYS.RISK_SHOP_RELOCATION_MAX_M, 500);
-      const distM = haversineKm(input.previous.latitude, input.previous.longitude, input.next.latitude, input.next.longitude) * M_PER_KM;
+      const maxM = this.settings.getNumber(
+        SETTING_KEYS.RISK_SHOP_RELOCATION_MAX_M,
+        500,
+      );
+      const distM =
+        haversineKm(
+          input.previous.latitude,
+          input.previous.longitude,
+          input.next.latitude,
+          input.next.longitude,
+        ) * M_PER_KM;
       if (distM > maxM) {
         await this.flags.raise({
           rule: RiskRule.ShopRelocatedAfterOrders,
@@ -286,7 +365,9 @@ export class RiskService {
         });
       }
     } catch (err) {
-      this.logger.error(`onShopPinned failed for shop ${input.shopId}: ${(err as Error).message}`);
+      this.logger.error(
+        `onShopPinned failed for shop ${input.shopId}: ${(err as Error).message}`,
+      );
     }
   }
 
@@ -295,9 +376,15 @@ export class RiskService {
   async linkDevice(userId: string, deviceId: string | null): Promise<void> {
     if (!deviceId) return;
     try {
-      await this.deviceAccounts.upsert({ deviceId, userId, lastSeenAt: new Date() }, ['deviceId', 'userId']);
+      await this.deviceAccounts.upsert(
+        { deviceId, userId, lastSeenAt: new Date() },
+        ['deviceId', 'userId'],
+      );
       const count = await this.deviceAccounts.count({ where: { deviceId } });
-      const maxAccounts = this.settings.getNumber(SETTING_KEYS.RISK_DEVICE_MAX_ACCOUNTS, 5);
+      const maxAccounts = this.settings.getNumber(
+        SETTING_KEYS.RISK_DEVICE_MAX_ACCOUNTS,
+        5,
+      );
       if (count > maxAccounts) {
         await this.flags.raise({
           rule: RiskRule.DeviceSharedAcrossAccounts,
@@ -311,7 +398,9 @@ export class RiskService {
         });
       }
     } catch (err) {
-      this.logger.error(`linkDevice failed for device ${deviceId}: ${(err as Error).message}`);
+      this.logger.error(
+        `linkDevice failed for device ${deviceId}: ${(err as Error).message}`,
+      );
     }
   }
 
@@ -325,7 +414,12 @@ export class RiskService {
     return this.flags.openCount();
   }
 
-  review(id: string, status: RiskFlagStatus.Confirmed | RiskFlagStatus.Dismissed, adminUserId: string, note?: string) {
+  review(
+    id: string,
+    status: RiskFlagStatus.Confirmed | RiskFlagStatus.Dismissed,
+    adminUserId: string,
+    note?: string,
+  ) {
     return this.flags.review(id, status, adminUserId, note);
   }
 
@@ -359,7 +453,10 @@ export class RiskService {
   async orderEvidence(orderId: string) {
     const order = await this.orders.findOne({ where: { id: orderId } });
     if (!order) return null;
-    const [pings, summary] = await Promise.all([this.ping.listForOrder(orderId), this.ping.summaryForOrder(orderId)]);
+    const [pings, summary] = await Promise.all([
+      this.ping.listForOrder(orderId),
+      this.ping.summaryForOrder(orderId),
+    ]);
     return {
       orderEvidence: order.orderEvidence,
       dispatchedEvidence: order.dispatchedEvidence,

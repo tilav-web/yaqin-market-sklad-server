@@ -17,9 +17,18 @@ import {
  * `last_known` can be up to a minute and kilometres stale, so callers must
  * never run a distance rule against `last_known` evidence, only record it.
  */
-export type EvidenceSource = 'foreground' | 'background' | 'last_known' | 'map_pick';
+export type EvidenceSource =
+  | 'foreground'
+  | 'background'
+  | 'last_known'
+  | 'map_pick';
 
-const EVIDENCE_SOURCES: EvidenceSource[] = ['foreground', 'background', 'last_known', 'map_pick'];
+const EVIDENCE_SOURCES: EvidenceSource[] = [
+  'foreground',
+  'background',
+  'last_known',
+  'map_pick',
+];
 
 /** What the client sends. Every field is an unverified claim. */
 export class LocationEvidenceDto {
@@ -76,12 +85,18 @@ export interface LocationEvidence {
 
 export function buildEvidence(
   dto: LocationEvidenceDto | null | undefined,
-  ctx: { deviceId: string | null; actorUserId: string; actorRole: 'customer' | 'shop' },
+  ctx: {
+    deviceId: string | null;
+    actorUserId: string;
+    actorRole: 'customer' | 'shop';
+  },
 ): LocationEvidence | null {
   if (!dto) return null;
   const receivedAt = new Date();
   const capturedAt = dto.capturedAt ?? null;
-  const skewMs = capturedAt ? receivedAt.getTime() - new Date(capturedAt).getTime() : null;
+  const skewMs = capturedAt
+    ? receivedAt.getTime() - new Date(capturedAt).getTime()
+    : null;
   return {
     latitude: dto.latitude,
     longitude: dto.longitude,

@@ -11,7 +11,16 @@ import { Debt } from './entities/debt.entity';
 import { DebtPayment } from './entities/debt-payment.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Debt, DebtPayment, Shop, ShopStaff, ProductVariant, GlobalProduct])],
+  imports: [
+    TypeOrmModule.forFeature([
+      Debt,
+      DebtPayment,
+      Shop,
+      ShopStaff,
+      ProductVariant,
+      GlobalProduct,
+    ]),
+  ],
   controllers: [DebtsController],
   providers: [DebtsService],
 })

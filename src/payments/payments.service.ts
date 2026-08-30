@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, LessThan, Repository } from 'typeorm';
@@ -13,19 +18,28 @@ import { SettingsService } from '../settings/settings.service';
 import { SETTING_KEYS } from '../settings/entities/global-setting.entity';
 import { User } from '../users/entities/user.entity';
 import { SellerBalance } from './entities/seller-balance.entity';
-import { SellerTransaction, SellerTxType } from './entities/seller-transaction.entity';
-import { WithdrawalRequest, WithdrawalStatus } from './entities/withdrawal-request.entity';
+import {
+  SellerTransaction,
+  SellerTxType,
+} from './entities/seller-transaction.entity';
+import {
+  WithdrawalRequest,
+  WithdrawalStatus,
+} from './entities/withdrawal-request.entity';
 
 @Injectable()
 export class PaymentsService {
   private readonly log = new Logger(PaymentsService.name);
 
   constructor(
-    @InjectRepository(SellerBalance)   private readonly balances: Repository<SellerBalance>,
-    @InjectRepository(SellerTransaction) private readonly txs: Repository<SellerTransaction>,
-    @InjectRepository(WithdrawalRequest) private readonly withdrawals: Repository<WithdrawalRequest>,
-    @InjectRepository(Shop)            private readonly shops: Repository<Shop>,
-    @InjectRepository(User)           private readonly users: Repository<User>,
+    @InjectRepository(SellerBalance)
+    private readonly balances: Repository<SellerBalance>,
+    @InjectRepository(SellerTransaction)
+    private readonly txs: Repository<SellerTransaction>,
+    @InjectRepository(WithdrawalRequest)
+    private readonly withdrawals: Repository<WithdrawalRequest>,
+    @InjectRepository(Shop) private readonly shops: Repository<Shop>,
+    @InjectRepository(User) private readonly users: Repository<User>,
     private readonly settings: SettingsService,
     private readonly dataSource: DataSource,
     private readonly push: PushService,
@@ -47,7 +61,11 @@ export class PaymentsService {
     return this.ensureBalance(sellerId);
   }
 
-  async getTransactions(sellerId: string, page = 0, limit = 30): Promise<SellerTransaction[]> {
+  async getTransactions(
+    sellerId: string,
+    page = 0,
+    limit = 30,
+  ): Promise<SellerTransaction[]> {
     return this.txs.find({
       where: { sellerId },
       order: { createdAt: 'DESC' },
@@ -71,13 +89,16 @@ export class PaymentsService {
     const netAmount = orderTotal - commissionAmount;
 
     await this.dataSource.transaction(async (em) => {
-      const bal = (await em.findOne(SellerBalance, {
-        where: { sellerId },
-        lock: { mode: 'pessimistic_write' },
-      })) ?? em.create(SellerBalance, { sellerId });
+      const bal =
+        (await em.findOne(SellerBalance, {
+          where: { sellerId },
+          lock: { mode: 'pessimistic_write' },
+        })) ?? em.create(SellerBalance, { sellerId });
 
       // Add net to available
-      bal.availableBalance = String(parseFloat(bal.availableBalance ?? '0') + netAmount);
+      bal.availableBalance = String(
+        parseFloat(bal.availableBalance ?? '0') + netAmount,
+      );
 
       // Add commission to debt
       const newDebt = parseFloat(bal.debtBalance ?? '0') + commissionAmount;
@@ -94,16 +115,19 @@ export class PaymentsService {
       await em.save(SellerBalance, bal);
 
       // Record transaction
-      await em.save(SellerTransaction, em.create(SellerTransaction, {
-        sellerId,
-        orderId,
-        type: SellerTxType.CashOrderCommission,
-        amount: String(netAmount),
-        commissionRate: String(commissionRate),
-        commissionAmount: String(commissionAmount),
-        status: 'settled',
-        description: `Naqd buyurtma yetkazildi. Komissiya (${commissionRate}%) qarzga yozildi`,
-      }));
+      await em.save(
+        SellerTransaction,
+        em.create(SellerTransaction, {
+          sellerId,
+          orderId,
+          type: SellerTxType.CashOrderCommission,
+          amount: String(netAmount),
+          commissionRate: String(commissionRate),
+          commissionAmount: String(commissionAmount),
+          status: 'settled',
+          description: `Naqd buyurtma yetkazildi. Komissiya (${commissionRate}%) qarzga yozildi`,
+        }),
+      );
     });
 
     // Try to auto-repay debt from available balance
@@ -129,25 +153,31 @@ export class PaymentsService {
     settlesAt.setHours(settlesAt.getHours() + hours);
 
     await this.dataSource.transaction(async (em) => {
-      const bal = (await em.findOne(SellerBalance, {
-        where: { sellerId },
-        lock: { mode: 'pessimistic_write' },
-      })) ?? em.create(SellerBalance, { sellerId });
+      const bal =
+        (await em.findOne(SellerBalance, {
+          where: { sellerId },
+          lock: { mode: 'pessimistic_write' },
+        })) ?? em.create(SellerBalance, { sellerId });
 
-      bal.pendingBalance = String(parseFloat(bal.pendingBalance ?? '0') + netAmount);
+      bal.pendingBalance = String(
+        parseFloat(bal.pendingBalance ?? '0') + netAmount,
+      );
       await em.save(SellerBalance, bal);
 
-      await em.save(SellerTransaction, em.create(SellerTransaction, {
-        sellerId,
-        orderId,
-        type: SellerTxType.OnlineOrderPending,
-        amount: String(netAmount),
-        commissionRate: String(commissionRate),
-        commissionAmount: String(commissionAmount),
-        status: 'pending',
-        settlesAt,
-        description: `Online buyurtma yetkazildi. ${hours} soatdan keyin chiqariladi`,
-      }));
+      await em.save(
+        SellerTransaction,
+        em.create(SellerTransaction, {
+          sellerId,
+          orderId,
+          type: SellerTxType.OnlineOrderPending,
+          amount: String(netAmount),
+          commissionRate: String(commissionRate),
+          commissionAmount: String(commissionAmount),
+          status: 'pending',
+          settlesAt,
+          description: `Online buyurtma yetkazildi. ${hours} soatdan keyin chiqariladi`,
+        }),
+      );
     });
   }
 
@@ -157,7 +187,11 @@ export class PaymentsService {
     // obviously nothing to do; the real numbers are re-read under lock below.
     const precheck = await this.balances.findOne({ where: { sellerId } });
     if (!precheck) return;
-    if (parseFloat(precheck.debtBalance) <= 0 || parseFloat(precheck.availableBalance) <= 0) return;
+    if (
+      parseFloat(precheck.debtBalance) <= 0 ||
+      parseFloat(precheck.availableBalance) <= 0
+    )
+      return;
 
     await this.dataSource.transaction(async (em) => {
       const b = await em.findOne(SellerBalance, {
@@ -168,7 +202,13 @@ export class PaymentsService {
 
       const available = parseFloat(b.availableBalance);
       const debt = parseFloat(b.debtBalance);
-      if (!Number.isFinite(available) || !Number.isFinite(debt) || debt <= 0 || available <= 0) return;
+      if (
+        !Number.isFinite(available) ||
+        !Number.isFinite(debt) ||
+        debt <= 0 ||
+        available <= 0
+      )
+        return;
       const repayAmount = Math.min(available, debt);
 
       b.availableBalance = String(available - repayAmount);
@@ -178,20 +218,27 @@ export class PaymentsService {
         b.debtBalance = '0';
         b.debtDueDate = null;
         // Re-activate shops if they were deactivated due to debt
-        await em.update(Shop, { ownerId: sellerId, deactivatedByDebt: true }, {
-          isActive: true,
-          deactivatedByDebt: false,
-        });
+        await em.update(
+          Shop,
+          { ownerId: sellerId, deactivatedByDebt: true },
+          {
+            isActive: true,
+            deactivatedByDebt: false,
+          },
+        );
       }
 
       await em.save(SellerBalance, b);
-      await em.save(SellerTransaction, em.create(SellerTransaction, {
-        sellerId,
-        type: SellerTxType.DebtRepaid,
-        amount: String(-repayAmount),
-        status: 'settled',
-        description: `Qarz avtomatik so'ndirildi: ${repayAmount.toLocaleString()} so'm`,
-      }));
+      await em.save(
+        SellerTransaction,
+        em.create(SellerTransaction, {
+          sellerId,
+          type: SellerTxType.DebtRepaid,
+          amount: String(-repayAmount),
+          status: 'settled',
+          description: `Qarz avtomatik so'ndirildi: ${repayAmount.toLocaleString()} so'm`,
+        }),
+      );
     });
   }
 
@@ -203,15 +250,18 @@ export class PaymentsService {
    * partially (debt < amount: debt cleared, remainder paid out) or fully
    * (debt >= amount: the whole amount repays debt, no payout is created).
    */
-  async requestWithdrawal(sellerId: string, dto: {
-    amount: number;
-    bankCardNumber: string;
-    bankCardHolderName: string;
-  }): Promise<WithdrawalRequest> {
+  async requestWithdrawal(
+    sellerId: string,
+    dto: {
+      amount: number;
+      bankCardNumber: string;
+      bankCardHolderName: string;
+    },
+  ): Promise<WithdrawalRequest> {
     // Belt-and-suspenders: the DTO already validates this, but never let a
     // NaN/negative/non-finite amount reach the arithmetic below.
     if (!Number.isFinite(dto.amount) || dto.amount <= 0) {
-      throw new BadRequestException('Yechib olish miqdori noto\'g\'ri');
+      throw new BadRequestException("Yechib olish miqdori noto'g'ri");
     }
 
     // Debt repayment must be committed even when it consumes the whole
@@ -229,13 +279,13 @@ export class PaymentsService {
       const debt = parseFloat(b.debtBalance);
 
       if (!Number.isFinite(available) || available <= 0) {
-        throw new BadRequestException('Yechib olish uchun mablag\' yo\'q');
+        throw new BadRequestException("Yechib olish uchun mablag' yo'q");
       }
 
       // Total drawn from the available balance this request (bounded by what's there).
       const totalDrawn = Math.min(dto.amount, available);
       if (totalDrawn <= 0) {
-        throw new BadRequestException('Yechib olish miqdori noto\'g\'ri');
+        throw new BadRequestException("Yechib olish miqdori noto'g'ri");
       }
       // Debt-first: repay as much of the drawn amount into debt as possible.
       const debtRepaid = debt > 0 ? Math.min(debt, totalDrawn) : 0;
@@ -247,22 +297,29 @@ export class PaymentsService {
         b.debtBalance = String(Math.max(0, newDebt));
         if (parseFloat(b.debtBalance) <= 0) {
           b.debtDueDate = null;
-          await em.update(Shop, { ownerId: sellerId, deactivatedByDebt: true }, {
-            isActive: true,
-            deactivatedByDebt: false,
-          });
+          await em.update(
+            Shop,
+            { ownerId: sellerId, deactivatedByDebt: true },
+            {
+              isActive: true,
+              deactivatedByDebt: false,
+            },
+          );
         }
       }
       await em.save(SellerBalance, b);
 
       if (debtRepaid > 0) {
-        await em.save(SellerTransaction, em.create(SellerTransaction, {
-          sellerId,
-          type: SellerTxType.DebtRepaid,
-          amount: String(-debtRepaid),
-          status: 'settled',
-          description: `Yechib olishdan qarz so\'ndirildi: ${debtRepaid.toLocaleString()} so'm`,
-        }));
+        await em.save(
+          SellerTransaction,
+          em.create(SellerTransaction, {
+            sellerId,
+            type: SellerTxType.DebtRepaid,
+            amount: String(-debtRepaid),
+            status: 'settled',
+            description: `Yechib olishdan qarz so\'ndirildi: ${debtRepaid.toLocaleString()} so'm`,
+          }),
+        );
       }
 
       if (payout <= 0) {
@@ -279,25 +336,33 @@ export class PaymentsService {
       });
       await em.save(WithdrawalRequest, req);
 
-      await em.save(SellerTransaction, em.create(SellerTransaction, {
-        sellerId,
-        type: SellerTxType.WithdrawalRequested,
-        amount: String(-payout),
-        status: 'settled',
-        description: `Yechib olish so\'rovi: ${payout.toLocaleString()} so'm`,
-      }));
+      await em.save(
+        SellerTransaction,
+        em.create(SellerTransaction, {
+          sellerId,
+          type: SellerTxType.WithdrawalRequested,
+          amount: String(-payout),
+          status: 'settled',
+          description: `Yechib olish so\'rovi: ${payout.toLocaleString()} so'm`,
+        }),
+      );
 
       return req;
     });
 
     if (!result) {
-      throw new BadRequestException('Mablag\'ingiz qarzni to\'lash uchun sarflandi');
+      throw new BadRequestException(
+        "Mablag'ingiz qarzni to'lash uchun sarflandi",
+      );
     }
     return result;
   }
 
   async getMyWithdrawals(sellerId: string): Promise<WithdrawalRequest[]> {
-    return this.withdrawals.find({ where: { sellerId }, order: { requestedAt: 'DESC' } });
+    return this.withdrawals.find({
+      where: { sellerId },
+      order: { requestedAt: 'DESC' },
+    });
   }
 
   /** Admin: list all pending withdrawals */
@@ -306,7 +371,9 @@ export class PaymentsService {
     limit?: number;
     offset?: number;
   }): Promise<{
-    items: (WithdrawalRequest & { seller: { id: string; name: string | null; phone: string } | null })[];
+    items: (WithdrawalRequest & {
+      seller: { id: string; name: string | null; phone: string } | null;
+    })[];
     total: number;
   }> {
     const [rows, total] = await this.withdrawals.findAndCount({
@@ -317,10 +384,16 @@ export class PaymentsService {
     });
     const sellerIds = [...new Set(rows.map((w) => w.sellerId))];
     const sellers = sellerIds.length
-      ? await this.users.find({ where: { id: In(sellerIds) }, select: { id: true, name: true, phone: true } })
+      ? await this.users.find({
+          where: { id: In(sellerIds) },
+          select: { id: true, name: true, phone: true },
+        })
       : [];
     const byId = new Map(sellers.map((s) => [s.id, s]));
-    return { items: rows.map((w) => ({ ...w, seller: byId.get(w.sellerId) ?? null })), total };
+    return {
+      items: rows.map((w) => ({ ...w, seller: byId.get(w.sellerId) ?? null })),
+      total,
+    };
   }
 
   async adminExportWithdrawals(status?: WithdrawalStatus): Promise<Buffer> {
@@ -331,7 +404,10 @@ export class PaymentsService {
     });
     const sellerIds = [...new Set(rows.map((w) => w.sellerId))];
     const sellers = sellerIds.length
-      ? await this.users.find({ where: { id: In(sellerIds) }, select: { id: true, name: true, phone: true } })
+      ? await this.users.find({
+          where: { id: In(sellerIds) },
+          select: { id: true, name: true, phone: true },
+        })
       : [];
     const byId = new Map(sellers.map((s) => [s.id, s]));
     return buildXlsxBuffer(
@@ -368,18 +444,28 @@ export class PaymentsService {
    * concurrent calls for the same request (double-click, retry) must not
    * both pass the "still pending" check and both move money.
    */
-  async adminProcessWithdrawal(id: string, adminId: string, approve: boolean, note?: string): Promise<WithdrawalRequest> {
+  async adminProcessWithdrawal(
+    id: string,
+    adminId: string,
+    approve: boolean,
+    note?: string,
+  ): Promise<WithdrawalRequest> {
     const req = await this.dataSource.transaction(async (em) => {
       const locked = await em.findOne(WithdrawalRequest, {
         where: { id },
         lock: { mode: 'pessimistic_write' },
       });
-      if (!locked) throw new NotFoundException('So\'rov topilmadi');
-      if (locked.status !== WithdrawalStatus.Pending && locked.status !== WithdrawalStatus.Processing) {
-        throw new BadRequestException('So\'rov allaqachon yakunlangan');
+      if (!locked) throw new NotFoundException("So'rov topilmadi");
+      if (
+        locked.status !== WithdrawalStatus.Pending &&
+        locked.status !== WithdrawalStatus.Processing
+      ) {
+        throw new BadRequestException("So'rov allaqachon yakunlangan");
       }
 
-      locked.status = approve ? WithdrawalStatus.Completed : WithdrawalStatus.Rejected;
+      locked.status = approve
+        ? WithdrawalStatus.Completed
+        : WithdrawalStatus.Rejected;
       locked.processedAt = new Date();
       locked.processedByAdminId = adminId;
       locked.adminNote = note ?? null;
@@ -391,26 +477,34 @@ export class PaymentsService {
           lock: { mode: 'pessimistic_write' },
         });
         if (b) {
-          b.availableBalance = String(parseFloat(b.availableBalance) + parseFloat(locked.amount));
+          b.availableBalance = String(
+            parseFloat(b.availableBalance) + parseFloat(locked.amount),
+          );
           await em.save(SellerBalance, b);
         }
         await em.save(WithdrawalRequest, locked);
-        await em.save(SellerTransaction, em.create(SellerTransaction, {
-          sellerId: locked.sellerId,
-          type: SellerTxType.AdminAdjustment,
-          amount: locked.amount,
-          status: 'settled',
-          description: `Yechib olish rad etildi, balansga qaytarildi. Sabab: ${note ?? ''}`,
-        }));
+        await em.save(
+          SellerTransaction,
+          em.create(SellerTransaction, {
+            sellerId: locked.sellerId,
+            type: SellerTxType.AdminAdjustment,
+            amount: locked.amount,
+            status: 'settled',
+            description: `Yechib olish rad etildi, balansga qaytarildi. Sabab: ${note ?? ''}`,
+          }),
+        );
       } else {
         await em.save(WithdrawalRequest, locked);
-        await em.save(SellerTransaction, em.create(SellerTransaction, {
-          sellerId: locked.sellerId,
-          type: SellerTxType.WithdrawalCompleted,
-          amount: String(-parseFloat(locked.amount)),
-          status: 'settled',
-          description: `Yechib olish bajarildi: ${parseFloat(locked.amount).toLocaleString()} so'm`,
-        }));
+        await em.save(
+          SellerTransaction,
+          em.create(SellerTransaction, {
+            sellerId: locked.sellerId,
+            type: SellerTxType.WithdrawalCompleted,
+            amount: String(-parseFloat(locked.amount)),
+            status: 'settled',
+            description: `Yechib olish bajarildi: ${parseFloat(locked.amount).toLocaleString()} so'm`,
+          }),
+        );
       }
       return locked;
     });
@@ -418,12 +512,14 @@ export class PaymentsService {
     if (!approve) {
       void this.push.sendToUser(req.sellerId, {
         title: 'Yechib olish rad etildi',
-        body: note ? `Sabab: ${note}` : `${parseFloat(req.amount).toLocaleString()} so'm balansga qaytarildi`,
+        body: note
+          ? `Sabab: ${note}`
+          : `${parseFloat(req.amount).toLocaleString()} so'm balansga qaytarildi`,
         data: { kind: 'withdrawal:rejected' },
       });
     } else {
       void this.push.sendToUser(req.sellerId, {
-        title: 'Mablag\' yechildi',
+        title: "Mablag' yechildi",
         body: `${parseFloat(req.amount).toLocaleString()} so'm kartangizga o'tkazildi`,
         data: { kind: 'withdrawal:completed' },
       });
@@ -437,7 +533,10 @@ export class PaymentsService {
   }
 
   /** Admin: get transactions for any seller */
-  async adminGetTransactions(sellerId: string, page = 0): Promise<SellerTransaction[]> {
+  async adminGetTransactions(
+    sellerId: string,
+    page = 0,
+  ): Promise<SellerTransaction[]> {
     return this.getTransactions(sellerId, page);
   }
 
@@ -449,16 +548,19 @@ export class PaymentsService {
     adminUserId: string,
   ): Promise<SellerBalance> {
     if (!Number.isFinite(amount)) {
-      throw new BadRequestException('Noto\'g\'ri miqdor');
+      throw new BadRequestException("Noto'g'ri miqdor");
     }
     await this.dataSource.transaction(async (em) => {
-      const b = (await em.findOne(SellerBalance, {
-        where: { sellerId },
-        lock: { mode: 'pessimistic_write' },
-      })) ?? em.create(SellerBalance, { sellerId });
+      const b =
+        (await em.findOne(SellerBalance, {
+          where: { sellerId },
+          lock: { mode: 'pessimistic_write' },
+        })) ?? em.create(SellerBalance, { sellerId });
 
       if (amount > 0) {
-        b.availableBalance = String(parseFloat(b.availableBalance ?? '0') + amount);
+        b.availableBalance = String(
+          parseFloat(b.availableBalance ?? '0') + amount,
+        );
       } else {
         const debit = Math.abs(amount);
         const avail = parseFloat(b.availableBalance ?? '0');
@@ -466,13 +568,16 @@ export class PaymentsService {
       }
       await em.save(SellerBalance, b);
 
-      await em.save(SellerTransaction, em.create(SellerTransaction, {
-        sellerId,
-        type: SellerTxType.AdminAdjustment,
-        amount: String(amount),
-        status: 'settled',
-        description,
-      }));
+      await em.save(
+        SellerTransaction,
+        em.create(SellerTransaction, {
+          sellerId,
+          type: SellerTxType.AdminAdjustment,
+          amount: String(amount),
+          status: 'settled',
+          description,
+        }),
+      );
     });
     void this.auditLog.record({
       adminUserId,
@@ -490,19 +595,30 @@ export class PaymentsService {
   async settlePendingTransactions() {
     const now = new Date();
     const pending = await this.txs.find({
-      where: { status: 'pending', type: SellerTxType.OnlineOrderPending, settlesAt: LessThan(now) },
+      where: {
+        status: 'pending',
+        type: SellerTxType.OnlineOrderPending,
+        settlesAt: LessThan(now),
+      },
     });
     if (!pending.length) return;
 
     // An order under an OPEN customer complaint must not auto-settle — it
     // stays pending until an admin resolves it via force-settle/force-refund
     // (SPEC.md §8.5, §21).
-    const orderIds = pending.map((t) => t.orderId).filter((id): id is string => !!id);
-    const disputedOrderIds = await this.complaints.openComplaintOrderIds(orderIds);
-    const toSettle = pending.filter((t) => !t.orderId || !disputedOrderIds.has(t.orderId));
+    const orderIds = pending
+      .map((t) => t.orderId)
+      .filter((id): id is string => !!id);
+    const disputedOrderIds =
+      await this.complaints.openComplaintOrderIds(orderIds);
+    const toSettle = pending.filter(
+      (t) => !t.orderId || !disputedOrderIds.has(t.orderId),
+    );
     const skipped = pending.length - toSettle.length;
     if (skipped > 0) {
-      this.log.log(`Skipping settlement for ${skipped} pending transaction(s) under open complaint`);
+      this.log.log(
+        `Skipping settlement for ${skipped} pending transaction(s) under open complaint`,
+      );
     }
     if (!toSettle.length) return;
 
@@ -517,7 +633,9 @@ export class PaymentsService {
         if (!b) return;
 
         const amount = parseFloat(tx.amount);
-        b.pendingBalance = String(Math.max(0, parseFloat(b.pendingBalance) - amount));
+        b.pendingBalance = String(
+          Math.max(0, parseFloat(b.pendingBalance) - amount),
+        );
         b.availableBalance = String(parseFloat(b.availableBalance) + amount);
         await em.save(SellerBalance, b);
 
@@ -525,14 +643,17 @@ export class PaymentsService {
         await em.save(SellerTransaction, tx);
 
         // Also record the settlement as a new tx for clarity
-        await em.save(SellerTransaction, em.create(SellerTransaction, {
-          sellerId: tx.sellerId,
-          orderId: tx.orderId,
-          type: SellerTxType.PendingSettled,
-          amount: tx.amount,
-          status: 'settled',
-          description: `Online buyurtma mablag'i chiqarildi`,
-        }));
+        await em.save(
+          SellerTransaction,
+          em.create(SellerTransaction, {
+            sellerId: tx.sellerId,
+            orderId: tx.orderId,
+            type: SellerTxType.PendingSettled,
+            amount: tx.amount,
+            status: 'settled',
+            description: `Online buyurtma mablag'i chiqarildi`,
+          }),
+        );
       });
 
       // Try auto-repay debt after each settlement
@@ -554,7 +675,9 @@ export class PaymentsService {
 
     if (!overdueBalances.length) return;
 
-    this.log.warn(`Deactivating shops for ${overdueBalances.length} sellers with overdue debt`);
+    this.log.warn(
+      `Deactivating shops for ${overdueBalances.length} sellers with overdue debt`,
+    );
 
     for (const bal of overdueBalances) {
       await this.shops.update(
@@ -579,7 +702,10 @@ export class PaymentsService {
       .where('b.debtBalance > 0')
       .andWhere('b.debtDueDate IS NOT NULL')
       .andWhere('b.debtDueDate = :due', { due: dueSoon })
-      .andWhere('(b.lastDebtReminderAt IS NULL OR b.lastDebtReminderAt < :yesterday)', { yesterday })
+      .andWhere(
+        '(b.lastDebtReminderAt IS NULL OR b.lastDebtReminderAt < :yesterday)',
+        { yesterday },
+      )
       .getMany();
 
     for (const bal of debtors) {
@@ -592,7 +718,8 @@ export class PaymentsService {
       bal.lastDebtReminderAt = new Date();
       await this.balances.save(bal);
     }
-    if (debtors.length > 0) this.log.log(`Sent debt reminders to ${debtors.length} seller(s)`);
+    if (debtors.length > 0)
+      this.log.log(`Sent debt reminders to ${debtors.length} seller(s)`);
   }
 
   /**
@@ -600,15 +727,23 @@ export class PaymentsService {
    * wait). The tx row is locked and re-checked inside the transaction so two
    * concurrent calls can't both settle the same transaction twice.
    */
-  async adminForceSettle(txId: string, adminId: string): Promise<SellerTransaction> {
+  async adminForceSettle(
+    txId: string,
+    adminId: string,
+  ): Promise<SellerTransaction> {
     const sellerId = await this.dataSource.transaction(async (em) => {
       const tx = await em.findOne(SellerTransaction, {
         where: { id: txId },
         lock: { mode: 'pessimistic_write' },
       });
       if (!tx) throw new NotFoundException('Tranzaksiya topilmadi');
-      if (tx.type !== SellerTxType.OnlineOrderPending || tx.status !== 'pending') {
-        throw new BadRequestException('Faqat pending online tranzaksiyani force settle qilish mumkin');
+      if (
+        tx.type !== SellerTxType.OnlineOrderPending ||
+        tx.status !== 'pending'
+      ) {
+        throw new BadRequestException(
+          'Faqat pending online tranzaksiyani force settle qilish mumkin',
+        );
       }
 
       const b = await em.findOne(SellerBalance, {
@@ -618,21 +753,26 @@ export class PaymentsService {
       if (!b) throw new NotFoundException('Balans topilmadi');
 
       const amount = parseFloat(tx.amount);
-      b.pendingBalance = String(Math.max(0, parseFloat(b.pendingBalance) - amount));
+      b.pendingBalance = String(
+        Math.max(0, parseFloat(b.pendingBalance) - amount),
+      );
       b.availableBalance = String(parseFloat(b.availableBalance) + amount);
       await em.save(SellerBalance, b);
 
       tx.status = 'settled';
       await em.save(SellerTransaction, tx);
 
-      await em.save(SellerTransaction, em.create(SellerTransaction, {
-        sellerId: tx.sellerId,
-        orderId: tx.orderId,
-        type: SellerTxType.PendingSettled,
-        amount: tx.amount,
-        status: 'settled',
-        description: `Admin force settle (admin: ${adminId})`,
-      }));
+      await em.save(
+        SellerTransaction,
+        em.create(SellerTransaction, {
+          sellerId: tx.sellerId,
+          orderId: tx.orderId,
+          type: SellerTxType.PendingSettled,
+          amount: tx.amount,
+          status: 'settled',
+          description: `Admin force settle (admin: ${adminId})`,
+        }),
+      );
       return tx.sellerId;
     });
 
@@ -651,15 +791,23 @@ export class PaymentsService {
    * platform). Same lock-and-recheck-inside-the-transaction pattern as
    * {@link adminForceSettle}, so it can't double-refund.
    */
-  async adminForceRefund(txId: string, adminId: string): Promise<SellerTransaction> {
+  async adminForceRefund(
+    txId: string,
+    adminId: string,
+  ): Promise<SellerTransaction> {
     await this.dataSource.transaction(async (em) => {
       const tx = await em.findOne(SellerTransaction, {
         where: { id: txId },
         lock: { mode: 'pessimistic_write' },
       });
       if (!tx) throw new NotFoundException('Tranzaksiya topilmadi');
-      if (tx.type !== SellerTxType.OnlineOrderPending || tx.status !== 'pending') {
-        throw new BadRequestException('Faqat pending online tranzaksiyani force refund qilish mumkin');
+      if (
+        tx.type !== SellerTxType.OnlineOrderPending ||
+        tx.status !== 'pending'
+      ) {
+        throw new BadRequestException(
+          'Faqat pending online tranzaksiyani force refund qilish mumkin',
+        );
       }
 
       const b = await em.findOne(SellerBalance, {
@@ -669,20 +817,25 @@ export class PaymentsService {
       if (!b) throw new NotFoundException('Balans topilmadi');
 
       const amount = parseFloat(tx.amount);
-      b.pendingBalance = String(Math.max(0, parseFloat(b.pendingBalance) - amount));
+      b.pendingBalance = String(
+        Math.max(0, parseFloat(b.pendingBalance) - amount),
+      );
       await em.save(SellerBalance, b);
 
       tx.status = 'cancelled';
       await em.save(SellerTransaction, tx);
 
-      await em.save(SellerTransaction, em.create(SellerTransaction, {
-        sellerId: tx.sellerId,
-        orderId: tx.orderId,
-        type: SellerTxType.RefundDebit,
-        amount: tx.amount,
-        status: 'settled',
-        description: `Admin force refund (admin: ${adminId})`,
-      }));
+      await em.save(
+        SellerTransaction,
+        em.create(SellerTransaction, {
+          sellerId: tx.sellerId,
+          orderId: tx.orderId,
+          type: SellerTxType.RefundDebit,
+          amount: tx.amount,
+          status: 'settled',
+          description: `Admin force refund (admin: ${adminId})`,
+        }),
+      );
     });
 
     void this.auditLog.record({
@@ -707,7 +860,11 @@ export class PaymentsService {
   }
 
   /** Admin: forgive a seller's entire debt (write it off). */
-  async adminForgiveDebt(sellerId: string, adminId: string, reason: string): Promise<SellerBalance> {
+  async adminForgiveDebt(
+    sellerId: string,
+    adminId: string,
+    reason: string,
+  ): Promise<SellerBalance> {
     const result = await this.dataSource.transaction(async (em) => {
       const b = await em.findOne(SellerBalance, {
         where: { sellerId },
@@ -718,13 +875,16 @@ export class PaymentsService {
       b.debtBalance = '0';
       b.debtDueDate = null;
       await em.save(SellerBalance, b);
-      await em.save(SellerTransaction, em.create(SellerTransaction, {
-        sellerId,
-        type: SellerTxType.AdminAdjustment,
-        amount: `-${forgiven}`,
-        status: 'settled',
-        description: `Admin qarz kechirdi: ${reason} (admin: ${adminId})`,
-      }));
+      await em.save(
+        SellerTransaction,
+        em.create(SellerTransaction, {
+          sellerId,
+          type: SellerTxType.AdminAdjustment,
+          amount: `-${forgiven}`,
+          status: 'settled',
+          description: `Admin qarz kechirdi: ${reason} (admin: ${adminId})`,
+        }),
+      );
       // Re-activate shops if they were deactivated by debt
       await this.shops.update(
         { ownerId: sellerId, deactivatedByDebt: true },
@@ -743,7 +903,11 @@ export class PaymentsService {
   }
 
   /** Admin: extend the debt due date by N days. */
-  async adminExtendDebtDue(sellerId: string, days: number, adminUserId: string): Promise<SellerBalance> {
+  async adminExtendDebtDue(
+    sellerId: string,
+    days: number,
+    adminUserId: string,
+  ): Promise<SellerBalance> {
     const result = await this.dataSource.transaction(async (em) => {
       const b = await em.findOne(SellerBalance, {
         where: { sellerId },
@@ -754,10 +918,14 @@ export class PaymentsService {
       current.setDate(current.getDate() + days);
       b.debtDueDate = current.toISOString().split('T')[0];
       // Re-activate shops if they were deactivated by expired debt
-      await em.update(Shop, { ownerId: sellerId, deactivatedByDebt: true }, {
-        isActive: true,
-        deactivatedByDebt: false,
-      });
+      await em.update(
+        Shop,
+        { ownerId: sellerId, deactivatedByDebt: true },
+        {
+          isActive: true,
+          deactivatedByDebt: false,
+        },
+      );
       return em.save(SellerBalance, b);
     });
     void this.auditLog.record({

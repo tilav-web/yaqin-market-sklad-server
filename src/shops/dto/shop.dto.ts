@@ -43,15 +43,19 @@ class GeoJsonPolygonCoordinatesConstraint implements ValidatorConstraintInterfac
         if (!Array.isArray(point) || point.length !== 2) return false;
         const [lng, lat] = point as [unknown, unknown];
         return (
-          typeof lng === 'number' && lng >= -180 && lng <= 180 &&
-          typeof lat === 'number' && lat >= -90 && lat <= 90
+          typeof lng === 'number' &&
+          lng >= -180 &&
+          lng <= 180 &&
+          typeof lat === 'number' &&
+          lat >= -90 &&
+          lat <= 90
         );
       });
     });
   }
 
   defaultMessage(): string {
-    return 'coordinates har bir halqasi kamida 4 ta [lng, lat] nuqtadan iborat bo\'lishi va diapazonda bo\'lishi kerak';
+    return "coordinates har bir halqasi kamida 4 ta [lng, lat] nuqtadan iborat bo'lishi va diapazonda bo'lishi kerak";
   }
 }
 
@@ -109,11 +113,27 @@ export class AdminSetActiveDto {
   reason?: string;
 }
 
-import { ALL_STAFF_PERMISSIONS, StaffRole } from '../entities/shop-staff.entity';
-import type { StaffPermission, StaffPreset } from '../entities/shop-staff.entity';
-import type { DeliveryPricingType, Holiday, WorkingHourSlot } from '../entities/shop.entity';
+import {
+  ALL_STAFF_PERMISSIONS,
+  StaffRole,
+} from '../entities/shop-staff.entity';
+import type {
+  StaffPermission,
+  StaffPreset,
+} from '../entities/shop-staff.entity';
+import type {
+  DeliveryPricingType,
+  Holiday,
+  WorkingHourSlot,
+} from '../entities/shop.entity';
 
-const STAFF_ROLES: StaffRole[] = ['cashier', 'storekeeper', 'courier', 'manager', 'custom'];
+const STAFF_ROLES: StaffRole[] = [
+  'cashier',
+  'storekeeper',
+  'courier',
+  'manager',
+  'custom',
+];
 const STAFF_PRESETS: StaffPreset[] = [
   'cashier',
   'storekeeper',
@@ -220,17 +240,25 @@ export class CreateShopDto {
   @MaxLength(32)
   phone?: string;
 
-  @ApiPropertyOptional({ description: 'Whether shop supports online delivery (default true)' })
+  @ApiPropertyOptional({
+    description: 'Whether shop supports online delivery (default true)',
+  })
   @IsOptional()
   @IsBoolean()
   isDeliveryEnabled?: boolean;
 
-  @ApiPropertyOptional({ description: 'Whether in-store pickup / walk-in is supported (default true)' })
+  @ApiPropertyOptional({
+    description:
+      'Whether in-store pickup / walk-in is supported (default true)',
+  })
   @IsOptional()
   @IsBoolean()
   isPickupEnabled?: boolean;
 
-  @ApiPropertyOptional({ type: [WorkingHourSlotDto], description: 'Independent delivery schedule' })
+  @ApiPropertyOptional({
+    type: [WorkingHourSlotDto],
+    description: 'Independent delivery schedule',
+  })
   @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
@@ -366,7 +394,11 @@ export class UpdateStaffDto {
   @IsIn(STAFF_PRESETS)
   preset?: StaffPreset;
 
-  @ApiPropertyOptional({ enum: STAFF_ROLES, isArray: true, description: 'Multi-roles: kassir, omborchi, kuryer, menejer' })
+  @ApiPropertyOptional({
+    enum: STAFF_ROLES,
+    isArray: true,
+    description: 'Multi-roles: kassir, omborchi, kuryer, menejer',
+  })
   @IsOptional()
   @IsArray()
   @IsIn(STAFF_ROLES, { each: true })
@@ -391,12 +423,19 @@ export class UpdateStaffDto {
 }
 
 export class CreateInvitationDto {
-  @ApiPropertyOptional({ enum: STAFF_PRESETS, description: 'System preset to grant at invite time' })
+  @ApiPropertyOptional({
+    enum: STAFF_PRESETS,
+    description: 'System preset to grant at invite time',
+  })
   @IsOptional()
   @IsIn(STAFF_PRESETS)
   preset?: StaffPreset;
 
-  @ApiPropertyOptional({ enum: STAFF_ROLES, isArray: true, description: 'Multi-roles: kassir, omborchi, kuryer, menejer' })
+  @ApiPropertyOptional({
+    enum: STAFF_ROLES,
+    isArray: true,
+    description: 'Multi-roles: kassir, omborchi, kuryer, menejer',
+  })
   @IsOptional()
   @IsArray()
   @IsIn(STAFF_ROLES, { each: true })
@@ -408,7 +447,11 @@ export class CreateInvitationDto {
   @IsUUID()
   customPresetId?: string;
 
-  @ApiPropertyOptional({ enum: ALL_STAFF_PERMISSIONS, description: 'Explicit permission list — alternative to preset/customPresetId' })
+  @ApiPropertyOptional({
+    enum: ALL_STAFF_PERMISSIONS,
+    description:
+      'Explicit permission list — alternative to preset/customPresetId',
+  })
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(ALL_STAFF_PERMISSIONS.length)

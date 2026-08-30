@@ -5,7 +5,10 @@ import { Test, TestingModule } from '@nestjs/testing';
 import * as argon2 from 'argon2';
 
 import { AdminUsersService } from '../admin-users/admin-users.service';
-import { AdminRole, AdminUser } from '../admin-users/entities/admin-user.entity';
+import {
+  AdminRole,
+  AdminUser,
+} from '../admin-users/entities/admin-user.entity';
 import { RedisService } from '../redis/redis.service';
 import { SmsService } from '../sms/sms.service';
 import { AdminAuthService } from './admin-auth.service';
@@ -20,7 +23,15 @@ describe('AdminAuthService', () => {
     resetPassword: jest.Mock;
   };
   let jwt: { sign: jest.Mock; verify: jest.Mock };
-  let redis: { client: { get: jest.Mock; setex: jest.Mock; del: jest.Mock; exists: jest.Mock; ttl: jest.Mock } };
+  let redis: {
+    client: {
+      get: jest.Mock;
+      setex: jest.Mock;
+      del: jest.Mock;
+      exists: jest.Mock;
+      ttl: jest.Mock;
+    };
+  };
   let sms: { sendOtp: jest.Mock };
 
   beforeEach(async () => {
@@ -74,9 +85,9 @@ describe('AdminAuthService', () => {
   describe('login', () => {
     it('should throw UnauthorizedException if admin not found', async () => {
       adminUsers.findByUsername.mockResolvedValue(null);
-      await expect(service.login({ username: 'nonexistent', password: 'password123' })).rejects.toThrow(
-        UnauthorizedException,
-      );
+      await expect(
+        service.login({ username: 'nonexistent', password: 'password123' }),
+      ).rejects.toThrow(UnauthorizedException);
     });
 
     it('should throw UnauthorizedException if admin is inactive', async () => {
@@ -88,9 +99,9 @@ describe('AdminAuthService', () => {
       } as AdminUser;
       adminUsers.findByUsername.mockResolvedValue(mockAdmin);
 
-      await expect(service.login({ username: 'inactive_admin', password: 'password123' })).rejects.toThrow(
-        UnauthorizedException,
-      );
+      await expect(
+        service.login({ username: 'inactive_admin', password: 'password123' }),
+      ).rejects.toThrow(UnauthorizedException);
     });
 
     it('should login successfully with valid password and return tokens', async () => {
@@ -107,7 +118,10 @@ describe('AdminAuthService', () => {
 
       adminUsers.findByUsername.mockResolvedValue(mockAdmin);
 
-      const res = await service.login({ username: 'superadmin', password: 'Secret123!' });
+      const res = await service.login({
+        username: 'superadmin',
+        password: 'Secret123!',
+      });
       expect(res.tokens.accessToken).toBe('mock_jwt_token');
       expect(res.admin.username).toBe('superadmin');
       expect(adminUsers.updateLastLogin).toHaveBeenCalledWith('1');
@@ -116,19 +130,31 @@ describe('AdminAuthService', () => {
 
   describe('requestPasswordResetOtp', () => {
     it('should throw BadRequestException if admin has no phone', async () => {
-      const mockAdmin = { id: '1', username: 'admin1', phone: null, isActive: true } as AdminUser;
+      const mockAdmin = {
+        id: '1',
+        username: 'admin1',
+        phone: null,
+        isActive: true,
+      } as AdminUser;
       adminUsers.findByUsername.mockResolvedValue(mockAdmin);
 
-      await expect(service.requestPasswordResetOtp({ identifier: 'admin1' })).rejects.toThrow(
-        BadRequestException,
-      );
+      await expect(
+        service.requestPasswordResetOtp({ identifier: 'admin1' }),
+      ).rejects.toThrow(BadRequestException);
     });
 
     it('should send SMS OTP when admin with phone requests reset', async () => {
-      const mockAdmin = { id: '1', username: 'admin1', phone: '+998901234567', isActive: true } as AdminUser;
+      const mockAdmin = {
+        id: '1',
+        username: 'admin1',
+        phone: '+998901234567',
+        isActive: true,
+      } as AdminUser;
       adminUsers.findByUsername.mockResolvedValue(mockAdmin);
 
-      const res = await service.requestPasswordResetOtp({ identifier: 'admin1' });
+      const res = await service.requestPasswordResetOtp({
+        identifier: 'admin1',
+      });
       expect(res.success).toBe(true);
       expect(sms.sendOtp).toHaveBeenCalled();
       expect(redis.client.setex).toHaveBeenCalled();

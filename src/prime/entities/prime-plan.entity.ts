@@ -1,4 +1,10 @@
-import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
+import {
+  Column,
+  CreateDateColumn,
+  Entity,
+  PrimaryGeneratedColumn,
+  UpdateDateColumn,
+} from 'typeorm';
 import type { LocalizedText } from '../../common/types/localized-text.type';
 
 @Entity({ name: 'prime_plans' })
@@ -6,7 +12,10 @@ export class PrimePlan {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
 
-  @Column({ type: 'jsonb', default: () => "'{\"uz\":\"\",\"kr\":\"\",\"ru\":\"\"}'::jsonb" })
+  @Column({
+    type: 'jsonb',
+    default: () => '\'{"uz":"","kr":"","ru":""}\'::jsonb',
+  })
   name!: LocalizedText;
 
   @Column({ type: 'decimal', precision: 15, scale: 2 })

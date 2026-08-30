@@ -68,27 +68,32 @@ const DEFAULTS: Record<string, { value: string; description: string }> = {
   },
   [SETTING_KEYS.DELIVERY_MXIK_CODE]: {
     value: '10105001002000000',
-    description: "Yetkazib berish xizmati MXIK kodi (tasnif: 'Kuryerlik xizmati')",
+    description:
+      "Yetkazib berish xizmati MXIK kodi (tasnif: 'Kuryerlik xizmati')",
   },
   [SETTING_KEYS.DIDOX_USER_KEY]: {
     value: '',
-    description: "Didox API kaliti (user-key) — Soliq ma'lumotlarini avtomatik tekshirish uchun",
+    description:
+      "Didox API kaliti (user-key) — Soliq ma'lumotlarini avtomatik tekshirish uchun",
   },
   [SETTING_KEYS.DIDOX_API_URL]: {
     value: 'https://api.didox.uz',
-    description: "Didox API asosiy manzili (masalan: https://api.didox.uz)",
+    description: 'Didox API asosiy manzili (masalan: https://api.didox.uz)',
   },
   [SETTING_KEYS.RISK_DELIVERED_MAX_DISTANCE_M]: {
     value: '300',
-    description: '"Yetkazildi" tugmasi bosilgan joy manzildan qancha uzoq bo\'lsa flag (metr)',
+    description:
+      '"Yetkazildi" tugmasi bosilgan joy manzildan qancha uzoq bo\'lsa flag (metr)',
   },
   [SETTING_KEYS.RISK_EVIDENCE_MAX_ACCURACY_M]: {
     value: '150',
-    description: 'GPS aniqligi bundan yomon bo\'lsa masofa qoidasi ishlamaydi (metr)',
+    description:
+      "GPS aniqligi bundan yomon bo'lsa masofa qoidasi ishlamaydi (metr)",
   },
   [SETTING_KEYS.RISK_PICKUP_MAX_DISTANCE_M]: {
     value: '400',
-    description: 'Kuryer "yo\'lga chiqdim" bosgan joy do\'kondan uzoqligi (metr)',
+    description:
+      'Kuryer "yo\'lga chiqdim" bosgan joy do\'kondan uzoqligi (metr)',
   },
   [SETTING_KEYS.RISK_IMPOSSIBLE_SPEED_KMH]: {
     value: '120',
@@ -96,7 +101,8 @@ const DEFAULTS: Record<string, { value: string; description: string }> = {
   },
   [SETTING_KEYS.RISK_IMPOSSIBLE_MIN_SEGMENT_M]: {
     value: '1000',
-    description: "Bundan qisqa masofada tezlik tekshirilmaydi — GPS sakrashi (metr)",
+    description:
+      'Bundan qisqa masofada tezlik tekshirilmaydi — GPS sakrashi (metr)',
   },
   [SETTING_KEYS.RISK_LOW_RATING_THRESHOLD]: {
     value: '2',
@@ -104,7 +110,8 @@ const DEFAULTS: Record<string, { value: string; description: string }> = {
   },
   [SETTING_KEYS.RISK_ADDRESS_PIN_MAX_DISTANCE_M]: {
     value: '0',
-    description: "Saqlangan manzil pini qurilma GPSidan uzoqligi (metr). 0 = o'chirilgan",
+    description:
+      "Saqlangan manzil pini qurilma GPSidan uzoqligi (metr). 0 = o'chirilgan",
   },
   [SETTING_KEYS.RISK_SHOP_RELOCATION_MAX_M]: {
     value: '500',
@@ -116,7 +123,7 @@ const DEFAULTS: Record<string, { value: string; description: string }> = {
   },
   [SETTING_KEYS.RISK_PING_RETENTION_DAYS]: {
     value: '90',
-    description: "Kuryer marshruti saqlanish muddati (kun)",
+    description: 'Kuryer marshruti saqlanish muddati (kun)',
   },
   [SETTING_KEYS.RISK_PING_MIN_INTERVAL_SEC]: {
     value: '5',
@@ -124,7 +131,8 @@ const DEFAULTS: Record<string, { value: string; description: string }> = {
   },
   [SETTING_KEYS.RISK_QR_HANDSHAKE_ENABLED]: {
     value: '1',
-    description: "Bayrog'i tasdiqlangan kuryerga QR-tasdiq talab qilinsinmi (1/0)",
+    description:
+      "Bayrog'i tasdiqlangan kuryerga QR-tasdiq talab qilinsinmi (1/0)",
   },
 };
 
@@ -319,22 +327,33 @@ export class SettingsService implements OnModuleInit {
   /**
    * Super Admin Didox API kalitini kiritganda ulanishni tekshirish uchun.
    */
-  async testDidox(userKey?: string, tin = '313296455'): Promise<{
+  async testDidox(
+    userKey?: string,
+    tin = '313296455',
+  ): Promise<{
     success: boolean;
     status: number;
     data?: any;
     error?: string;
     message: string;
   }> {
-    const key = (userKey || this.get(SETTING_KEYS.DIDOX_USER_KEY) || process.env.DIDOX_USER_KEY || '').trim();
+    const key = (
+      userKey ||
+      this.get(SETTING_KEYS.DIDOX_USER_KEY) ||
+      process.env.DIDOX_USER_KEY ||
+      ''
+    ).trim();
     if (!key) {
       return {
         success: false,
         status: 400,
-        message: 'Didox API kaliti kiritilmagan. Iltimos, Didox kabinetingizdagi user-key ni kiriting.',
+        message:
+          'Didox API kaliti kiritilmagan. Iltimos, Didox kabinetingizdagi user-key ni kiriting.',
       };
     }
-    const apiUrl = (this.get(SETTING_KEYS.DIDOX_API_URL) || 'https://api.didox.uz').replace(/\/+$/, '');
+    const apiUrl = (
+      this.get(SETTING_KEYS.DIDOX_API_URL) || 'https://api.didox.uz'
+    ).replace(/\/+$/, '');
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 8000);
@@ -342,15 +361,15 @@ export class SettingsService implements OnModuleInit {
         signal: controller.signal,
         headers: {
           'user-key': key,
-          'Accept': 'application/json',
+          Accept: 'application/json',
           'User-Agent': 'YaqinMarket/1.0',
         },
       });
       clearTimeout(timeout);
       const text = await res.text();
-      let json: any;
+      let json: Record<string, unknown>;
       try {
-        json = JSON.parse(text);
+        json = JSON.parse(text) as Record<string, unknown>;
       } catch {
         json = { raw: text };
       }
@@ -360,22 +379,25 @@ export class SettingsService implements OnModuleInit {
           success: true,
           status: res.status,
           data: json,
-          message: "Didox & Soliq API ga muvaffaqiyatli ulandi! Ma'lumotlar to'g'ri qabul qilinmoqda.",
+          message:
+            "Didox & Soliq API ga muvaffaqiyatli ulandi! Ma'lumotlar to'g'ri qabul qilinmoqda.",
         };
       } else {
+        const errorMsg = String(json.message || json.error || text);
         return {
           success: false,
           status: res.status,
-          error: json?.message || json?.error || text,
-          message: `Didox xatolik qaytardi (${res.status}): ${json?.message || json?.error || 'Token noto\'g\'ri yoki muddati o\'tgan'}`,
+          error: errorMsg,
+          message: `Didox xatolik qaytardi (${res.status}): ${errorMsg || "Token noto'g'ri yoki muddati o'tgan"}`,
         };
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
       return {
         success: false,
         status: 500,
-        error: err.message,
-        message: `Didox serveriga ulanishda xatolik: ${err.message}`,
+        error: errorMsg,
+        message: `Didox serveriga ulanishda xatolik: ${errorMsg}`,
       };
     }
   }

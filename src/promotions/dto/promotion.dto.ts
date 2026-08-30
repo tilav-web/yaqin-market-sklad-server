@@ -11,7 +11,11 @@ import {
   ValidateIf,
 } from 'class-validator';
 
-const PROMOTION_TYPES = ['product_discount', 'category_discount', 'free_delivery'] as const;
+const PROMOTION_TYPES = [
+  'product_discount',
+  'category_discount',
+  'free_delivery',
+] as const;
 const DISCOUNT_TYPES = ['percent', 'fixed'] as const;
 
 export class CreatePromotionDto {

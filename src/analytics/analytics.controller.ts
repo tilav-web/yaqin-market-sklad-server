@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 import { Role } from '../auth/role.enum';
@@ -51,7 +59,10 @@ export class AnalyticsEventsController {
   constructor(private readonly analytics: AnalyticsService) {}
 
   @Post('events')
-  logEvents(@CurrentUser() user: JwtPayload, @Body() dto: LogAnalyticsEventsDto) {
+  logEvents(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: LogAnalyticsEventsDto,
+  ) {
     return this.analytics.logEvents(user.sub, dto.events);
   }
 }
@@ -68,7 +79,8 @@ export class AnalyticsController {
     @Param('shopId', ParseUUIDPipe) shopId: string,
     @Query('period') period?: string,
   ) {
-    const p: StatsPeriod = period === 'today' || period === '7d' || period === '30d' ? period : '7d';
+    const p: StatsPeriod =
+      period === 'today' || period === '7d' || period === '30d' ? period : '7d';
     return this.analytics.stats(user.sub, shopId, p);
   }
 

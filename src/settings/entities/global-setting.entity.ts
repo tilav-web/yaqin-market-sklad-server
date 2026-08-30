@@ -62,7 +62,10 @@ export const STRING_SETTING_KEYS: Record<
   [SETTING_KEYS.FISCAL_MODE]: { allowedValues: ['off', 'collect', 'live'] },
   [SETTING_KEYS.PLATFORM_LEGAL_NAME]: {},
   // Yuridik shaxs STIRi (INN) — O'zbekistonda 9 xonali raqam.
-  [SETTING_KEYS.PLATFORM_STIR]: { pattern: /^\d{9}$/, patternHint: '9 xonali raqam' },
+  [SETTING_KEYS.PLATFORM_STIR]: {
+    pattern: /^\d{9}$/,
+    patternHint: '9 xonali raqam',
+  },
   [SETTING_KEYS.DELIVERY_MXIK_CODE]: {},
   [SETTING_KEYS.DIDOX_USER_KEY]: {},
   [SETTING_KEYS.DIDOX_API_URL]: {},

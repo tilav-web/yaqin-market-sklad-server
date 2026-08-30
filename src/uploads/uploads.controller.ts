@@ -45,10 +45,14 @@ export class UploadsController {
   // Wildcard so nested keys work too (e.g. seed/shop-0.jpg, apk/...).
   @Public()
   @Get('*key')
-  async getImage(@Param('key') key: string | string[], @Res() res: Response): Promise<void> {
+  async getImage(
+    @Param('key') key: string | string[],
+    @Res() res: Response,
+  ): Promise<void> {
     const objectKey = Array.isArray(key) ? key.join('/') : key;
     try {
-      const { stream, contentType, size } = await this.uploads.getObject(objectKey);
+      const { stream, contentType, size } =
+        await this.uploads.getObject(objectKey);
       res.setHeader('Content-Type', contentType);
       res.setHeader('Content-Length', size);
       res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');

@@ -36,7 +36,10 @@ export class NotificationsService {
 
   // ---- User inbox ---------------------------------------------------------
 
-  listForUser(userId: string, opts: { unreadOnly?: boolean; limit?: number; offset?: number }): Promise<Notification[]> {
+  listForUser(
+    userId: string,
+    opts: { unreadOnly?: boolean; limit?: number; offset?: number },
+  ): Promise<Notification[]> {
     const where = opts.unreadOnly ? { userId, isRead: false } : { userId };
     return this.notifications.find({
       where,
@@ -55,7 +58,10 @@ export class NotificationsService {
   }
 
   async markAllRead(userId: string): Promise<void> {
-    await this.notifications.update({ userId, isRead: false }, { isRead: true });
+    await this.notifications.update(
+      { userId, isRead: false },
+      { isRead: true },
+    );
   }
 
   // ---- Admin broadcast ----------------------------------------------------
@@ -65,11 +71,18 @@ export class NotificationsService {
    * + push; for "all", anonymous devices also receive the push (no inbox, since
    * they have no account yet — once they register, future pushes are saved).
    */
-  async broadcast(input: BroadcastInput): Promise<{ registered: number; pushedTokens: number }> {
+  async broadcast(
+    input: BroadcastInput,
+  ): Promise<{ registered: number; pushedTokens: number }> {
     const payload = {
       title: input.title,
       body: input.body,
-      data: { kind: 'admin', ...(input.deepLink ? { deepLink: input.deepLink } : {}), ...(input.richBody ? { richBody: input.richBody } : {}), ...input.data },
+      data: {
+        kind: 'admin',
+        ...(input.deepLink ? { deepLink: input.deepLink } : {}),
+        ...(input.richBody ? { richBody: input.richBody } : {}),
+        ...input.data,
+      },
       imageUrl: input.imageUrl,
     };
 
@@ -85,11 +98,23 @@ export class NotificationsService {
       }
       userIds = [...new Set(userIds)];
     } else if (input.audience === 'sellers') {
-      userIds = (await this.users.find({ where: { isSellerApproved: true }, select: { id: true } })).map((u) => u.id);
+      userIds = (
+        await this.users.find({
+          where: { isSellerApproved: true },
+          select: { id: true },
+        })
+      ).map((u) => u.id);
     } else if (input.audience === 'customers') {
-      userIds = (await this.users.find({ where: { isSellerApproved: false, isAdmin: false }, select: { id: true } })).map((u) => u.id);
+      userIds = (
+        await this.users.find({
+          where: { isSellerApproved: false, isAdmin: false },
+          select: { id: true },
+        })
+      ).map((u) => u.id);
     } else {
-      userIds = (await this.users.find({ select: { id: true } })).map((u) => u.id);
+      userIds = (await this.users.find({ select: { id: true } })).map(
+        (u) => u.id,
+      );
     }
 
     await this.push.saveInbox(userIds, payload);
@@ -116,8 +141,22 @@ export class NotificationsService {
   }
 
   createTemplate(dto: any): Promise<NotificationTemplate> {
-    const title = toLocalizedText(dto.titleI18n || { uz: dto.titleUzLatn, kr: dto.titleUzCyrl, ru: dto.titleRu } || dto.title);
-    const body = toLocalizedText(dto.bodyI18n || { uz: dto.bodyUzLatn, kr: dto.bodyUzCyrl, ru: dto.bodyRu } || dto.body);
+    const title = toLocalizedText(
+      dto.titleI18n || {
+          uz: dto.titleUzLatn,
+          kr: dto.titleUzCyrl,
+          ru: dto.titleRu,
+        } ||
+        dto.title,
+    );
+    const body = toLocalizedText(
+      dto.bodyI18n || {
+          uz: dto.bodyUzLatn,
+          kr: dto.bodyUzCyrl,
+          ru: dto.bodyRu,
+        } ||
+        dto.body,
+    );
     const t = this.templates.create({
       name: dto.name,
       title,
@@ -132,8 +171,17 @@ export class NotificationsService {
     const t = await this.templates.findOne({ where: { id } });
     if (!t) throw new NotFoundException('Shablon topilmadi');
     if (dto.name !== undefined) t.name = dto.name;
-    if (dto.title !== undefined || dto.titleUzLatn !== undefined || dto.titleUzCyrl !== undefined || dto.titleRu !== undefined || dto.titleI18n !== undefined) {
-      const cur = typeof t.title === 'object' ? t.title : { uz: t.title || '', kr: '', ru: '' };
+    if (
+      dto.title !== undefined ||
+      dto.titleUzLatn !== undefined ||
+      dto.titleUzCyrl !== undefined ||
+      dto.titleRu !== undefined ||
+      dto.titleI18n !== undefined
+    ) {
+      const cur =
+        typeof t.title === 'object'
+          ? t.title
+          : { uz: t.title || '', kr: '', ru: '' };
       t.title = toLocalizedText(
         dto.titleI18n || {
           uz: dto.titleUzLatn ?? dto.title ?? cur?.uz,
@@ -142,8 +190,17 @@ export class NotificationsService {
         },
       );
     }
-    if (dto.body !== undefined || dto.bodyUzLatn !== undefined || dto.bodyUzCyrl !== undefined || dto.bodyRu !== undefined || dto.bodyI18n !== undefined) {
-      const cur = typeof t.body === 'object' ? t.body : { uz: t.body || '', kr: '', ru: '' };
+    if (
+      dto.body !== undefined ||
+      dto.bodyUzLatn !== undefined ||
+      dto.bodyUzCyrl !== undefined ||
+      dto.bodyRu !== undefined ||
+      dto.bodyI18n !== undefined
+    ) {
+      const cur =
+        typeof t.body === 'object'
+          ? t.body
+          : { uz: t.body || '', kr: '', ru: '' };
       t.body = toLocalizedText(
         dto.bodyI18n || {
           uz: dto.bodyUzLatn ?? dto.body ?? cur?.uz,

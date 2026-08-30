@@ -1,16 +1,26 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Between, In, Repository } from 'typeorm';
 
 import { GlobalProduct } from '../products/entities/global-product.entity';
-import { InventoryMovement, MovementType } from '../products/entities/inventory-movement.entity';
+import {
+  InventoryMovement,
+  MovementType,
+} from '../products/entities/inventory-movement.entity';
 import { ProductVariant } from '../products/entities/product-variant.entity';
 import { StockBatch } from '../products/entities/stock-batch.entity';
 import { OrderItem } from '../orders/entities/order-item.entity';
 import { Order, OrderStatus } from '../orders/entities/order.entity';
 import { Shop } from '../shops/entities/shop.entity';
 import { User } from '../users/entities/user.entity';
-import { AnalyticsEvent, AnalyticsEventType } from './entities/analytics-event.entity';
+import {
+  AnalyticsEvent,
+  AnalyticsEventType,
+} from './entities/analytics-event.entity';
 
 export type StatsPeriod = 'today' | '7d' | '30d';
 
@@ -90,7 +100,11 @@ export class AnalyticsService {
    */
   async logEvents(
     userId: string | null,
-    items: { type: AnalyticsEventType; shopId: string; productVariantId?: string }[],
+    items: {
+      type: AnalyticsEventType;
+      shopId: string;
+      productVariantId?: string;
+    }[],
   ): Promise<void> {
     if (!items.length) return;
     await this.events.insert(
@@ -110,7 +124,10 @@ export class AnalyticsService {
    * separate concern already covered by the dashboard/timeline endpoints).
    * MVP scope: aggregate totals only, no per-user/session funnel tracking.
    */
-  async funnel(from?: string, to?: string): Promise<{
+  async funnel(
+    from?: string,
+    to?: string,
+  ): Promise<{
     from: string;
     to: string;
     productViews: number;
@@ -118,14 +135,22 @@ export class AnalyticsService {
     orders: number;
   }> {
     const toDate = to ? new Date(to) : new Date();
-    const fromDate = from ? new Date(from) : new Date(toDate.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const fromDate = from
+      ? new Date(from)
+      : new Date(toDate.getTime() - 30 * 24 * 60 * 60 * 1000);
 
     const [productViews, addToCart, orders] = await Promise.all([
       this.events.count({
-        where: { type: AnalyticsEventType.ProductView, createdAt: Between(fromDate, toDate) },
+        where: {
+          type: AnalyticsEventType.ProductView,
+          createdAt: Between(fromDate, toDate),
+        },
       }),
       this.events.count({
-        where: { type: AnalyticsEventType.AddToCart, createdAt: Between(fromDate, toDate) },
+        where: {
+          type: AnalyticsEventType.AddToCart,
+          createdAt: Between(fromDate, toDate),
+        },
       }),
       this.orders.count({ where: { createdAt: Between(fromDate, toDate) } }),
     ]);
@@ -141,7 +166,7 @@ export class AnalyticsService {
 
   private async ensureOwned(userId: string, shopId: string): Promise<void> {
     const shop = await this.shops.findOne({ where: { id: shopId } });
-    if (!shop) throw new NotFoundException('Do\'kon topilmadi');
+    if (!shop) throw new NotFoundException("Do'kon topilmadi");
     if (shop.ownerId !== userId) throw new ForbiddenException();
   }
 
@@ -157,7 +182,11 @@ export class AnalyticsService {
   }
 
   /** Sales + profit dashboard for delivered orders within the period. */
-  async stats(userId: string, shopId: string, period: StatsPeriod): Promise<StatsResult> {
+  async stats(
+    userId: string,
+    shopId: string,
+    period: StatsPeriod,
+  ): Promise<StatsResult> {
     await this.ensureOwned(userId, shopId);
     const start = this.periodStart(period);
 
@@ -165,14 +194,22 @@ export class AnalyticsService {
     const agg = await this.items
       .createQueryBuilder('it')
       .innerJoin(Order, 'o', 'o.id = it.orderId')
-      .select('COALESCE(SUM(it.unitPrice * (it.quantity - it.returnedQuantity)), 0)', 'revenue')
+      .select(
+        'COALESCE(SUM(it.unitPrice * (it.quantity - it.returnedQuantity)), 0)',
+        'revenue',
+      )
       .addSelect('COALESCE(SUM(it.costOfGoods), 0)', 'cogs')
       .addSelect('COALESCE(SUM(it.quantity - it.returnedQuantity), 0)', 'qty')
       .addSelect('COUNT(DISTINCT o.id)', 'orders')
       .where('o.shopId = :shopId', { shopId })
       .andWhere('o.status = :st', { st: OrderStatus.Delivered })
       .andWhere('o.createdAt >= :start', { start })
-      .getRawOne<{ revenue: string; cogs: string; qty: string; orders: string }>();
+      .getRawOne<{
+        revenue: string;
+        cogs: string;
+        qty: string;
+        orders: string;
+      }>();
 
     const revenue = Number(agg?.revenue ?? 0);
     const cogs = Number(agg?.cogs ?? 0);
@@ -182,7 +219,10 @@ export class AnalyticsService {
       .innerJoin(Order, 'o', 'o.id = it.orderId')
       .select('it.productName', 'name')
       .addSelect('SUM(it.quantity - it.returnedQuantity)', 'qty')
-      .addSelect('SUM(it.unitPrice * (it.quantity - it.returnedQuantity))', 'revenue')
+      .addSelect(
+        'SUM(it.unitPrice * (it.quantity - it.returnedQuantity))',
+        'revenue',
+      )
       .where('o.shopId = :shopId', { shopId })
       .andWhere('o.status = :st', { st: OrderStatus.Delivered })
       .andWhere('o.createdAt >= :start', { start })
@@ -221,14 +261,21 @@ export class AnalyticsService {
     await this.ensureOwned(userId, shopId);
     const start = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
-    const variants = await this.variants.find({ where: { shopId, isActive: true } });
+    const variants = await this.variants.find({
+      where: { shopId, isActive: true },
+    });
     if (variants.length === 0) return [];
     const gpIds = [...new Set(variants.map((v) => v.globalProductId))];
     const gps = await this.globalProducts.findBy({ id: In(gpIds) });
     const gpNameMap = new Map(
-      gps.map((gp) => [gp.id, typeof gp.name === 'object' ? gp.name?.uz || '' : (gp.name ?? '')]),
+      gps.map((gp) => [
+        gp.id,
+        typeof gp.name === 'object' ? gp.name?.uz || '' : (gp.name ?? ''),
+      ]),
     );
-    const variantNameMap = new Map(variants.map((v) => [v.id, gpNameMap.get(v.globalProductId) ?? '']));
+    const variantNameMap = new Map(
+      variants.map((v) => [v.id, gpNameMap.get(v.globalProductId) ?? '']),
+    );
 
     // Units sold per variant over the last 30 days (from the movement ledger).
     // NET demand = sold − returned/cancelled, so cancelled orders don't inflate
@@ -237,16 +284,25 @@ export class AnalyticsService {
       .createQueryBuilder('m')
       .select('m.productVariantId', 'vid')
       .addSelect(
-        "SUM(CASE WHEN m.type = :sold THEN m.quantity WHEN m.type = :returned THEN -m.quantity ELSE 0 END)",
+        'SUM(CASE WHEN m.type = :sold THEN m.quantity WHEN m.type = :returned THEN -m.quantity ELSE 0 END)',
         'qty',
       )
-      .where('m.productVariantId IN (:...ids)', { ids: variants.map((v) => v.id) })
-      .andWhere('m.type IN (:...types)', { types: [MovementType.Sold, MovementType.Returned] })
+      .where('m.productVariantId IN (:...ids)', {
+        ids: variants.map((v) => v.id),
+      })
+      .andWhere('m.type IN (:...types)', {
+        types: [MovementType.Sold, MovementType.Returned],
+      })
       .andWhere('m.createdAt >= :start', { start })
-      .setParameters({ sold: MovementType.Sold, returned: MovementType.Returned })
+      .setParameters({
+        sold: MovementType.Sold,
+        returned: MovementType.Returned,
+      })
       .groupBy('m.productVariantId')
       .getRawMany<{ vid: string; qty: string }>();
-    const soldMap = new Map(soldRows.map((r) => [r.vid, Math.max(0, Number(r.qty))]));
+    const soldMap = new Map(
+      soldRows.map((r) => [r.vid, Math.max(0, Number(r.qty))]),
+    );
 
     // Next FIFO cost per variant (cost to restock estimate).
     const heads = await this.batches
@@ -257,7 +313,9 @@ export class AnalyticsService {
       .addOrderBy('b.receivedAt', 'ASC')
       .getMany();
     const costMap = new Map<string, number>();
-    for (const b of heads) if (!costMap.has(b.productVariantId)) costMap.set(b.productVariantId, b.costPrice);
+    for (const b of heads)
+      if (!costMap.has(b.productVariantId))
+        costMap.set(b.productVariantId, b.costPrice);
 
     const out: ReorderItem[] = [];
     for (const v of variants) {
@@ -291,7 +349,11 @@ export class AnalyticsService {
   }
 
   /** Batches expiring within `days` (or already expired), soonest first. */
-  async expiring(userId: string, shopId: string, days: number): Promise<ExpiringItem[]> {
+  async expiring(
+    userId: string,
+    shopId: string,
+    days: number,
+  ): Promise<ExpiringItem[]> {
     await this.ensureOwned(userId, shopId);
     const cutoff = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
 
@@ -308,20 +370,32 @@ export class AnalyticsService {
       .andWhere('b.expiryDate IS NOT NULL')
       .andWhere('b.expiryDate <= :cutoff', { cutoff })
       .orderBy('b.expiryDate', 'ASC')
-      .getRawMany<{ id: string; vid: string; name: string; qty: number; cost: number; expiry: string }>();
+      .getRawMany<{
+        id: string;
+        vid: string;
+        name: string;
+        qty: number;
+        cost: number;
+        expiry: string;
+      }>();
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     return rows.map((r) => {
       const exp = new Date(r.expiry);
-      const daysToExpiry = Math.round((exp.getTime() - today.getTime()) / (24 * 60 * 60 * 1000));
+      const daysToExpiry = Math.round(
+        (exp.getTime() - today.getTime()) / (24 * 60 * 60 * 1000),
+      );
       return {
         batchId: r.id,
         variantId: r.vid,
         name: r.name,
         quantityRemaining: Number(r.qty),
         costPrice: Number(r.cost),
-        expiryDate: typeof r.expiry === 'string' ? r.expiry.slice(0, 10) : exp.toISOString().slice(0, 10),
+        expiryDate:
+          typeof r.expiry === 'string'
+            ? r.expiry.slice(0, 10)
+            : exp.toISOString().slice(0, 10),
         daysToExpiry,
       };
     });
@@ -330,19 +404,31 @@ export class AnalyticsService {
   /** Platform-wide dashboard stats for admin. */
   async adminDashboard(): Promise<AdminDashboardStats> {
     const now = new Date();
-    const startOfDay = new Date(now); startOfDay.setHours(0, 0, 0, 0);
+    const startOfDay = new Date(now);
+    startOfDay.setHours(0, 0, 0, 0);
     const start7d = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-    const [totalUsers, totalSellers, totalShops, totalOrders] = await Promise.all([
-      this.users.count(),
-      this.users.count({ where: { isSellerApproved: true } }),
-      this.shops.count(),
-      this.orders.count({ where: { status: OrderStatus.Delivered } }),
-    ]);
+    const [totalUsers, totalSellers, totalShops, totalOrders] =
+      await Promise.all([
+        this.users.count(),
+        this.users.count({ where: { isSellerApproved: true } }),
+        this.shops.count(),
+        this.orders.count({ where: { status: OrderStatus.Delivered } }),
+      ]);
 
     const [ordersToday, orders7d] = await Promise.all([
-      this.orders.count({ where: { status: OrderStatus.Delivered, createdAt: require('typeorm').MoreThanOrEqual(startOfDay) } }),
-      this.orders.count({ where: { status: OrderStatus.Delivered, createdAt: require('typeorm').MoreThanOrEqual(start7d) } }),
+      this.orders.count({
+        where: {
+          status: OrderStatus.Delivered,
+          createdAt: require('typeorm').MoreThanOrEqual(startOfDay),
+        },
+      }),
+      this.orders.count({
+        where: {
+          status: OrderStatus.Delivered,
+          createdAt: require('typeorm').MoreThanOrEqual(start7d),
+        },
+      }),
     ]);
 
     const gmvRows = await this.orders
@@ -380,7 +466,11 @@ export class AnalyticsService {
   }
 
   /** Top shops by delivered order count and GMV, last 30 days. */
-  async topShops(limit = 10): Promise<Array<{ shopId: string; shopName: string; orderCount: number; gmv: number }>> {
+  async topShops(
+    limit = 10,
+  ): Promise<
+    Array<{ shopId: string; shopName: string; orderCount: number; gmv: number }>
+  > {
     const start30d = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const rows = await this.orders
       .createQueryBuilder('o')
@@ -396,7 +486,12 @@ export class AnalyticsService {
       .groupBy('o.shopId, s.name')
       .orderBy('"orderCount"', 'DESC')
       .limit(limit)
-      .getRawMany<{ shopId: string; shopName: string; orderCount: string; gmv: string }>();
+      .getRawMany<{
+        shopId: string;
+        shopName: string;
+        orderCount: string;
+        gmv: string;
+      }>();
 
     return rows.map((r) => ({
       shopId: r.shopId,
@@ -407,7 +502,14 @@ export class AnalyticsService {
   }
 
   /** Top products by quantity sold, last 30 days. */
-  async topProducts(limit = 10): Promise<Array<{ productName: string; shopName: string; qtySold: number; revenue: number }>> {
+  async topProducts(limit = 10): Promise<
+    Array<{
+      productName: string;
+      shopName: string;
+      qtySold: number;
+      revenue: number;
+    }>
+  > {
     const start30d = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const rows = await this.orders.manager
       .createQueryBuilder()
@@ -425,7 +527,12 @@ export class AnalyticsService {
       .groupBy('oi."productName", s.name')
       .orderBy('"qtySold"', 'DESC')
       .limit(limit)
-      .getRawMany<{ productName: string; shopName: string; qtySold: string; revenue: string }>();
+      .getRawMany<{
+        productName: string;
+        shopName: string;
+        qtySold: string;
+        revenue: string;
+      }>();
 
     return rows.map((r) => ({
       productName: r.productName,
@@ -436,19 +543,21 @@ export class AnalyticsService {
   }
 
   /** Daily order count and GMV for the last N days. */
-  async ordersTimeline(days = 30): Promise<Array<{ date: string; count: number; gmv: number }>> {
+  async ordersTimeline(
+    days = 30,
+  ): Promise<Array<{ date: string; count: number; gmv: number }>> {
     const start = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
     const rows = await this.orders.manager
       .createQueryBuilder()
       .select([
-        "DATE_TRUNC('day', o.\"createdAt\")::date::text AS date",
+        'DATE_TRUNC(\'day\', o."createdAt")::date::text AS date',
         'COUNT(o.id) AS count',
         'COALESCE(SUM(o.total), 0) AS gmv',
       ])
       .from('orders', 'o')
       .where("o.status = 'delivered'")
       .andWhere('o."createdAt" >= :start', { start })
-      .groupBy("DATE_TRUNC('day', o.\"createdAt\")")
+      .groupBy('DATE_TRUNC(\'day\', o."createdAt")')
       .orderBy('date', 'ASC')
       .getRawMany<{ date: string; count: string; gmv: string }>();
 

@@ -12,13 +12,21 @@ import { DataSource, IsNull, Repository } from 'typeorm';
 
 import type { EnvironmentVariables } from '../config/configuration';
 import { FiscalService } from '../fiscal/fiscal.service';
-import { Order, PaymentMethod, PaymentStatus, isTerminalOrderStatus } from '../orders/entities/order.entity';
+import {
+  Order,
+  PaymentMethod,
+  PaymentStatus,
+  isTerminalOrderStatus,
+} from '../orders/entities/order.entity';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { SETTING_KEYS } from '../settings/entities/global-setting.entity';
 import { SettingsService } from '../settings/settings.service';
 import { ClickMerchantService } from './click-merchant.service';
 import { ClickWebhookDto } from './click-webhook.dto';
-import { ClickPaymentTransaction, ClickTxStatus } from './click-payment-transaction.entity';
+import {
+  ClickPaymentTransaction,
+  ClickTxStatus,
+} from './click-payment-transaction.entity';
 
 type ClickResponse = {
   click_trans_id?: string;
@@ -72,14 +80,21 @@ export class ClickService {
     const order = await this.orderRepo.findOne({ where: { id: orderId } });
     if (!order) return false;
     if (order.refundedAt) return true;
-    if (order.paymentMethod !== PaymentMethod.ClickOnline || order.paymentStatus !== PaymentStatus.Paid) {
+    if (
+      order.paymentMethod !== PaymentMethod.ClickOnline ||
+      order.paymentStatus !== PaymentStatus.Paid
+    ) {
       return false;
     }
 
-    const tx = await this.txRepo.findOne({ where: { orderId, status: ClickTxStatus.Success } });
+    const tx = await this.txRepo.findOne({
+      where: { orderId, status: ClickTxStatus.Success },
+    });
     const paymentId = tx?.clickPaymentId ?? tx?.clickPaydocId ?? null;
     if (!paymentId) {
-      this.logger.warn(`refundPaidOrder: order ${orderId} has no Click payment_id — manual reversal needed`);
+      this.logger.warn(
+        `refundPaidOrder: order ${orderId} has no Click payment_id — manual reversal needed`,
+      );
       return false;
     }
 
@@ -94,9 +109,15 @@ export class ClickService {
 
     // IsNull guard: a concurrent refund attempt (cancel path racing the retry
     // cron) must not stamp twice.
-    const stamped = await this.orderRepo.update({ id: orderId, refundedAt: IsNull() }, { refundedAt: new Date() });
-    this.logger.log(`Order ${orderId}: Click payment ${paymentId} reversed to the customer's card`);
-    if (order.userId) this.realtime.emitToUser(order.userId, 'order:refunded', { orderId });
+    const stamped = await this.orderRepo.update(
+      { id: orderId, refundedAt: IsNull() },
+      { refundedAt: new Date() },
+    );
+    this.logger.log(
+      `Order ${orderId}: Click payment ${paymentId} reversed to the customer's card`,
+    );
+    if (order.userId)
+      this.realtime.emitToUser(order.userId, 'order:refunded', { orderId });
     // Pul qaytdi → qaytarish cheki (asl sotuv chekini soliq tizimida bekor
     // qiladi; mijoz cashback olgan bo'lsa uni soliq tizimi o'zi qaytarib
     // oladi). Faqat birinchi stamplagan chaqiruv chiqaradi — poyga yo'q.
@@ -105,35 +126,67 @@ export class ClickService {
   }
 
   /** Returns the Click payment URL for an order. */
-  async getPaymentUrl(orderId: string, userId: string): Promise<{ url: string }> {
-    const order = await this.orderRepo.findOne({ where: { id: orderId, userId } });
+  async getPaymentUrl(
+    orderId: string,
+    userId: string,
+  ): Promise<{ url: string }> {
+    const order = await this.orderRepo.findOne({
+      where: { id: orderId, userId },
+    });
     if (!order) throw new NotFoundException('Buyurtma topilmadi');
     if (order.paymentMethod !== PaymentMethod.ClickOnline) {
-      throw new BadRequestException('Bu buyurtma uchun online to\'lov yoqilmagan');
+      throw new BadRequestException(
+        "Bu buyurtma uchun online to'lov yoqilmagan",
+      );
     }
     if (order.paymentStatus === PaymentStatus.Paid) {
-      throw new BadRequestException('Buyurtma allaqachon to\'langan');
+      throw new BadRequestException("Buyurtma allaqachon to'langan");
     }
     if (isTerminalOrderStatus(order.status)) {
-      throw new BadRequestException('Bekor qilingan buyurtma uchun to\'lov qilib bo\'lmaydi');
+      throw new BadRequestException(
+        "Bekor qilingan buyurtma uchun to'lov qilib bo'lmaydi",
+      );
     }
     return { url: this.buildUrl(order.id, order.total) };
   }
 
   async prepare(dto: ClickWebhookDto): Promise<ClickResponse> {
-    const { click_trans_id, click_paydoc_id, merchant_trans_id, amount, action, sign_string, sign_time, service_id } = dto;
+    const {
+      click_trans_id,
+      click_paydoc_id,
+      merchant_trans_id,
+      amount,
+      action,
+      sign_string,
+      sign_time,
+      service_id,
+    } = dto;
 
     const cfgErr = this.checkConfig(service_id);
     if (cfgErr) return cfgErr;
     if (action !== '0') return errRes(ERR.ACTION_NOT_FOUND, 'action must be 0');
-    if (!this.checkSign({ click_trans_id, service_id, merchant_trans_id, amount, action, sign_time, sign_string })) {
+    if (
+      !this.checkSign({
+        click_trans_id,
+        service_id,
+        merchant_trans_id,
+        amount,
+        action,
+        sign_time,
+        sign_string,
+      })
+    ) {
       return errRes(ERR.SIGN_FAILED, 'sign check failed');
     }
 
-    const order = await this.orderRepo.findOne({ where: { id: merchant_trans_id } });
+    const order = await this.orderRepo.findOne({
+      where: { id: merchant_trans_id },
+    });
     if (!order) return errRes(ERR.TX_NOT_FOUND, 'order not found');
-    if (order.paymentStatus === PaymentStatus.Paid) return errRes(ERR.ALREADY_PAID, 'already paid');
-    if (!this.amountMatch(order.total, amount)) return errRes(ERR.INVALID_AMOUNT, 'amount mismatch');
+    if (order.paymentStatus === PaymentStatus.Paid)
+      return errRes(ERR.ALREADY_PAID, 'already paid');
+    if (!this.amountMatch(order.total, amount))
+      return errRes(ERR.INVALID_AMOUNT, 'amount mismatch');
 
     return this.dataSource.transaction(async (em) => {
       // Lock any row already tracking this order (mirrors complete()'s
@@ -160,7 +213,8 @@ export class ClickService {
         // (a fresh click_trans_id after a user-cancelled payment, or a row
         // cancelled by our own declined card_token try): revive it, or the
         // order stays unpayable forever after a single failed attempt.
-        const sameClickTx = !!tx.clickTransId && tx.clickTransId === click_trans_id;
+        const sameClickTx =
+          !!tx.clickTransId && tx.clickTransId === click_trans_id;
         if (sameClickTx || tx.clickPaymentId) {
           return errRes(ERR.TX_CANCELLED, 'transaction cancelled');
         }
@@ -214,22 +268,46 @@ export class ClickService {
 
   async complete(dto: ClickWebhookDto): Promise<ClickResponse> {
     const {
-      click_trans_id, click_paydoc_id, merchant_trans_id, merchant_prepare_id,
-      amount, action, sign_string, sign_time, service_id, error: clickError,
+      click_trans_id,
+      click_paydoc_id,
+      merchant_trans_id,
+      merchant_prepare_id,
+      amount,
+      action,
+      sign_string,
+      sign_time,
+      service_id,
+      error: clickError,
     } = dto;
 
     const cfgErr = this.checkConfig(service_id);
     if (cfgErr) return cfgErr;
     if (action !== '1') return errRes(ERR.ACTION_NOT_FOUND, 'action must be 1');
-    if (!merchant_prepare_id) return errRes(ERR.TX_NOT_FOUND, 'merchant_prepare_id missing');
-    if (!this.checkSign({ click_trans_id, service_id, merchant_trans_id, merchant_prepare_id, amount, action, sign_time, sign_string })) {
+    if (!merchant_prepare_id)
+      return errRes(ERR.TX_NOT_FOUND, 'merchant_prepare_id missing');
+    if (
+      !this.checkSign({
+        click_trans_id,
+        service_id,
+        merchant_trans_id,
+        merchant_prepare_id,
+        amount,
+        action,
+        sign_time,
+        sign_string,
+      })
+    ) {
       return errRes(ERR.SIGN_FAILED, 'sign check failed');
     }
 
-    const order = await this.orderRepo.findOne({ where: { id: merchant_trans_id } });
+    const order = await this.orderRepo.findOne({
+      where: { id: merchant_trans_id },
+    });
     if (!order) return errRes(ERR.TX_NOT_FOUND, 'order not found');
-    if (order.paymentStatus === PaymentStatus.Paid) return errRes(ERR.ALREADY_PAID, 'already paid');
-    if (!this.amountMatch(order.total, amount)) return errRes(ERR.INVALID_AMOUNT, 'amount mismatch');
+    if (order.paymentStatus === PaymentStatus.Paid)
+      return errRes(ERR.ALREADY_PAID, 'already paid');
+    if (!this.amountMatch(order.total, amount))
+      return errRes(ERR.INVALID_AMOUNT, 'amount mismatch');
 
     const result = await this.dataSource.transaction(async (em) => {
       const tx = await em.findOne(ClickPaymentTransaction, {
@@ -237,8 +315,10 @@ export class ClickService {
         lock: { mode: 'pessimistic_write' },
       });
       if (!tx) return errRes(ERR.TX_NOT_FOUND, 'transaction not found');
-      if (tx.status === ClickTxStatus.Cancelled) return errRes(ERR.TX_CANCELLED, 'transaction cancelled');
-      if (tx.status === ClickTxStatus.Success) return errRes(ERR.ALREADY_PAID, 'already paid');
+      if (tx.status === ClickTxStatus.Cancelled)
+        return errRes(ERR.TX_CANCELLED, 'transaction cancelled');
+      if (tx.status === ClickTxStatus.Success)
+        return errRes(ERR.ALREADY_PAID, 'already paid');
 
       const clickErrCode = Number(clickError ?? 0);
 
@@ -249,7 +329,9 @@ export class ClickService {
       if (clickErrCode < 0) {
         tx.status = ClickTxStatus.Cancelled;
         await em.save(ClickPaymentTransaction, tx);
-        await em.update(Order, order.id, { paymentStatus: PaymentStatus.Failed });
+        await em.update(Order, order.id, {
+          paymentStatus: PaymentStatus.Failed,
+        });
         return errRes(ERR.TX_CANCELLED, 'payment cancelled by user');
       }
 
@@ -259,7 +341,10 @@ export class ClickService {
       // Click o'z ekvayring haqini totaldan ushlab qoladi — real marja
       // hisobi uchun to'lov paytidagi foiz bo'yicha snapshot qilinadi
       // (platforma yutadi, seller hisob-kitobiga ta'sir qilmaydi).
-      const feePercent = this.settings.getNumber(SETTING_KEYS.CLICK_FEE_PERCENT, 0);
+      const feePercent = this.settings.getNumber(
+        SETTING_KEYS.CLICK_FEE_PERCENT,
+        0,
+      );
       await em.update(Order, order.id, {
         paymentStatus: PaymentStatus.Paid,
         providerFeeAmount: Math.round((order.total * feePercent) / 100),
@@ -277,7 +362,10 @@ export class ClickService {
 
     // Notify customer via Socket.IO after payment confirmed
     if (!('error' in result) || result.error === String(ERR.OK)) {
-      if (order.userId) this.realtime.emitToUser(order.userId, 'order:payment_confirmed', { orderId: order.id });
+      if (order.userId)
+        this.realtime.emitToUser(order.userId, 'order:payment_confirmed', {
+          orderId: order.id,
+        });
       // Qonun: chek to'lov qabul qilingan paytda chiqariladi. Fire-and-forget
       // — chek muammosi to'lov webhookini yiqitmasligi kerak (servis o'zi
       // xatoni yutadi va log qiladi).
@@ -292,7 +380,9 @@ export class ClickService {
   private buildUrl(orderId: string, amount: number): string {
     const service_id = this.config.get('CLICK_SERVICE_ID', { infer: true });
     const merchant_id = this.config.get('CLICK_MERCHANT_ID', { infer: true });
-    const merchant_user_id = this.config.get('CLICK_MERCHANT_USER_ID', { infer: true });
+    const merchant_user_id = this.config.get('CLICK_MERCHANT_USER_ID', {
+      infer: true,
+    });
     const returnUrlBase = this.config.get('CLICK_RETURN_URL', { infer: true });
     if (!service_id || !merchant_id || !merchant_user_id || !returnUrlBase) {
       throw new Error('Click env vars are missing');
@@ -321,7 +411,8 @@ export class ClickService {
       this.logger.error('CLICK_SERVICE_ID or CLICK_SECRET_KEY not set');
       return errRes(ERR.CONFIG_ERROR, 'configuration error');
     }
-    if (serviceId !== expected) return errRes(ERR.CONFIG_ERROR, 'invalid service_id');
+    if (serviceId !== expected)
+      return errRes(ERR.CONFIG_ERROR, 'invalid service_id');
     return null;
   }
 
@@ -348,7 +439,10 @@ export class ClickService {
     ].join('');
     const expected = crypto.createHash('md5').update(raw).digest('hex');
     try {
-      return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(params.sign_string ?? ''));
+      return crypto.timingSafeEqual(
+        Buffer.from(expected),
+        Buffer.from(params.sign_string ?? ''),
+      );
     } catch {
       return false;
     }

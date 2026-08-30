@@ -1,4 +1,12 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 
 import { AuthService } from './auth.service';
@@ -51,7 +59,7 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @Get('me')
-  @ApiOperation({ summary: 'Hozirgi foydalanuvchi ma\'lumotlari (JWT payload)' })
+  @ApiOperation({ summary: "Hozirgi foydalanuvchi ma'lumotlari (JWT payload)" })
   me(@CurrentUser() user: JwtPayload) {
     return user;
   }

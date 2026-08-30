@@ -7,6 +7,8 @@ export class AdminChangePasswordDto {
 
   @IsString()
   @IsNotEmpty({ message: 'Yangi parol kiritilishi shart' })
-  @MinLength(6, { message: 'Yangi parol kamida 6 ta belgidan iborat bo\'lishi kerak' })
+  @MinLength(6, {
+    message: "Yangi parol kamida 6 ta belgidan iborat bo'lishi kerak",
+  })
   newPassword!: string;
 }

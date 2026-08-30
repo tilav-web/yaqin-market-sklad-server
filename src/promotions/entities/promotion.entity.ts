@@ -11,7 +11,10 @@ import {
 import { Category } from '../../categories/entities/category.entity';
 import { ProductVariant } from '../../products/entities/product-variant.entity';
 
-export type PromotionType = 'product_discount' | 'category_discount' | 'free_delivery';
+export type PromotionType =
+  | 'product_discount'
+  | 'category_discount'
+  | 'free_delivery';
 export type DiscountType = 'percent' | 'fixed';
 
 import type { LocalizedText } from '../../common/types/localized-text.type';
@@ -26,7 +29,10 @@ export class Promotion {
   @Column({ type: 'uuid' })
   shopId!: string;
 
-  @Column({ type: 'jsonb', default: () => "'{\"uz\":\"\",\"kr\":\"\",\"ru\":\"\"}'::jsonb" })
+  @Column({
+    type: 'jsonb',
+    default: () => '\'{"uz":"","kr":"","ru":""}\'::jsonb',
+  })
   name!: LocalizedText;
 
   @Column({ type: 'varchar', length: 32 })

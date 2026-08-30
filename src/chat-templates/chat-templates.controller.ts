@@ -1,9 +1,21 @@
-import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Post, Put } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Put,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { JwtPayload } from '../auth/decorators/current-user.decorator';
-import { ReorderChatTemplatesDto, UpsertChatTemplateDto } from './dto/chat-template.dto';
+import {
+  ReorderChatTemplatesDto,
+  UpsertChatTemplateDto,
+} from './dto/chat-template.dto';
 import { ChatTemplatesService } from './chat-templates.service';
 
 @ApiBearerAuth()
@@ -13,7 +25,10 @@ export class ChatTemplatesController {
   constructor(private readonly svc: ChatTemplatesService) {}
 
   @Get()
-  list(@CurrentUser() user: JwtPayload, @Param('shopId', ParseUUIDPipe) shopId: string) {
+  list(
+    @CurrentUser() user: JwtPayload,
+    @Param('shopId', ParseUUIDPipe) shopId: string,
+  ) {
     return this.svc.list(user.sub, shopId);
   }
 

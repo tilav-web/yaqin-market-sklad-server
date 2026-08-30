@@ -17,8 +17,10 @@ export interface AuditLogEntry {
 @Injectable()
 export class AuditLogService {
   constructor(
-    @InjectRepository(AdminAuditLog) private readonly logs: Repository<AdminAuditLog>,
-    @InjectRepository(AdminUser) private readonly adminUsers: Repository<AdminUser>,
+    @InjectRepository(AdminAuditLog)
+    private readonly logs: Repository<AdminAuditLog>,
+    @InjectRepository(AdminUser)
+    private readonly adminUsers: Repository<AdminUser>,
   ) {}
 
   /** Fire-and-forget from the caller's perspective — never blocks or fails the
@@ -48,7 +50,13 @@ export class AuditLogService {
     offset?: number;
   }): Promise<{
     items: (AdminAuditLog & {
-      admin: { id: string; username: string; firstName: string; lastName: string; phone: string | null } | null;
+      admin: {
+        id: string;
+        username: string;
+        firstName: string;
+        lastName: string;
+        phone: string | null;
+      } | null;
     })[];
     total: number;
   }> {
@@ -67,13 +75,22 @@ export class AuditLogService {
     const admins = adminIds.length
       ? await this.adminUsers.find({
           where: { id: In(adminIds) },
-          select: { id: true, username: true, firstName: true, lastName: true, phone: true },
+          select: {
+            id: true,
+            username: true,
+            firstName: true,
+            lastName: true,
+            phone: true,
+          },
         })
       : [];
     const byId = new Map(admins.map((a) => [a.id, a]));
 
     return {
-      items: items.map((l) => ({ ...l, admin: byId.get(l.adminUserId) ?? null })),
+      items: items.map((l) => ({
+        ...l,
+        admin: byId.get(l.adminUserId) ?? null,
+      })),
       total,
     };
   }

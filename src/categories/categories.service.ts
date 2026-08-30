@@ -93,5 +93,8 @@ export class CategoriesService {
 function filterActive(nodes: Category[]): Category[] {
   return nodes
     .filter((n) => n.isActive)
-    .map((n) => ({ ...n, children: n.children ? filterActive(n.children) : [] }));
+    .map((n) => ({
+      ...n,
+      children: n.children ? filterActive(n.children) : [],
+    }));
 }

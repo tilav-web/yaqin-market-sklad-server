@@ -3,7 +3,13 @@ import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
 
 import { User } from '../users/entities/user.entity';
-import { RiskFlag, RiskFlagStatus, RiskRule, RiskSeverity, RiskSubjectType } from './entities/risk-flag.entity';
+import {
+  RiskFlag,
+  RiskFlagStatus,
+  RiskRule,
+  RiskSeverity,
+  RiskSubjectType,
+} from './entities/risk-flag.entity';
 
 export interface RaiseFlagInput {
   rule: RiskRule;
@@ -60,7 +66,9 @@ export class RiskFlagsService {
         ],
       );
     } catch (err) {
-      this.logger.error(`raise(${input.rule}) failed: ${(err as Error).message}`);
+      this.logger.error(
+        `raise(${input.rule}) failed: ${(err as Error).message}`,
+      );
     }
   }
 
@@ -74,7 +82,9 @@ export class RiskFlagsService {
     limit?: number;
     offset?: number;
   }): Promise<{
-    items: (RiskFlag & { subject: { id: string; name: string | null; phone: string } | null })[];
+    items: (RiskFlag & {
+      subject: { id: string; name: string | null; phone: string } | null;
+    })[];
     total: number;
   }> {
     const where: Record<string, unknown> = {};
@@ -94,14 +104,26 @@ export class RiskFlagsService {
 
     // Only User-subject flags resolve to a name/phone — Shop/Order/Device
     // subjects are shown by their raw id (the admin UI links out instead).
-    const userIds = [...new Set(items.filter((f) => f.subjectType === RiskSubjectType.User).map((f) => f.subjectId))];
+    const userIds = [
+      ...new Set(
+        items
+          .filter((f) => f.subjectType === RiskSubjectType.User)
+          .map((f) => f.subjectId),
+      ),
+    ];
     const users = userIds.length
-      ? await this.users.find({ where: { id: In(userIds) }, select: { id: true, name: true, phone: true } })
+      ? await this.users.find({
+          where: { id: In(userIds) },
+          select: { id: true, name: true, phone: true },
+        })
       : [];
     const byId = new Map(users.map((u) => [u.id, u]));
 
     return {
-      items: items.map((f) => ({ ...f, subject: byId.get(f.subjectId) ?? null })),
+      items: items.map((f) => ({
+        ...f,
+        subject: byId.get(f.subjectId) ?? null,
+      })),
       total,
     };
   }

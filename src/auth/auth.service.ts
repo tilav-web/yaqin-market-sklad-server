@@ -45,21 +45,27 @@ export class AuthService {
     private readonly risk: RiskService,
   ) {}
 
-  async requestOtp(phone: string): Promise<{ resendAfterSec: number; ttlSec: number }> {
+  async requestOtp(
+    phone: string,
+  ): Promise<{ resendAfterSec: number; ttlSec: number }> {
     const hourKey = `otp:hour:${phone}`;
     const hourCount = await this.redis.client.incr(hourKey);
     if (hourCount === 1) {
       await this.redis.client.expire(hourKey, 60 * 60);
     }
     if (hourCount > REQUEST_RATE_LIMIT_PER_HOUR) {
-      throw new BadRequestException("Juda ko'p urinishlar. 1 soatdan keyin urinib ko'ring");
+      throw new BadRequestException(
+        "Juda ko'p urinishlar. 1 soatdan keyin urinib ko'ring",
+      );
     }
 
     const cooldownKey = `otp:cooldown:${phone}`;
     const cooldownExists = await this.redis.client.exists(cooldownKey);
     if (cooldownExists) {
       const ttl = await this.redis.client.ttl(cooldownKey);
-      throw new BadRequestException(`${ttl} soniyadan keyin qayta urinib ko'ring`);
+      throw new BadRequestException(
+        `${ttl} soniyadan keyin qayta urinib ko'ring`,
+      );
     }
 
     // When FIXED_OTP_CODE is set, bypass SMS entirely — the code is known
@@ -69,7 +75,11 @@ export class AuthService {
     const code = fixed ? fixed : nano6();
 
     const record: OtpRecord = { code, createdAt: Date.now() };
-    await this.redis.client.setex(`otp:${phone}`, OTP_TTL_SEC, JSON.stringify(record));
+    await this.redis.client.setex(
+      `otp:${phone}`,
+      OTP_TTL_SEC,
+      JSON.stringify(record),
+    );
     await this.redis.client.setex(cooldownKey, RESEND_COOLDOWN_SEC, '1');
     // A fresh code means a fresh 5-attempt budget — otherwise the old
     // attempts counter (and its shorter, now-stale TTL) carries over and the
@@ -87,7 +97,9 @@ export class AuthService {
     const key = `otp:${phone}`;
     const raw = await this.redis.client.get(key);
     if (!raw) {
-      throw new BadRequestException("Tasdiq kodi muddati o'tdi yoki yaratilmagan");
+      throw new BadRequestException(
+        "Tasdiq kodi muddati o'tdi yoki yaratilmagan",
+      );
     }
 
     // Attempts live in their OWN key and are incremented via atomic INCR —
@@ -117,11 +129,21 @@ export class AuthService {
 
     const user = await this.users.upsertByPhone(phone);
     const roles = await this.users.computeRoles(user);
-    const tokens = await this.issueTokens({ sub: user.id, phone: user.phone, roles });
+    const tokens = await this.issueTokens({
+      sub: user.id,
+      phone: user.phone,
+      roles,
+    });
     void this.risk.linkDevice(user.id, deviceId ?? null);
 
     return {
-      user: { id: user.id, phone: user.phone, name: user.name, avatarUrl: user.avatarUrl, roles },
+      user: {
+        id: user.id,
+        phone: user.phone,
+        name: user.name,
+        avatarUrl: user.avatarUrl,
+        roles,
+      },
       tokens,
     };
   }
@@ -133,17 +155,28 @@ export class AuthService {
         secret: this.config.get('JWT_REFRESH_SECRET', { infer: true }),
       });
     } catch {
-      throw new UnauthorizedException('Refresh token noto\'g\'ri yoki muddati o\'tgan');
+      throw new UnauthorizedException(
+        "Refresh token noto'g'ri yoki muddati o'tgan",
+      );
     }
     // Reject tokens that were rotated out or logged out.
-    if (payload.jti && (await this.redis.client.exists(`${REVOKED_REFRESH_PREFIX}${payload.jti}`))) {
+    if (
+      payload.jti &&
+      (await this.redis.client.exists(
+        `${REVOKED_REFRESH_PREFIX}${payload.jti}`,
+      ))
+    ) {
       throw new UnauthorizedException('Sessiya tugatilgan — qaytadan kiring');
     }
     const user = await this.users.findById(payload.sub);
     if (!user || user.status === 'blocked') throw new UnauthorizedException();
     // Rotation: a refresh token is single-use — revoke it as we mint the next pair.
     if (payload.jti) {
-      await this.redis.client.setex(`${REVOKED_REFRESH_PREFIX}${payload.jti}`, REVOKE_TTL_SEC, '1');
+      await this.redis.client.setex(
+        `${REVOKED_REFRESH_PREFIX}${payload.jti}`,
+        REVOKE_TTL_SEC,
+        '1',
+      );
     }
     const roles = await this.users.computeRoles(user);
     return this.issueTokens({ sub: user.id, phone: user.phone, roles });
@@ -152,11 +185,18 @@ export class AuthService {
   /** Revoke a refresh token (logout). Idempotent; ignores invalid tokens. */
   async logout(refreshToken: string): Promise<void> {
     try {
-      const payload = await this.jwt.verifyAsync<JwtPayload & { jti?: string }>(refreshToken, {
-        secret: this.config.get('JWT_REFRESH_SECRET', { infer: true }),
-      });
+      const payload = await this.jwt.verifyAsync<JwtPayload & { jti?: string }>(
+        refreshToken,
+        {
+          secret: this.config.get('JWT_REFRESH_SECRET', { infer: true }),
+        },
+      );
       if (payload.jti) {
-        await this.redis.client.setex(`${REVOKED_REFRESH_PREFIX}${payload.jti}`, REVOKE_TTL_SEC, '1');
+        await this.redis.client.setex(
+          `${REVOKED_REFRESH_PREFIX}${payload.jti}`,
+          REVOKE_TTL_SEC,
+          '1',
+        );
       }
     } catch {
       /* already invalid — nothing to revoke */
@@ -166,15 +206,21 @@ export class AuthService {
   private async issueTokens(payload: JwtPayload) {
     const accessTtl = this.config.get('JWT_ACCESS_TTL', { infer: true });
     const refreshTtl = this.config.get('JWT_REFRESH_TTL', { infer: true });
-    const accessToken = await this.jwt.signAsync({ ...payload }, {
-      secret: this.config.get('JWT_SECRET', { infer: true }),
-      expiresIn: accessTtl as never,
-    });
+    const accessToken = await this.jwt.signAsync(
+      { ...payload },
+      {
+        secret: this.config.get('JWT_SECRET', { infer: true }),
+        expiresIn: accessTtl as never,
+      },
+    );
     // Each refresh token carries a unique id so it can be individually revoked.
-    const refreshToken = await this.jwt.signAsync({ ...payload, jti: randomUUID() }, {
-      secret: this.config.get('JWT_REFRESH_SECRET', { infer: true }),
-      expiresIn: refreshTtl as never,
-    });
+    const refreshToken = await this.jwt.signAsync(
+      { ...payload, jti: randomUUID() },
+      {
+        secret: this.config.get('JWT_REFRESH_SECRET', { infer: true }),
+        expiresIn: refreshTtl as never,
+      },
+    );
     return { accessToken, refreshToken };
   }
 }

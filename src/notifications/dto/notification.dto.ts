@@ -26,33 +26,46 @@ export class BroadcastDto {
   @IsEnum(['all', 'sellers', 'customers', 'specific'])
   audience!: 'all' | 'sellers' | 'customers' | 'specific';
 
-  @ApiPropertyOptional({ type: [String], description: 'UUIDs (audience=specific)' })
+  @ApiPropertyOptional({
+    type: [String],
+    description: 'UUIDs (audience=specific)',
+  })
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(5000)
   @IsUUID('4', { each: true })
   userIds?: string[];
 
-  @ApiPropertyOptional({ type: [String], description: 'Telefon raqamlar (audience=specific)' })
+  @ApiPropertyOptional({
+    type: [String],
+    description: 'Telefon raqamlar (audience=specific)',
+  })
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(5000)
   @IsString({ each: true })
   phones?: string[];
 
-  @ApiPropertyOptional({ description: 'Rasm URL (notification ichida ko\'rsatiladi)' })
+  @ApiPropertyOptional({
+    description: "Rasm URL (notification ichida ko'rsatiladi)",
+  })
   @IsOptional()
   @IsUrl()
   @MaxLength(512)
   imageUrl?: string;
 
-  @ApiPropertyOptional({ description: 'Bosish uchun sahifa (masalan: /orders, /notifications)' })
+  @ApiPropertyOptional({
+    description: 'Bosish uchun sahifa (masalan: /orders, /notifications)',
+  })
   @IsOptional()
   @IsString()
   @MaxLength(256)
   deepLink?: string;
 
-  @ApiPropertyOptional({ description: 'HTML ko\'rinishidagi to\'liq matn (in-app detail sahifasi uchun)' })
+  @ApiPropertyOptional({
+    description:
+      "HTML ko'rinishidagi to'liq matn (in-app detail sahifasi uchun)",
+  })
   @IsOptional()
   @IsString()
   richBody?: string;

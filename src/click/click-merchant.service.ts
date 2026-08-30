@@ -41,11 +41,19 @@ export class ClickDeclinedException extends BadRequestException {
 export class ClickMerchantService {
   private readonly logger = new Logger(ClickMerchantService.name);
 
-  constructor(private readonly config: ConfigService<EnvironmentVariables, true>) {}
+  constructor(
+    private readonly config: ConfigService<EnvironmentVariables, true>,
+  ) {}
 
   /** Step 1: request a card token. Click sends an SMS code to the card's linked phone. */
-  async requestToken(cardNumber: string, expireDate: string): Promise<{ cardToken: string; phoneNumber: string | null }> {
-    const res = await this.request<{ card_token: string; phone_number?: string }>('POST', 'card_token/request', {
+  async requestToken(
+    cardNumber: string,
+    expireDate: string,
+  ): Promise<{ cardToken: string; phoneNumber: string | null }> {
+    const res = await this.request<{
+      card_token: string;
+      phone_number?: string;
+    }>('POST', 'card_token/request', {
       service_id: this.serviceId(),
       card_number: cardNumber,
       expire_date: expireDate,
@@ -58,36 +66,54 @@ export class ClickMerchantService {
   }
 
   /** Step 2: confirm the SMS code, activating the token. */
-  async verifyToken(cardToken: string, smsCode: string): Promise<{ cardNumberMasked: string | null }> {
-    const res = await this.request<{ card_number?: string }>('POST', 'card_token/verify', {
-      service_id: this.serviceId(),
-      card_token: cardToken,
-      sms_code: smsCode,
-    });
+  async verifyToken(
+    cardToken: string,
+    smsCode: string,
+  ): Promise<{ cardNumberMasked: string | null }> {
+    const res = await this.request<{ card_number?: string }>(
+      'POST',
+      'card_token/verify',
+      {
+        service_id: this.serviceId(),
+        card_token: cardToken,
+        sms_code: smsCode,
+      },
+    );
     return { cardNumberMasked: res.card_number ?? null };
   }
 
   /** Step 3: charge a verified token — no redirect, no further user interaction. */
-  async payWithToken(cardToken: string, amount: number, merchantTransId: string): Promise<{ paymentId: string }> {
-    const res = await this.request<{ payment_id: string | number }>('POST', 'card_token/payment', {
-      service_id: this.serviceId(),
-      card_token: cardToken,
-      amount,
-      // Click's own sources disagree on this field's name: docs.click.uz's
-      // "Payment with Card Token" example uses `transaction_parameter`, but
-      // the official click-llc/click-integration-php reference SDK sends
-      // `merchant_trans_id` (matching every other Click endpoint). Sending
-      // both is a harmless hedge until this is confirmed one way or the
-      // other with Click support — see ../../CLICK_PAYMENT_REFERENCE.md.
-      merchant_trans_id: merchantTransId,
-      transaction_parameter: merchantTransId,
-    });
+  async payWithToken(
+    cardToken: string,
+    amount: number,
+    merchantTransId: string,
+  ): Promise<{ paymentId: string }> {
+    const res = await this.request<{ payment_id: string | number }>(
+      'POST',
+      'card_token/payment',
+      {
+        service_id: this.serviceId(),
+        card_token: cardToken,
+        amount,
+        // Click's own sources disagree on this field's name: docs.click.uz's
+        // "Payment with Card Token" example uses `transaction_parameter`, but
+        // the official click-llc/click-integration-php reference SDK sends
+        // `merchant_trans_id` (matching every other Click endpoint). Sending
+        // both is a harmless hedge until this is confirmed one way or the
+        // other with Click support — see ../../CLICK_PAYMENT_REFERENCE.md.
+        merchant_trans_id: merchantTransId,
+        transaction_parameter: merchantTransId,
+      },
+    );
     return { paymentId: String(res.payment_id) };
   }
 
   /** Removes a saved token on Click's side (called before deleting our own row). */
   async deleteToken(cardToken: string): Promise<void> {
-    await this.request('DELETE', `card_token/${this.serviceId()}/${encodeURIComponent(cardToken)}`);
+    await this.request(
+      'DELETE',
+      `card_token/${this.serviceId()}/${encodeURIComponent(cardToken)}`,
+    );
   }
 
   /**
@@ -97,7 +123,10 @@ export class ClickMerchantService {
    * the card network — callers must treat failure as retryable/manual.
    */
   async reversePayment(paymentId: string): Promise<void> {
-    await this.request('DELETE', `payment/reversal/${this.serviceId()}/${encodeURIComponent(paymentId)}`);
+    await this.request(
+      'DELETE',
+      `payment/reversal/${this.serviceId()}/${encodeURIComponent(paymentId)}`,
+    );
   }
 
   // ── private helpers ──────────────────────────────────────────────────────
@@ -112,13 +141,21 @@ export class ClickMerchantService {
   private authHeader(): string {
     const userId = this.config.get('CLICK_MERCHANT_USER_ID', { infer: true });
     const secret = this.config.get('CLICK_SECRET_KEY', { infer: true });
-    if (!userId || !secret) throw new Error('CLICK_MERCHANT_USER_ID or CLICK_SECRET_KEY env var is missing');
+    if (!userId || !secret)
+      throw new Error(
+        'CLICK_MERCHANT_USER_ID or CLICK_SECRET_KEY env var is missing',
+      );
     const timestamp = Math.floor(Date.now() / 1000);
-    const digest = crypto.createHash('sha1').update(`${timestamp}${secret}`).digest('hex');
+    const digest = crypto
+      .createHash('sha1')
+      .update(`${timestamp}${secret}`)
+      .digest('hex');
     return `${userId}:${digest}:${timestamp}`;
   }
 
-  private async request<T extends Record<string, unknown> = Record<string, unknown>>(
+  private async request<
+    T extends Record<string, unknown> = Record<string, unknown>,
+  >(
     method: 'POST' | 'DELETE',
     path: string,
     body?: Record<string, unknown>,
@@ -135,11 +172,17 @@ export class ClickMerchantService {
         body: body ? JSON.stringify(body) : undefined,
       });
     } catch (err) {
-      this.logger.error(`Click Merchant API request failed: ${(err as Error).message}`);
-      throw new BadRequestException("Click bilan bog'lanib bo'lmadi, birozdan so'ng qayta urinib ko'ring");
+      this.logger.error(
+        `Click Merchant API request failed: ${(err as Error).message}`,
+      );
+      throw new BadRequestException(
+        "Click bilan bog'lanib bo'lmadi, birozdan so'ng qayta urinib ko'ring",
+      );
     }
 
-    const json = (await res.json().catch(() => null)) as (T & ClickMerchantResponse) | null;
+    const json = (await res.json().catch(() => null)) as
+      | (T & ClickMerchantResponse)
+      | null;
     // Full request/response trace for payment calls only — this path carries
     // no PAN/sms_code (unlike card_token/request|verify, which must never be
     // logged), and the trace is the evidence Click support asks for while the
@@ -150,7 +193,9 @@ export class ClickMerchantService {
       );
     }
     if (!json || typeof json.error_code !== 'number') {
-      this.logger.error(`Click Merchant API unexpected response: HTTP ${res.status}`);
+      this.logger.error(
+        `Click Merchant API unexpected response: HTTP ${res.status}`,
+      );
       throw new BadRequestException("Click javobini o'qib bo'lmadi");
     }
     if (json.error_code !== 0) {

@@ -40,7 +40,8 @@ const formatter = new Intl.DateTimeFormat('en-US', {
 
 function tzNow(now: Date): TzNow {
   const parts = formatter.formatToParts(now);
-  const get = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)?.value ?? '';
+  const get = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((p) => p.type === type)?.value ?? '';
   const year = get('year');
   const month = get('month');
   const day = get('day');
@@ -58,7 +59,8 @@ function tzNow(now: Date): TzNow {
 
 /** Whether `time` (HH:MM) falls inside a slot, correctly handling a slot that crosses midnight (e.g. 22:00-02:00). */
 function timeWithinSameDay(time: string, slot: WorkingHourSlot): boolean {
-  if (slot.closeTime >= slot.openTime) return time >= slot.openTime && time <= slot.closeTime;
+  if (slot.closeTime >= slot.openTime)
+    return time >= slot.openTime && time <= slot.closeTime;
   // Overnight slot: "today" only covers openTime through end of day — the
   // midnight-to-closeTime tail belongs to the NEXT calendar day (handled by
   // the yesterday-slot check in isShopOpenNow).
@@ -97,7 +99,11 @@ export function isShopOpenNow(
   const yesterday = tzNow(new Date(now.getTime() - 24 * 60 * 60 * 1000));
   if (holidays.some((h) => h.date === yesterday.date)) return false;
   const yesterdaySlot = hours.find((h) => h.dayOfWeek === yesterday.dayOfWeek);
-  if (yesterdaySlot?.isOpen && yesterdaySlot.closeTime < yesterdaySlot.openTime && time <= yesterdaySlot.closeTime) {
+  if (
+    yesterdaySlot?.isOpen &&
+    yesterdaySlot.closeTime < yesterdaySlot.openTime &&
+    time <= yesterdaySlot.closeTime
+  ) {
     return true;
   }
 
@@ -134,11 +140,16 @@ export function isDeliveryOpenNow(
 
   const yesterday = tzNow(new Date(now.getTime() - 24 * 60 * 60 * 1000));
   if (holidays.some((h) => h.date === yesterday.date)) return false;
-  const yesterdaySlot = delHours.find((h) => h.dayOfWeek === yesterday.dayOfWeek);
-  if (yesterdaySlot?.isOpen && yesterdaySlot.closeTime < yesterdaySlot.openTime && time <= yesterdaySlot.closeTime) {
+  const yesterdaySlot = delHours.find(
+    (h) => h.dayOfWeek === yesterday.dayOfWeek,
+  );
+  if (
+    yesterdaySlot?.isOpen &&
+    yesterdaySlot.closeTime < yesterdaySlot.openTime &&
+    time <= yesterdaySlot.closeTime
+  ) {
     return true;
   }
 
   return false;
 }
-

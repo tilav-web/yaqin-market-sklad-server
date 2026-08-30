@@ -98,7 +98,7 @@ describe('AuthService', () => {
   afterEach(() => jest.clearAllMocks());
 
   describe('requestOtp', () => {
-    it('birinchi so\'rovda hour-key ni 1 soatga expire qiladi', async () => {
+    it("birinchi so'rovda hour-key ni 1 soatga expire qiladi", async () => {
       redis.incr.mockResolvedValue(1);
       redis.exists.mockResolvedValue(0);
 
@@ -108,7 +108,7 @@ describe('AuthService', () => {
       expect(result).toEqual({ resendAfterSec: 60, ttlSec: 5 * 60 });
     });
 
-    it('keyingi so\'rovlarda hour-key ni qayta expire qilmaydi', async () => {
+    it("keyingi so'rovlarda hour-key ni qayta expire qilmaydi", async () => {
       redis.incr.mockResolvedValue(2);
       redis.exists.mockResolvedValue(0);
 
@@ -117,69 +117,87 @@ describe('AuthService', () => {
       expect(redis.expire).not.toHaveBeenCalled();
     });
 
-    it('1 soatda 5 tadan ko\'p so\'rov bo\'lsa rad etadi (rate limit)', async () => {
+    it("1 soatda 5 tadan ko'p so'rov bo'lsa rad etadi (rate limit)", async () => {
       redis.incr.mockResolvedValue(6);
       redis.exists.mockResolvedValue(0);
 
-      await expect(service.requestOtp(PHONE)).rejects.toThrow(BadRequestException);
-      await expect(service.requestOtp(PHONE)).rejects.toThrow("1 soatdan keyin");
+      await expect(service.requestOtp(PHONE)).rejects.toThrow(
+        BadRequestException,
+      );
+      await expect(service.requestOtp(PHONE)).rejects.toThrow(
+        '1 soatdan keyin',
+      );
       // Must reject before ever touching the cooldown key or sending an SMS.
       expect(redis.exists).not.toHaveBeenCalled();
     });
 
-    it('aniq 5-so\'rov hali ruxsat etiladi (chegara qiymat)', async () => {
+    it("aniq 5-so'rov hali ruxsat etiladi (chegara qiymat)", async () => {
       redis.incr.mockResolvedValue(5);
       redis.exists.mockResolvedValue(0);
 
       await expect(service.requestOtp(PHONE)).resolves.toBeDefined();
     });
 
-    it('resend-cooldown ichida bo\'lsa qolgan sekundlarni ko\'rsatib rad etadi', async () => {
+    it("resend-cooldown ichida bo'lsa qolgan sekundlarni ko'rsatib rad etadi", async () => {
       redis.incr.mockResolvedValue(1);
       redis.exists.mockResolvedValue(1);
       redis.ttl.mockResolvedValue(37);
 
-      await expect(service.requestOtp(PHONE)).rejects.toThrow('37 soniyadan keyin');
+      await expect(service.requestOtp(PHONE)).rejects.toThrow(
+        '37 soniyadan keyin',
+      );
     });
 
-    it('FIXED_OTP_CODE o\'rnatilganda shu kodni ishlatadi va SMS yubormaydi', async () => {
+    it("FIXED_OTP_CODE o'rnatilganda shu kodni ishlatadi va SMS yubormaydi", async () => {
       await buildModule({ FIXED_OTP_CODE: '111111' });
       redis.incr.mockResolvedValue(1);
       redis.exists.mockResolvedValue(0);
 
       await service.requestOtp(PHONE);
 
-      const [, , payload] = redis.setex.mock.calls.find(([key]) => key === `otp:${PHONE}`)!;
+      const [, , payload] = redis.setex.mock.calls.find(
+        ([key]) => key === `otp:${PHONE}`,
+      )!;
       const record = JSON.parse(payload as string);
       expect(record.code).toBe('111111');
       expect(sms.sendOtp).not.toHaveBeenCalled();
     });
 
-    it('FIXED_OTP_CODE bo\'sh bo\'lsa tasodifiy kod yaratadi va SMS orqali yuboradi', async () => {
+    it("FIXED_OTP_CODE bo'sh bo'lsa tasodifiy kod yaratadi va SMS orqali yuboradi", async () => {
       redis.incr.mockResolvedValue(1);
       redis.exists.mockResolvedValue(0);
 
       await service.requestOtp(PHONE);
 
-      const [, , payload] = redis.setex.mock.calls.find(([key]) => key === `otp:${PHONE}`)!;
+      const [, , payload] = redis.setex.mock.calls.find(
+        ([key]) => key === `otp:${PHONE}`,
+      )!;
       const record = JSON.parse(payload as string);
       expect(record.code).toMatch(/^\d{6}$/);
       expect(sms.sendOtp).toHaveBeenCalledWith(PHONE, record.code);
     });
 
-    it('otp va cooldown kalitlarini to\'g\'ri TTL bilan yozadi', async () => {
+    it("otp va cooldown kalitlarini to'g'ri TTL bilan yozadi", async () => {
       redis.incr.mockResolvedValue(1);
       redis.exists.mockResolvedValue(0);
 
       await service.requestOtp(PHONE);
 
-      expect(redis.setex).toHaveBeenCalledWith(`otp:${PHONE}`, 5 * 60, expect.any(String));
-      expect(redis.setex).toHaveBeenCalledWith(`otp:cooldown:${PHONE}`, 60, '1');
+      expect(redis.setex).toHaveBeenCalledWith(
+        `otp:${PHONE}`,
+        5 * 60,
+        expect.any(String),
+      );
+      expect(redis.setex).toHaveBeenCalledWith(
+        `otp:cooldown:${PHONE}`,
+        60,
+        '1',
+      );
     });
   });
 
   describe('verifyOtp', () => {
-    it('kod topilmasa (muddati o\'tgan) xato tashlaydi', async () => {
+    it("kod topilmasa (muddati o'tgan) xato tashlaydi", async () => {
       redis.get.mockResolvedValue(null);
 
       await expect(service.verifyOtp(PHONE, '111111')).rejects.toThrow(
@@ -187,38 +205,55 @@ describe('AuthService', () => {
       );
     });
 
-    it('5 martadan ko\'p noto\'g\'ri urinishdan keyin kodni o\'chirib rad etadi', async () => {
-      redis.get.mockResolvedValue(JSON.stringify({ code: '111111', createdAt: Date.now() }));
+    it("5 martadan ko'p noto'g'ri urinishdan keyin kodni o'chirib rad etadi", async () => {
+      redis.get.mockResolvedValue(
+        JSON.stringify({ code: '111111', createdAt: Date.now() }),
+      );
       redis.incr.mockResolvedValue(6); // atomic counter already past the cap
 
-      await expect(service.verifyOtp(PHONE, '000000')).rejects.toThrow("Juda ko'p urinishlar");
+      await expect(service.verifyOtp(PHONE, '000000')).rejects.toThrow(
+        "Juda ko'p urinishlar",
+      );
       expect(redis.del).toHaveBeenCalledWith(`otp:${PHONE}`);
       expect(redis.del).toHaveBeenCalledWith(`otp:attempts:${PHONE}`);
     });
 
-    it('birinchi noto\'g\'ri urinishda attempts kaliti otp bilan bir xil muddatga o\'rnatiladi', async () => {
-      redis.get.mockResolvedValue(JSON.stringify({ code: '111111', createdAt: Date.now() }));
+    it("birinchi noto'g'ri urinishda attempts kaliti otp bilan bir xil muddatga o'rnatiladi", async () => {
+      redis.get.mockResolvedValue(
+        JSON.stringify({ code: '111111', createdAt: Date.now() }),
+      );
       redis.incr.mockResolvedValue(1); // first attempt via atomic INCR
       redis.pttl.mockResolvedValue(120_000);
 
-      await expect(service.verifyOtp(PHONE, '000000')).rejects.toThrow("Tasdiq kodi noto'g'ri");
+      await expect(service.verifyOtp(PHONE, '000000')).rejects.toThrow(
+        "Tasdiq kodi noto'g'ri",
+      );
 
-      expect(redis.pexpire).toHaveBeenCalledWith(`otp:attempts:${PHONE}`, 120_000);
+      expect(redis.pexpire).toHaveBeenCalledWith(
+        `otp:attempts:${PHONE}`,
+        120_000,
+      );
       expect(redis.del).not.toHaveBeenCalled();
     });
 
-    it('keyingi noto\'g\'ri urinishlarda attempts muddatini qayta o\'rnatmaydi', async () => {
-      redis.get.mockResolvedValue(JSON.stringify({ code: '111111', createdAt: Date.now() }));
+    it("keyingi noto'g'ri urinishlarda attempts muddatini qayta o'rnatmaydi", async () => {
+      redis.get.mockResolvedValue(
+        JSON.stringify({ code: '111111', createdAt: Date.now() }),
+      );
       redis.incr.mockResolvedValue(2); // not the first attempt
 
-      await expect(service.verifyOtp(PHONE, '000000')).rejects.toThrow("Tasdiq kodi noto'g'ri");
+      await expect(service.verifyOtp(PHONE, '000000')).rejects.toThrow(
+        "Tasdiq kodi noto'g'ri",
+      );
 
       expect(redis.pexpire).not.toHaveBeenCalled();
       expect(redis.del).not.toHaveBeenCalled();
     });
 
-    it('to\'g\'ri kod bilan token juftligini qaytaradi', async () => {
-      redis.get.mockResolvedValue(JSON.stringify({ code: '111111', createdAt: Date.now() }));
+    it("to'g'ri kod bilan token juftligini qaytaradi", async () => {
+      redis.get.mockResolvedValue(
+        JSON.stringify({ code: '111111', createdAt: Date.now() }),
+      );
       redis.incr.mockResolvedValue(1);
       const user = { id: 'user-1', phone: PHONE, name: null, avatarUrl: null };
       users.upsertByPhone.mockResolvedValue(user);
@@ -237,21 +272,28 @@ describe('AuthService', () => {
         avatarUrl: null,
         roles: [Role.Customer],
       });
-      expect(result.tokens).toEqual({ accessToken: 'access-token', refreshToken: 'refresh-token' });
+      expect(result.tokens).toEqual({
+        accessToken: 'access-token',
+        refreshToken: 'refresh-token',
+      });
     });
 
-    it('FIXED_OTP_CODE rejimida ham verify to\'g\'ri ishlaydi', async () => {
+    it("FIXED_OTP_CODE rejimida ham verify to'g'ri ishlaydi", async () => {
       await buildModule({ FIXED_OTP_CODE: '111111' });
       redis.incr.mockResolvedValue(1);
       redis.exists.mockResolvedValue(0);
       await service.requestOtp(PHONE);
-      const [, , payload] = redis.setex.mock.calls.find(([key]) => key === `otp:${PHONE}`)!;
+      const [, , payload] = redis.setex.mock.calls.find(
+        ([key]) => key === `otp:${PHONE}`,
+      )!;
       redis.get.mockResolvedValue(payload);
 
       const user = { id: 'user-1', phone: PHONE, name: null, avatarUrl: null };
       users.upsertByPhone.mockResolvedValue(user);
       users.computeRoles.mockResolvedValue([Role.Customer]);
-      jwt.signAsync.mockResolvedValueOnce('access-token').mockResolvedValueOnce('refresh-token');
+      jwt.signAsync
+        .mockResolvedValueOnce('access-token')
+        .mockResolvedValueOnce('refresh-token');
 
       await expect(service.verifyOtp(PHONE, '111111')).resolves.toMatchObject({
         tokens: { accessToken: 'access-token', refreshToken: 'refresh-token' },
@@ -261,8 +303,15 @@ describe('AuthService', () => {
 
   describe('issueTokens (via verifyOtp)', () => {
     it('access tokenni JWT_SECRET va 15 daqiqalik TTL bilan chiqaradi', async () => {
-      redis.get.mockResolvedValue(JSON.stringify({ code: '111111', attempts: 0, createdAt: Date.now() }));
-      users.upsertByPhone.mockResolvedValue({ id: 'user-1', phone: PHONE, name: null, avatarUrl: null });
+      redis.get.mockResolvedValue(
+        JSON.stringify({ code: '111111', attempts: 0, createdAt: Date.now() }),
+      );
+      users.upsertByPhone.mockResolvedValue({
+        id: 'user-1',
+        phone: PHONE,
+        name: null,
+        avatarUrl: null,
+      });
       users.computeRoles.mockResolvedValue([Role.Customer]);
       jwt.signAsync.mockResolvedValue('token');
 
@@ -271,13 +320,23 @@ describe('AuthService', () => {
       expect(jwt.signAsync).toHaveBeenNthCalledWith(
         1,
         expect.objectContaining({ sub: 'user-1', phone: PHONE }),
-        expect.objectContaining({ secret: 'test-jwt-secret', expiresIn: '15m' }),
+        expect.objectContaining({
+          secret: 'test-jwt-secret',
+          expiresIn: '15m',
+        }),
       );
     });
 
     it('refresh tokenni JWT_REFRESH_SECRET, 30 kunlik TTL va noyob jti bilan chiqaradi', async () => {
-      redis.get.mockResolvedValue(JSON.stringify({ code: '111111', attempts: 0, createdAt: Date.now() }));
-      users.upsertByPhone.mockResolvedValue({ id: 'user-1', phone: PHONE, name: null, avatarUrl: null });
+      redis.get.mockResolvedValue(
+        JSON.stringify({ code: '111111', attempts: 0, createdAt: Date.now() }),
+      );
+      users.upsertByPhone.mockResolvedValue({
+        id: 'user-1',
+        phone: PHONE,
+        name: null,
+        avatarUrl: null,
+      });
       users.computeRoles.mockResolvedValue([Role.Customer]);
       jwt.signAsync.mockResolvedValue('token');
 
@@ -285,40 +344,74 @@ describe('AuthService', () => {
 
       expect(jwt.signAsync).toHaveBeenNthCalledWith(
         2,
-        expect.objectContaining({ sub: 'user-1', phone: PHONE, jti: expect.any(String) }),
-        expect.objectContaining({ secret: 'test-jwt-refresh-secret', expiresIn: '30d' }),
+        expect.objectContaining({
+          sub: 'user-1',
+          phone: PHONE,
+          jti: expect.any(String),
+        }),
+        expect.objectContaining({
+          secret: 'test-jwt-refresh-secret',
+          expiresIn: '30d',
+        }),
       );
     });
   });
 
   describe('refresh', () => {
-    it('yaroqsiz/tugagan refresh token bo\'lsa UnauthorizedException tashlaydi', async () => {
+    it("yaroqsiz/tugagan refresh token bo'lsa UnauthorizedException tashlaydi", async () => {
       jwt.verifyAsync.mockRejectedValue(new Error('jwt expired'));
 
-      await expect(service.refresh('bad-token')).rejects.toThrow(UnauthorizedException);
+      await expect(service.refresh('bad-token')).rejects.toThrow(
+        UnauthorizedException,
+      );
     });
 
     it('bekor qilingan (revoked) jti bilan rad etadi', async () => {
-      jwt.verifyAsync.mockResolvedValue({ sub: 'user-1', phone: PHONE, roles: [Role.Customer], jti: 'jti-1' });
+      jwt.verifyAsync.mockResolvedValue({
+        sub: 'user-1',
+        phone: PHONE,
+        roles: [Role.Customer],
+        jti: 'jti-1',
+      });
       redis.exists.mockResolvedValue(1);
 
-      await expect(service.refresh('rotated-token')).rejects.toThrow('Sessiya tugatilgan');
+      await expect(service.refresh('rotated-token')).rejects.toThrow(
+        'Sessiya tugatilgan',
+      );
     });
 
-    it('foydalanuvchi topilmasa yoki bloklangan bo\'lsa rad etadi', async () => {
-      jwt.verifyAsync.mockResolvedValue({ sub: 'user-1', phone: PHONE, roles: [Role.Customer], jti: 'jti-1' });
+    it("foydalanuvchi topilmasa yoki bloklangan bo'lsa rad etadi", async () => {
+      jwt.verifyAsync.mockResolvedValue({
+        sub: 'user-1',
+        phone: PHONE,
+        roles: [Role.Customer],
+        jti: 'jti-1',
+      });
       redis.exists.mockResolvedValue(0);
       users.findById.mockResolvedValue(null);
 
-      await expect(service.refresh('token')).rejects.toThrow(UnauthorizedException);
+      await expect(service.refresh('token')).rejects.toThrow(
+        UnauthorizedException,
+      );
     });
 
     it('muvaffaqiyatli refresh: eski jtini bekor qiladi va yangi juftlik chiqaradi', async () => {
-      jwt.verifyAsync.mockResolvedValue({ sub: 'user-1', phone: PHONE, roles: [Role.Customer], jti: 'old-jti' });
+      jwt.verifyAsync.mockResolvedValue({
+        sub: 'user-1',
+        phone: PHONE,
+        roles: [Role.Customer],
+        jti: 'old-jti',
+      });
       redis.exists.mockResolvedValue(0);
-      users.findById.mockResolvedValue({ id: 'user-1', phone: PHONE, status: 'active' });
+      users.findById.mockResolvedValue({
+        id: 'user-1',
+        phone: PHONE,
+        status: 'active',
+      });
       users.computeRoles.mockResolvedValue([Role.Customer]);
-      jwt.signAsync.mockResolvedValueOnce('new-access').mockResolvedValueOnce('new-refresh');
+      jwt.signAsync
+        .mockResolvedValueOnce('new-access')
+        .mockResolvedValueOnce('new-refresh');
 
       const result = await service.refresh('token');
 
@@ -327,20 +420,32 @@ describe('AuthService', () => {
         31 * 24 * 60 * 60,
         '1',
       );
-      expect(result).toEqual({ accessToken: 'new-access', refreshToken: 'new-refresh' });
+      expect(result).toEqual({
+        accessToken: 'new-access',
+        refreshToken: 'new-refresh',
+      });
     });
   });
 
   describe('logout', () => {
     it('yaroqli tokenni bekor qiladi (revoke)', async () => {
-      jwt.verifyAsync.mockResolvedValue({ sub: 'user-1', phone: PHONE, roles: [Role.Customer], jti: 'jti-1' });
+      jwt.verifyAsync.mockResolvedValue({
+        sub: 'user-1',
+        phone: PHONE,
+        roles: [Role.Customer],
+        jti: 'jti-1',
+      });
 
       await service.logout('token');
 
-      expect(redis.setex).toHaveBeenCalledWith('revoked_refresh:jti-1', 31 * 24 * 60 * 60, '1');
+      expect(redis.setex).toHaveBeenCalledWith(
+        'revoked_refresh:jti-1',
+        31 * 24 * 60 * 60,
+        '1',
+      );
     });
 
-    it('yaroqsiz tokenni sekin/idempotent tarzda e\'tiborsiz qoldiradi', async () => {
+    it("yaroqsiz tokenni sekin/idempotent tarzda e'tiborsiz qoldiradi", async () => {
       jwt.verifyAsync.mockRejectedValue(new Error('invalid'));
 
       await expect(service.logout('garbage')).resolves.toBeUndefined();

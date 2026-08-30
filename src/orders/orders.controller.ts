@@ -60,7 +60,13 @@ export class OrdersController {
     await this.orders.assertOrderParty(user.sub, id);
     const raw = await this.redis.client.get(`courier:location:${id}`);
     if (!raw) return null;
-    return JSON.parse(raw) as { orderId: string; lat: number; lng: number; etaMinutes: number | null; updatedAt: string };
+    return JSON.parse(raw) as {
+      orderId: string;
+      lat: number;
+      lng: number;
+      etaMinutes: number | null;
+      updatedAt: string;
+    };
   }
 
   /**
@@ -97,7 +103,11 @@ export class OrdersController {
   }
 
   @Post()
-  create(@CurrentUser() user: JwtPayload, @Body() dto: CreateOrderDto, @DeviceId() deviceId: string | null) {
+  create(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: CreateOrderDto,
+    @DeviceId() deviceId: string | null,
+  ) {
     return this.orders.create(user.sub, dto, deviceId);
   }
 
@@ -107,7 +117,10 @@ export class OrdersController {
   }
 
   @Get(':id')
-  getOne(@CurrentUser() user: JwtPayload, @Param('id', ParseUUIDPipe) id: string) {
+  getOne(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
     return this.orders.getOne(user.sub, id);
   }
 
@@ -118,12 +131,18 @@ export class OrdersController {
     @Body() dto: UpdateOrderStatusDto,
     @DeviceId() deviceId: string | null,
   ) {
-    return this.orders.updateStatus(user.sub, id, dto.status, dto.note, { evidence: dto.evidence, deviceId });
+    return this.orders.updateStatus(user.sub, id, dto.status, dto.note, {
+      evidence: dto.evidence,
+      deviceId,
+    });
   }
 
   /** Customer: re-ask the silent shop for a paid order — restarts the 5-min window. */
   @Post(':id/re-request')
-  reRequest(@CurrentUser() user: JwtPayload, @Param('id', ParseUUIDPipe) id: string) {
+  reRequest(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
     return this.orders.reRequestOrder(user.sub, id);
   }
 
@@ -196,7 +215,10 @@ export class OrdersController {
 
   /** Customer: fetch (lazily issuing) the QR handshake token — `required` is almost always false. */
   @Get(':id/handshake')
-  getHandshake(@CurrentUser() user: JwtPayload, @Param('id', ParseUUIDPipe) id: string) {
+  getHandshake(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
     return this.orders.getHandshake(user.sub, id);
   }
 
@@ -211,7 +233,10 @@ export class OrdersController {
   }
 
   @Get(':id/messages')
-  listMessages(@CurrentUser() user: JwtPayload, @Param('id', ParseUUIDPipe) id: string) {
+  listMessages(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
     return this.orders.listMessages(user.sub, id);
   }
 
@@ -258,7 +283,12 @@ export class SellerOrdersController {
     @Param('orderId', ParseUUIDPipe) orderId: string,
     @Body() dto: AssignOrderDto,
   ) {
-    return this.orders.assignOrder(user.sub, shopId, orderId, dto.staffId ?? null);
+    return this.orders.assignOrder(
+      user.sub,
+      shopId,
+      orderId,
+      dto.staffId ?? null,
+    );
   }
 
   /** Nearest-neighbor greedy delivery route for this shop's 'delivering' orders (SPEC.md §27). */

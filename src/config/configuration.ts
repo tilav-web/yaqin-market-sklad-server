@@ -126,7 +126,9 @@ export class EnvironmentVariables {
   FIXED_OTP_CODE = '';
 }
 
-export function validateEnv(config: Record<string, unknown>): EnvironmentVariables {
+export function validateEnv(
+  config: Record<string, unknown>,
+): EnvironmentVariables {
   const coerced = {
     ...config,
     PORT: Number(config.PORT ?? 3000),
@@ -143,7 +145,10 @@ export function validateEnv(config: Record<string, unknown>): EnvironmentVariabl
   if (errors.length > 0) {
     throw new Error(
       `Environment variable validation failed:\n${errors
-        .map((e) => `  - ${e.property}: ${Object.values(e.constraints ?? {}).join(', ')}`)
+        .map(
+          (e) =>
+            `  - ${e.property}: ${Object.values(e.constraints ?? {}).join(', ')}`,
+        )
         .join('\n')}`,
     );
   }

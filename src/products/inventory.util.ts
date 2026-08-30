@@ -1,7 +1,11 @@
 import { BadRequestException } from '@nestjs/common';
 import { EntityManager } from 'typeorm';
 
-import { BrakReasonCode, InventoryMovement, MovementType } from './entities/inventory-movement.entity';
+import {
+  BrakReasonCode,
+  InventoryMovement,
+  MovementType,
+} from './entities/inventory-movement.entity';
 import { ProductVariant } from './entities/product-variant.entity';
 import { StockBatch } from './entities/stock-batch.entity';
 
@@ -36,7 +40,8 @@ export async function receiveBatch(
   manager: EntityManager,
   input: ReceiveBatchInput,
 ): Promise<StockBatch> {
-  if (input.quantity <= 0) throw new BadRequestException('Miqdor 0 dan katta bo\'lishi kerak');
+  if (input.quantity <= 0)
+    throw new BadRequestException("Miqdor 0 dan katta bo'lishi kerak");
   const { variant } = input;
   const before = variant.stock;
 

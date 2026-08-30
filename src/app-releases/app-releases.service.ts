@@ -51,8 +51,11 @@ export class AppReleasesService {
     // >= whatever's currently latest — re-uploading an accidentally-older
     // build must not push users backward. Still saved as a normal release
     // either way, just not flagged as latest.
-    const currentLatest = await this.releases.findOne({ where: { isLatest: true } });
-    const becomesLatest = !currentLatest || compareSemver(version, currentLatest.version) >= 0;
+    const currentLatest = await this.releases.findOne({
+      where: { isLatest: true },
+    });
+    const becomesLatest =
+      !currentLatest || compareSemver(version, currentLatest.version) >= 0;
     if (becomesLatest && currentLatest) {
       await this.releases.update({ id: currentLatest.id }, { isLatest: false });
     }
@@ -75,9 +78,7 @@ export class AppReleasesService {
     return this.releases.findOne({ where: { isLatest: true } });
   }
 
-  async getApkStream(
-    key: string,
-  ): Promise<{ stream: Readable; size: number }> {
+  async getApkStream(key: string): Promise<{ stream: Readable; size: number }> {
     const { stream, size } = await this.uploads.getObject(key);
     return { stream, size };
   }
@@ -93,7 +94,9 @@ export class AppReleasesService {
     if (release.isLatest) {
       const remaining = await this.releases.find();
       if (remaining.length > 0) {
-        const highest = remaining.reduce((best, r) => (compareSemver(r.version, best.version) > 0 ? r : best));
+        const highest = remaining.reduce((best, r) =>
+          compareSemver(r.version, best.version) > 0 ? r : best,
+        );
         highest.isLatest = true;
         await this.releases.save(highest);
       }

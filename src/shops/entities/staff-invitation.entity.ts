@@ -9,7 +9,11 @@ import {
 } from 'typeorm';
 
 import { Shop } from './shop.entity';
-import type { StaffPermission, StaffPreset, StaffRole } from './shop-staff.entity';
+import type {
+  StaffPermission,
+  StaffPreset,
+  StaffRole,
+} from './shop-staff.entity';
 
 export enum StaffInvitationStatus {
   Pending = 'pending',
@@ -50,7 +54,11 @@ export class StaffInvitation {
   @Column({ type: 'varchar', length: 64 })
   qrToken!: string;
 
-  @Column({ type: 'enum', enum: StaffInvitationStatus, default: StaffInvitationStatus.Pending })
+  @Column({
+    type: 'enum',
+    enum: StaffInvitationStatus,
+    default: StaffInvitationStatus.Pending,
+  })
   status!: StaffInvitationStatus;
 
   @Column({ type: 'uuid', nullable: true })

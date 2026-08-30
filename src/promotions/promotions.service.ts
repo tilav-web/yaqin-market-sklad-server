@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -26,14 +30,30 @@ export class PromotionsService {
   ) {}
 
   private ensureAccess(userId: string, shopId: string) {
-    return assertShopPermission(this.shops, this.staff, userId, shopId, 'promotions.view');
+    return assertShopPermission(
+      this.shops,
+      this.staff,
+      userId,
+      shopId,
+      'promotions.view',
+    );
   }
 
   private ensureManage(userId: string, shopId: string) {
-    return assertShopPermission(this.shops, this.staff, userId, shopId, 'promotions.manage');
+    return assertShopPermission(
+      this.shops,
+      this.staff,
+      userId,
+      shopId,
+      'promotions.manage',
+    );
   }
 
-  async list(userId: string, shopId: string, status?: 'active' | 'scheduled' | 'ended') {
+  async list(
+    userId: string,
+    shopId: string,
+    status?: 'active' | 'scheduled' | 'ended',
+  ) {
     await this.ensureAccess(userId, shopId);
     const now = new Date();
     const qb = this.repo
@@ -42,11 +62,17 @@ export class PromotionsService {
       .orderBy('p.createdAt', 'DESC');
 
     if (status === 'active') {
-      qb.andWhere('p.isActive = true AND p.startAt <= :now AND (p.endAt IS NULL OR p.endAt >= :now)', { now });
+      qb.andWhere(
+        'p.isActive = true AND p.startAt <= :now AND (p.endAt IS NULL OR p.endAt >= :now)',
+        { now },
+      );
     } else if (status === 'scheduled') {
       qb.andWhere('p.isActive = true AND p.startAt > :now', { now });
     } else if (status === 'ended') {
-      qb.andWhere('p.isActive = false OR (p.endAt IS NOT NULL AND p.endAt < :now)', { now });
+      qb.andWhere(
+        'p.isActive = false OR (p.endAt IS NOT NULL AND p.endAt < :now)',
+        { now },
+      );
     }
     return qb.getMany();
   }
@@ -85,7 +111,10 @@ export class PromotionsService {
     const saved = await this.repo.save(promo);
 
     // Sevimli do'kon foydalanuvchilariga notification yuboramiz
-    void this.notifyFavoriteUsers(shopId, typeof saved.name === 'object' ? saved.name?.uz || '' : saved.name);
+    void this.notifyFavoriteUsers(
+      shopId,
+      typeof saved.name === 'object' ? saved.name?.uz || '' : saved.name,
+    );
     return saved;
   }
 
@@ -139,13 +168,22 @@ export class PromotionsService {
     let bestId: string | null = null;
 
     for (const p of promos) {
-      if (p.type === 'product_discount' && p.targetProductId !== productVariantId) continue;
-      if (p.type === 'category_discount' && (!categoryId || p.targetCategoryId !== categoryId)) continue;
+      if (
+        p.type === 'product_discount' &&
+        p.targetProductId !== productVariantId
+      )
+        continue;
+      if (
+        p.type === 'category_discount' &&
+        (!categoryId || p.targetCategoryId !== categoryId)
+      )
+        continue;
       if (!p.discountType || !p.discountValue) continue;
 
-      const rawDiscount = p.discountType === 'percent'
-        ? Math.round((unitPrice * p.discountValue) / 100)
-        : p.discountValue;
+      const rawDiscount =
+        p.discountType === 'percent'
+          ? Math.round((unitPrice * p.discountValue) / 100)
+          : p.discountValue;
       const discount = Math.max(0, Math.min(rawDiscount, unitPrice));
 
       // "Best discount wins" — keep the largest actual so'm discount, not
@@ -187,19 +225,25 @@ export class PromotionsService {
       .createQueryBuilder()
       .update(Promotion)
       .set({ isActive: false })
-      .where('isActive = true AND endAt IS NOT NULL AND endAt < :now', { now: new Date() })
+      .where('isActive = true AND endAt IS NOT NULL AND endAt < :now', {
+        now: new Date(),
+      })
       .execute();
   }
 
-  private validate(dto: Partial<{
-    type: string;
-    discountType: string | null;
-    discountValue: number | null;
-    freeDeliveryMinAmount: number | null;
-  }>) {
+  private validate(
+    dto: Partial<{
+      type: string;
+      discountType: string | null;
+      discountValue: number | null;
+      freeDeliveryMinAmount: number | null;
+    }>,
+  ) {
     if (dto.type !== 'free_delivery') {
-      if (!dto.discountType) throw new BadRequestException('discountType majburiy');
-      if (!dto.discountValue || dto.discountValue <= 0) throw new BadRequestException('discountValue > 0 bo\'lishi kerak');
+      if (!dto.discountType)
+        throw new BadRequestException('discountType majburiy');
+      if (!dto.discountValue || dto.discountValue <= 0)
+        throw new BadRequestException("discountValue > 0 bo'lishi kerak");
     } else {
       if (!dto.freeDeliveryMinAmount || dto.freeDeliveryMinAmount <= 0) {
         throw new BadRequestException('freeDeliveryMinAmount majburiy');
@@ -207,18 +251,27 @@ export class PromotionsService {
     }
   }
 
-  private async notifyFavoriteUsers(shopId: string, promoName: string): Promise<void> {
-    const shop = await this.shops.findOne({ where: { id: shopId }, select: { name: true } });
+  private async notifyFavoriteUsers(
+    shopId: string,
+    promoName: string,
+  ): Promise<void> {
+    const shop = await this.shops.findOne({
+      where: { id: shopId },
+      select: { name: true },
+    });
     const favUsers = await this.users
       .createQueryBuilder('u')
       .where(':shopId = ANY(u.favoriteShopIds)', { shopId })
       .select(['u.id'])
       .getMany();
     if (!favUsers.length) return;
-    void this.push.sendToUsers(favUsers.map((u) => u.id), {
-      title: `${shop?.name ?? 'Do\'koningiz'} — yangi aksiya!`,
-      body: promoName,
-      data: { kind: 'shop_promo', shopId },
-    });
+    void this.push.sendToUsers(
+      favUsers.map((u) => u.id),
+      {
+        title: `${shop?.name ?? "Do'koningiz"} — yangi aksiya!`,
+        body: promoName,
+        data: { kind: 'shop_promo', shopId },
+      },
+    );
   }
 }

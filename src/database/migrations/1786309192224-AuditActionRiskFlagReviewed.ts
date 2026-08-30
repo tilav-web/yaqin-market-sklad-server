@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner } from "typeorm";
+import { MigrationInterface, QueryRunner } from 'typeorm';
 
 /**
  * Adds the 'risk_flag_reviewed' value to the admin_audit_logs action enum —
@@ -8,16 +8,17 @@ import { MigrationInterface, QueryRunner } from "typeorm";
  * class of problem regardless of the Postgres version deployed.
  */
 export class AuditActionRiskFlagReviewed1786309192224 implements MigrationInterface {
-    name = 'AuditActionRiskFlagReviewed1786309192224'
+  name = 'AuditActionRiskFlagReviewed1786309192224';
 
-    public async up(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`ALTER TYPE "public"."admin_audit_logs_action_enum" ADD VALUE IF NOT EXISTS 'risk_flag_reviewed'`);
-    }
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(
+      `ALTER TYPE "public"."admin_audit_logs_action_enum" ADD VALUE IF NOT EXISTS 'risk_flag_reviewed'`,
+    );
+  }
 
-    public async down(): Promise<void> {
-        // Postgres has no DROP VALUE for enums — rolling back this value
-        // would require recreating the type and rewriting the column, which
-        // is destructive if any row already uses it. Left as a no-op.
-    }
-
+  public async down(): Promise<void> {
+    // Postgres has no DROP VALUE for enums — rolling back this value
+    // would require recreating the type and rewriting the column, which
+    // is destructive if any row already uses it. Left as a no-op.
+  }
 }

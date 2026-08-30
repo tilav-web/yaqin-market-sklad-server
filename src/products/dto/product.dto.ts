@@ -225,7 +225,9 @@ export class BrakStockDto {
   @IsEnum(BrakReasonCode)
   reasonCode!: BrakReasonCode;
 
-  @ApiPropertyOptional({ description: 'Majburiy — reasonCode "other" bo\'lganda' })
+  @ApiPropertyOptional({
+    description: 'Majburiy — reasonCode "other" bo\'lganda',
+  })
   @ValidateIf((o) => o.reasonCode === BrakReasonCode.Other)
   @IsString()
   @IsNotEmpty({ message: '"Boshqa" sababda izoh yozish shart' })
@@ -234,7 +236,10 @@ export class BrakStockDto {
 }
 
 export class CountStockDto {
-  @ApiProperty({ example: 12, description: 'Real sanab chiqilgan haqiqiy qoldiq' })
+  @ApiProperty({
+    example: 12,
+    description: 'Real sanab chiqilgan haqiqiy qoldiq',
+  })
   @IsInt()
   @Min(0)
   actualQty!: number;
@@ -246,7 +251,10 @@ export class ReceiveStockDto {
   @IsPositive()
   quantity!: number;
 
-  @ApiProperty({ example: 3500, description: 'Dona uchun tannarx (kirim narxi)' })
+  @ApiProperty({
+    example: 3500,
+    description: 'Dona uchun tannarx (kirim narxi)',
+  })
   @IsInt()
   @Min(0)
   costPrice!: number;

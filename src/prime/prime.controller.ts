@@ -1,8 +1,22 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, Query, Request } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  Put,
+  Query,
+  Request,
+} from '@nestjs/common';
 
 import { Role } from '../auth/role.enum';
 import { Roles } from '../auth/decorators/roles.decorator';
-import { CreatePrimePlanDto, ExtendPrimeSubDto, UpdatePrimePlanDto } from './dto/prime-plan.dto';
+import {
+  CreatePrimePlanDto,
+  ExtendPrimeSubDto,
+  UpdatePrimePlanDto,
+} from './dto/prime-plan.dto';
 import { SubscribeDto } from './dto/subscribe.dto';
 import { PrimeService } from './prime.service';
 
@@ -72,7 +86,11 @@ export class AdminPrimeController {
   }
 
   @Put('subscriptions/:id/extend')
-  extend(@Param('id') id: string, @Request() req: any, @Body() dto: ExtendPrimeSubDto) {
+  extend(
+    @Param('id') id: string,
+    @Request() req: any,
+    @Body() dto: ExtendPrimeSubDto,
+  ) {
     return this.svc.adminExtend(id, dto.days, req.user.sub);
   }
 }

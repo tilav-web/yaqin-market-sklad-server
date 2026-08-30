@@ -21,9 +21,13 @@ import {
   ValidateNested,
 } from 'class-validator';
 
-
 import { LocationEvidenceDto } from '../../geo/location-evidence';
-import { OrderChannel, OrderStatus, PaymentMethod, PaymentStatus } from '../entities/order.entity';
+import {
+  OrderChannel,
+  OrderStatus,
+  PaymentMethod,
+  PaymentStatus,
+} from '../entities/order.entity';
 import { ReviewTarget } from '../entities/review.entity';
 
 export class OrderItemDto {
@@ -58,7 +62,10 @@ export class CreateOrderDto {
   @IsEnum(PaymentMethod)
   paymentMethod?: PaymentMethod;
 
-  @ApiPropertyOptional({ example: '+998901234567', description: 'Defaults to the customer\'s own phone if omitted' })
+  @ApiPropertyOptional({
+    example: '+998901234567',
+    description: "Defaults to the customer's own phone if omitted",
+  })
   @IsOptional()
   @Matches(/^\+998\d{9}$/)
   recipientPhone?: string;
@@ -78,7 +85,9 @@ export class CreateOrderDto {
 }
 
 export class AssignOrderDto {
-  @ApiPropertyOptional({ description: 'ShopStaff.id; null = biriktirishni bekor qilish' })
+  @ApiPropertyOptional({
+    description: 'ShopStaff.id; null = biriktirishni bekor qilish',
+  })
   @IsOptional()
   @IsUUID()
   staffId?: string | null;
@@ -231,7 +240,9 @@ export class PartialReturnDto {
 }
 
 export class AdminListOrdersQuery {
-  @ApiPropertyOptional({ description: 'Buyurtma raqami, mijoz ismi/telefoni yoki do\'kon nomi' })
+  @ApiPropertyOptional({
+    description: "Buyurtma raqami, mijoz ismi/telefoni yoki do'kon nomi",
+  })
   @IsOptional()
   @IsString()
   @MaxLength(64)
@@ -330,7 +341,10 @@ export class AdminListReviewsQuery {
   @IsEnum(ReviewTarget)
   target?: ReviewTarget;
 
-  @ApiPropertyOptional({ description: 'Faqat shu qiymatdan past/teng baholar (masalan 2 — muammoli sharhlarni topish uchun)' })
+  @ApiPropertyOptional({
+    description:
+      'Faqat shu qiymatdan past/teng baholar (masalan 2 — muammoli sharhlarni topish uchun)',
+  })
   @IsOptional()
   @Type(() => Number)
   @IsInt()

@@ -1,7 +1,8 @@
 import { Workbook } from 'exceljs';
 import type { Response } from 'express';
 
-export const XLSX_CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+export const XLSX_CONTENT_TYPE =
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
 /** Build a single-sheet .xlsx buffer — shared by the admin export endpoints. */
 export async function buildXlsxBuffer(

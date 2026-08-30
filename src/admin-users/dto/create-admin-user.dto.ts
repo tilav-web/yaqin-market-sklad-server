@@ -17,7 +17,8 @@ export class CreateAdminUserDto {
   @MinLength(3)
   @MaxLength(32)
   @Matches(/^[a-zA-Z0-9._-]+$/, {
-    message: 'Username faqat lotin harflari, raqamlar va . _ - belgilaridan iborat bo\'lishi kerak',
+    message:
+      "Username faqat lotin harflari, raqamlar va . _ - belgilaridan iborat bo'lishi kerak",
   })
   username!: string;
 

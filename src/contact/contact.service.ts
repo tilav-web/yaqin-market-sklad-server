@@ -22,7 +22,9 @@ export class ContactService {
     const count = await this.redis.client.incr(key);
     if (count === 1) await this.redis.client.expire(key, 60 * 60);
     if (count > RATE_LIMIT_PER_HOUR) {
-      throw new BadRequestException("Juda ko'p murojaat. Birozdan keyin urinib ko'ring");
+      throw new BadRequestException(
+        "Juda ko'p murojaat. Birozdan keyin urinib ko'ring",
+      );
     }
     const inquiry = this.inquiries.create({
       name: dto.name.trim(),

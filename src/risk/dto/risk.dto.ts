@@ -1,8 +1,23 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsEnum, IsIn, IsInt, IsOptional, IsString, IsUUID, Max, MaxLength, Min } from 'class-validator';
+import {
+  IsEnum,
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Max,
+  MaxLength,
+  Min,
+} from 'class-validator';
 
-import { RiskFlagStatus, RiskRule, RiskSeverity, RiskSubjectType } from '../entities/risk-flag.entity';
+import {
+  RiskFlagStatus,
+  RiskRule,
+  RiskSeverity,
+  RiskSubjectType,
+} from '../entities/risk-flag.entity';
 
 export class AdminListRiskFlagsQuery {
   @ApiPropertyOptional({ enum: RiskFlagStatus })

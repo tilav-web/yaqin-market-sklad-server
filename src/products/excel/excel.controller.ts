@@ -17,7 +17,11 @@ import type { Response } from 'express';
 
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import type { JwtPayload } from '../../auth/decorators/current-user.decorator';
-import { ConfirmImportDto, DateRangeQueryDto, InventoryExportQueryDto } from './dto/excel.dto';
+import {
+  ConfirmImportDto,
+  DateRangeQueryDto,
+  InventoryExportQueryDto,
+} from './dto/excel.dto';
 import { ExcelService, XLSX_CONTENT_TYPE } from './excel.service';
 
 const MAX_IMPORT_BYTES = 5 * 1024 * 1024; // 5 MB
@@ -52,7 +56,12 @@ export class ExcelController {
     @Query() query: DateRangeQueryDto,
     @Res() res: Response,
   ) {
-    const buf = await this.excel.exportOrders(user.sub, shopId, query.from, query.to);
+    const buf = await this.excel.exportOrders(
+      user.sub,
+      shopId,
+      query.from,
+      query.to,
+    );
     sendXlsx(res, buf, 'buyurtmalar.xlsx');
   }
 
@@ -63,13 +72,20 @@ export class ExcelController {
     @Query() query: DateRangeQueryDto,
     @Res() res: Response,
   ) {
-    const buf = await this.excel.exportMovements(user.sub, shopId, query.from, query.to);
+    const buf = await this.excel.exportMovements(
+      user.sub,
+      shopId,
+      query.from,
+      query.to,
+    );
     sendXlsx(res, buf, 'kirim-chiqim-tarixi.xlsx');
   }
 
   /** Upload a filled-in `.xlsx` for validation — does NOT create anything yet. */
   @Post('import/preview')
-  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: MAX_IMPORT_BYTES } }))
+  @UseInterceptors(
+    FileInterceptor('file', { limits: { fileSize: MAX_IMPORT_BYTES } }),
+  )
   async previewImport(
     @CurrentUser() user: JwtPayload,
     @Param('shopId', ParseUUIDPipe) shopId: string,

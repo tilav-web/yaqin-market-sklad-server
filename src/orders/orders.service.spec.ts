@@ -1,4 +1,8 @@
-import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { DataSource, In, Repository, SelectQueryBuilder } from 'typeorm';
@@ -24,7 +28,12 @@ import { UserAddress } from '../users/entities/user-address.entity';
 import { User } from '../users/entities/user.entity';
 import { ChatMessage } from './entities/chat-message.entity';
 import { OrderItem } from './entities/order-item.entity';
-import { Order, OrderStatus, PaymentMethod, PaymentStatus } from './entities/order.entity';
+import {
+  Order,
+  OrderStatus,
+  PaymentMethod,
+  PaymentStatus,
+} from './entities/order.entity';
 import { Review } from './entities/review.entity';
 import { OrdersService } from './orders.service';
 
@@ -51,7 +60,12 @@ function makeShop(overrides: Partial<Shop> = {}): Shop {
     workingHours: ALWAYS_OPEN_HOURS,
     holidays: [],
     minOrderPrice: 0,
-    deliveryZone: { maxKm: 5, freeKm: 1, pricingType: 'flat', pricePerStep: 10_000 },
+    deliveryZone: {
+      maxKm: 5,
+      freeKm: 1,
+      pricingType: 'flat',
+      pricePerStep: 10_000,
+    },
     deliveryPolygon: null,
     freeDeliveryPolygon: null,
     blockedUserIds: [],
@@ -65,7 +79,7 @@ function makeAddress(overrides: Partial<UserAddress> = {}): UserAddress {
     id: 'addr-1',
     userId: USER_ID,
     label: 'Uy',
-    address: 'Test ko\'cha 1',
+    address: "Test ko'cha 1",
     latitude: 41.001,
     longitude: 69.001, // ~0.1km from the shop — inside a 5km/1km-free zone
     notes: null,
@@ -128,9 +142,14 @@ function mockEntityManager(variantsById: Record<string, ProductVariant>) {
     // instance), and the narrow type TypeScript infers from this default body
     // would reject every one of those.
     findOne: jest.fn(
-      async (Entity: unknown, opts: { where: { id?: string } }): Promise<unknown> => {
-        if (Entity === ProductVariant) return variantsById[opts.where.id as string] ?? null;
-        if (Entity === Order) return orderRecord ? { ...orderRecord, items: itemRecords } : null;
+      async (
+        Entity: unknown,
+        opts: { where: { id?: string } },
+      ): Promise<unknown> => {
+        if (Entity === ProductVariant)
+          return variantsById[opts.where.id as string] ?? null;
+        if (Entity === Order)
+          return orderRecord ? { ...orderRecord, items: itemRecords } : null;
         return null;
       },
     ),
@@ -155,10 +174,17 @@ describe('OrdersService', () => {
   let dataSource: { transaction: jest.Mock; createQueryBuilder: jest.Mock };
   let realtime: { emitToUser: jest.Mock; emitToShop: jest.Mock };
   let push: { sendToUser: jest.Mock; sendToUsers: jest.Mock };
-  let payments: { recordCashOrderDelivery: jest.Mock; recordOnlineOrderDelivery: jest.Mock };
+  let payments: {
+    recordCashOrderDelivery: jest.Mock;
+    recordOnlineOrderDelivery: jest.Mock;
+  };
   let prime: { getCommissionRate: jest.Mock };
   let settings: { getNumber: jest.Mock };
-  let promotions: { findActivePromosForShop: jest.Mock; bestDiscountFor: jest.Mock; findFreeDeliveryPromotion: jest.Mock };
+  let promotions: {
+    findActivePromosForShop: jest.Mock;
+    bestDiscountFor: jest.Mock;
+    findFreeDeliveryPromotion: jest.Mock;
+  };
   let complaints: { getForOrder: jest.Mock; openComplaintOrderIds: jest.Mock };
   let auditLog: { record: jest.Mock };
   let click: { refundPaidOrder: jest.Mock };
@@ -197,13 +223,20 @@ describe('OrdersService', () => {
     dataSource = { transaction: jest.fn(), createQueryBuilder: jest.fn() };
     realtime = { emitToUser: jest.fn(), emitToShop: jest.fn() };
     push = { sendToUser: jest.fn(), sendToUsers: jest.fn() };
-    payments = { recordCashOrderDelivery: jest.fn(), recordOnlineOrderDelivery: jest.fn() };
+    payments = {
+      recordCashOrderDelivery: jest.fn(),
+      recordOnlineOrderDelivery: jest.fn(),
+    };
     prime = { getCommissionRate: jest.fn().mockResolvedValue(12) };
     settings = { getNumber: jest.fn().mockReturnValue(12) };
     promotions = {
       findActivePromosForShop: jest.fn().mockResolvedValue([]),
-      bestDiscountFor: jest.fn().mockReturnValue({ discountAmount: 0, promotionId: null }),
-      findFreeDeliveryPromotion: jest.fn().mockResolvedValue({ free: false, promotionId: null }),
+      bestDiscountFor: jest
+        .fn()
+        .mockReturnValue({ discountAmount: 0, promotionId: null }),
+      findFreeDeliveryPromotion: jest
+        .fn()
+        .mockResolvedValue({ free: false, promotionId: null }),
     };
     complaints = { getForOrder: jest.fn(), openComplaintOrderIds: jest.fn() };
     auditLog = { record: jest.fn().mockResolvedValue(undefined) };
@@ -221,7 +254,12 @@ describe('OrdersService', () => {
       onOrderDelivered: jest.fn().mockResolvedValue(undefined),
       requiresHandshake: jest.fn().mockResolvedValue(false),
     };
-    const redis = { client: { set: jest.fn().mockResolvedValue('OK'), get: jest.fn().mockResolvedValue(null) } };
+    const redis = {
+      client: {
+        set: jest.fn().mockResolvedValue('OK'),
+        get: jest.fn().mockResolvedValue(null),
+      },
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -229,13 +267,22 @@ describe('OrdersService', () => {
         { provide: getRepositoryToken(Order), useFactory: buildRepoMock },
         { provide: getRepositoryToken(OrderItem), useFactory: buildRepoMock },
         { provide: getRepositoryToken(Shop), useFactory: buildRepoMock },
-        { provide: getRepositoryToken(ProductVariant), useFactory: buildRepoMock },
+        {
+          provide: getRepositoryToken(ProductVariant),
+          useFactory: buildRepoMock,
+        },
         { provide: getRepositoryToken(UserAddress), useFactory: buildRepoMock },
         { provide: getRepositoryToken(Review), useFactory: buildRepoMock },
         { provide: getRepositoryToken(ChatMessage), useFactory: buildRepoMock },
         { provide: getRepositoryToken(ShopStaff), useFactory: buildRepoMock },
-        { provide: getRepositoryToken(GlobalProduct), useFactory: buildRepoMock },
-        { provide: getRepositoryToken(SellerTransaction), useFactory: buildRepoMock },
+        {
+          provide: getRepositoryToken(GlobalProduct),
+          useFactory: buildRepoMock,
+        },
+        {
+          provide: getRepositoryToken(SellerTransaction),
+          useFactory: buildRepoMock,
+        },
         { provide: getRepositoryToken(User), useFactory: buildRepoMock },
         { provide: DataSource, useValue: dataSource },
         { provide: RealtimeGateway, useValue: realtime },
@@ -264,7 +311,9 @@ describe('OrdersService', () => {
     sellerTransactions = module.get(getRepositoryToken(SellerTransaction));
 
     // Common defaults shared by most `create()` tests.
-    globalProducts.findBy.mockResolvedValue([{ id: 'gp-1', name: 'Test mahsulot', categoryId: 'cat-1' }] as never);
+    globalProducts.findBy.mockResolvedValue([
+      { id: 'gp-1', name: 'Test mahsulot', categoryId: 'cat-1' },
+    ] as never);
   });
 
   afterEach(() => jest.clearAllMocks());
@@ -276,31 +325,50 @@ describe('OrdersService', () => {
       items: [{ productVariantId: 'variant-1', quantity: 2 }],
     };
 
-    it('do\'kon topilmasa yoki aktiv bo\'lmasa NotFoundException', async () => {
+    it("do'kon topilmasa yoki aktiv bo'lmasa NotFoundException", async () => {
       shops.findOne.mockResolvedValue(null);
-      await expect(service.create(USER_ID, dto)).rejects.toThrow(NotFoundException);
+      await expect(service.create(USER_ID, dto)).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
-    it('do\'kon hozir yopiq bo\'lsa BadRequestException (ish vaqti gate)', async () => {
+    it("do'kon hozir yopiq bo'lsa BadRequestException (ish vaqti gate)", async () => {
       shops.findOne.mockResolvedValue(makeShop({ isOpenManual: false }));
       await expect(service.create(USER_ID, dto)).rejects.toThrow('hozir yopiq');
     });
 
-    it('foydalanuvchi shu do\'kon tomonidan bloklangan bo\'lsa ForbiddenException', async () => {
+    it("foydalanuvchi shu do'kon tomonidan bloklangan bo'lsa ForbiddenException", async () => {
       shops.findOne.mockResolvedValue(makeShop({ blockedUserIds: [USER_ID] }));
-      await expect(service.create(USER_ID, dto)).rejects.toThrow(ForbiddenException);
+      await expect(service.create(USER_ID, dto)).rejects.toThrow(
+        ForbiddenException,
+      );
     });
 
     it('manzil topilmasa NotFoundException', async () => {
       shops.findOne.mockResolvedValue(makeShop());
       addresses.findOne.mockResolvedValue(null);
-      await expect(service.create(USER_ID, dto)).rejects.toThrow(NotFoundException);
+      await expect(service.create(USER_ID, dto)).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
-    it('manzil yetkazib berish zonasidan tashqarida bo\'lsa rad etadi', async () => {
-      shops.findOne.mockResolvedValue(makeShop({ deliveryZone: { maxKm: 5, freeKm: 1, pricingType: 'flat', pricePerStep: 5000 } }));
-      addresses.findOne.mockResolvedValue(makeAddress({ latitude: 42.0, longitude: 70.0 })); // ~140km away
-      await expect(service.create(USER_ID, dto)).rejects.toThrow("zonasidan tashqarida");
+    it("manzil yetkazib berish zonasidan tashqarida bo'lsa rad etadi", async () => {
+      shops.findOne.mockResolvedValue(
+        makeShop({
+          deliveryZone: {
+            maxKm: 5,
+            freeKm: 1,
+            pricingType: 'flat',
+            pricePerStep: 5000,
+          },
+        }),
+      );
+      addresses.findOne.mockResolvedValue(
+        makeAddress({ latitude: 42.0, longitude: 70.0 }),
+      ); // ~140km away
+      await expect(service.create(USER_ID, dto)).rejects.toThrow(
+        'zonasidan tashqarida',
+      );
     });
 
     it('deliveryPolygon berilgan bo\'lsa, doiradan tashqarida ham "ichkarida" hisoblanadi', async () => {
@@ -309,39 +377,55 @@ describe('OrdersService', () => {
       // over the circle radius (regression: b9fd09b).
       const polygon = {
         type: 'Polygon' as const,
-        coordinates: [[[69, 41], [70, 41], [70, 42], [69, 42], [69, 41]]] as [number, number][][],
+        coordinates: [
+          [
+            [69, 41],
+            [70, 41],
+            [70, 42],
+            [69, 42],
+            [69, 41],
+          ],
+        ] as [number, number][][],
       };
       shops.findOne.mockResolvedValue(makeShop({ deliveryPolygon: polygon }));
-      addresses.findOne.mockResolvedValue(makeAddress({ latitude: 41.5, longitude: 69.5 }));
+      addresses.findOne.mockResolvedValue(
+        makeAddress({ latitude: 41.5, longitude: 69.5 }),
+      );
       variants.find.mockResolvedValue([]); // deliberately mismatched so we get a *different*, later error
 
       // If the zone check had rejected it, we'd see "zonasidan tashqarida" —
       // instead we reach the next check (variant count mismatch), proving
       // reachability passed.
-      await expect(service.create(USER_ID, dto)).rejects.toThrow('Bir yoki bir nechta mahsulot topilmadi');
+      await expect(service.create(USER_ID, dto)).rejects.toThrow(
+        'Bir yoki bir nechta mahsulot topilmadi',
+      );
     });
 
-    it('so\'ralgan variantlar soni topilganlardan farq qilsa rad etadi', async () => {
+    it("so'ralgan variantlar soni topilganlardan farq qilsa rad etadi", async () => {
       shops.findOne.mockResolvedValue(makeShop());
       addresses.findOne.mockResolvedValue(makeAddress());
       variants.find.mockResolvedValue([]);
-      await expect(service.create(USER_ID, dto)).rejects.toThrow('Bir yoki bir nechta mahsulot topilmadi');
+      await expect(service.create(USER_ID, dto)).rejects.toThrow(
+        'Bir yoki bir nechta mahsulot topilmadi',
+      );
     });
 
-    it('mahsulot qoldig\'i yetarli bo\'lmasa rad etadi', async () => {
+    it("mahsulot qoldig'i yetarli bo'lmasa rad etadi", async () => {
       shops.findOne.mockResolvedValue(makeShop());
       addresses.findOne.mockResolvedValue(makeAddress());
       variants.find.mockResolvedValue([makeVariant({ stock: 1 })]);
       await expect(service.create(USER_ID, dto)).rejects.toThrow(/ta qoldi/);
     });
 
-    it('savat summasi minimal buyurtma narxidan kam bo\'lsa rad etadi (mini-order minimum)', async () => {
+    it("savat summasi minimal buyurtma narxidan kam bo'lsa rad etadi (mini-order minimum)", async () => {
       // 2 × 10000 = 20000 subtotal, but the shop requires 50000 minimum.
       shops.findOne.mockResolvedValue(makeShop({ minOrderPrice: 50_000 }));
       addresses.findOne.mockResolvedValue(makeAddress());
       variants.find.mockResolvedValue([makeVariant()]);
 
-      await expect(service.create(USER_ID, dto)).rejects.toThrow('Minimal buyurtma narxi: 50000');
+      await expect(service.create(USER_ID, dto)).rejects.toThrow(
+        'Minimal buyurtma narxi: 50000',
+      );
     });
   });
 
@@ -352,7 +436,7 @@ describe('OrdersService', () => {
       items: [{ productVariantId: 'variant-1', quantity: 2 }],
     };
 
-    it('freeKm ichida bo\'lsa yetkazish bepul, umumiy summa subtotalga teng', async () => {
+    it("freeKm ichida bo'lsa yetkazish bepul, umumiy summa subtotalga teng", async () => {
       const shop = makeShop(); // freeKm: 1, address ~0.1km away
       const address = makeAddress();
       const variant = makeVariant();
@@ -369,9 +453,14 @@ describe('OrdersService', () => {
       expect(created.total).toBe(20_000);
     });
 
-    it('freeKm dan tashqarida narxlash turiga mos yetkazish to\'lovini hisoblaydi (flat)', async () => {
+    it("freeKm dan tashqarida narxlash turiga mos yetkazish to'lovini hisoblaydi (flat)", async () => {
       const shop = makeShop({
-        deliveryZone: { maxKm: 10, freeKm: 1, pricingType: 'flat', pricePerStep: 7000 },
+        deliveryZone: {
+          maxKm: 10,
+          freeKm: 1,
+          pricingType: 'flat',
+          pricePerStep: 7000,
+        },
       });
       const address = makeAddress({ latitude: 41.03, longitude: 69.0 }); // ~3.3km away — beyond freeKm
       const variant = makeVariant();
@@ -387,13 +476,26 @@ describe('OrdersService', () => {
       expect(created.total).toBe(created.subTotal + 7000);
     });
 
-    it('freeDeliveryPolygon ichida bo\'lsa masofadan qat\'i nazar yetkazish bepul', async () => {
+    it("freeDeliveryPolygon ichida bo'lsa masofadan qat'i nazar yetkazish bepul", async () => {
       const polygon = {
         type: 'Polygon' as const,
-        coordinates: [[[69, 41], [70, 41], [70, 42], [69, 42], [69, 41]]] as [number, number][][],
+        coordinates: [
+          [
+            [69, 41],
+            [70, 41],
+            [70, 42],
+            [69, 42],
+            [69, 41],
+          ],
+        ] as [number, number][][],
       };
       const shop = makeShop({
-        deliveryZone: { maxKm: 200, freeKm: 1, pricingType: 'flat', pricePerStep: 9000 },
+        deliveryZone: {
+          maxKm: 200,
+          freeKm: 1,
+          pricingType: 'flat',
+          pricePerStep: 9000,
+        },
         freeDeliveryPolygon: polygon,
       });
       const address = makeAddress({ latitude: 41.5, longitude: 69.5 }); // far, but inside the free polygon
@@ -409,16 +511,24 @@ describe('OrdersService', () => {
       expect(created.deliveryFee).toBe(0);
     });
 
-    it('shop-darajadagi free_delivery aksiyasi savat yetarli bo\'lsa to\'lovni bekor qiladi', async () => {
+    it("shop-darajadagi free_delivery aksiyasi savat yetarli bo'lsa to'lovni bekor qiladi", async () => {
       const shop = makeShop({
-        deliveryZone: { maxKm: 10, freeKm: 0, pricingType: 'flat', pricePerStep: 9000 },
+        deliveryZone: {
+          maxKm: 10,
+          freeKm: 0,
+          pricingType: 'flat',
+          pricePerStep: 9000,
+        },
       });
       const address = makeAddress({ latitude: 41.03, longitude: 69.0 });
       const variant = makeVariant();
       shops.findOne.mockResolvedValue(shop);
       addresses.findOne.mockResolvedValue(address);
       variants.find.mockResolvedValue([variant]);
-      promotions.findFreeDeliveryPromotion.mockResolvedValue({ free: true, promotionId: 'promo-free' });
+      promotions.findFreeDeliveryPromotion.mockResolvedValue({
+        free: true,
+        promotionId: 'promo-free',
+      });
       const em = mockEntityManager({ [variant.id]: variant });
       dataSource.transaction.mockImplementation((cb) => cb(em));
 
@@ -427,14 +537,17 @@ describe('OrdersService', () => {
       expect(created.deliveryFee).toBe(0);
     });
 
-    it('promotions.bestDiscountFor dan qaytgan chegirmani birlik narxiga qo\'llaydi', async () => {
+    it("promotions.bestDiscountFor dan qaytgan chegirmani birlik narxiga qo'llaydi", async () => {
       const shop = makeShop();
       const address = makeAddress();
       const variant = makeVariant({ price: 10_000 });
       shops.findOne.mockResolvedValue(shop);
       addresses.findOne.mockResolvedValue(address);
       variants.find.mockResolvedValue([variant]);
-      promotions.bestDiscountFor.mockReturnValue({ discountAmount: 2000, promotionId: 'promo-1' });
+      promotions.bestDiscountFor.mockReturnValue({
+        discountAmount: 2000,
+        promotionId: 'promo-1',
+      });
       const em = mockEntityManager({ [variant.id]: variant });
       dataSource.transaction.mockImplementation((cb) => cb(em));
 
@@ -442,7 +555,13 @@ describe('OrdersService', () => {
 
       // unitPrice = 10000 - 2000 = 8000, × 2 qty = 16000
       expect(created.subTotal).toBe(16_000);
-      const item = (created.items as unknown as { unitPrice: number; promotionDiscountAmount: number; appliedPromotionId: string }[])[0];
+      const item = (
+        created.items as unknown as {
+          unitPrice: number;
+          promotionDiscountAmount: number;
+          appliedPromotionId: string;
+        }[]
+      )[0];
       expect(item.unitPrice).toBe(8000);
       expect(item.promotionDiscountAmount).toBe(4000); // 2000 × 2 qty
       expect(item.appliedPromotionId).toBe('promo-1');
@@ -465,33 +584,37 @@ describe('OrdersService', () => {
       } as unknown as Order;
     }
 
-    it('ruxsat etilmagan status o\'tishini rad etadi', async () => {
+    it("ruxsat etilmagan status o'tishini rad etadi", async () => {
       orders.findOne.mockResolvedValue(makeOrder({ status: OrderStatus.New }));
-      await expect(service.updateStatus(OWNER_ID, 'order-1', OrderStatus.Delivered)).rejects.toThrow(
-        BadRequestException,
-      );
+      await expect(
+        service.updateStatus(OWNER_ID, 'order-1', OrderStatus.Delivered),
+      ).rejects.toThrow(BadRequestException);
     });
 
     it('mijoz yetkazib berish boshlangandan keyin (delivering) bekor qila olmaydi', async () => {
-      orders.findOne.mockResolvedValue(makeOrder({ status: OrderStatus.Delivering }));
+      orders.findOne.mockResolvedValue(
+        makeOrder({ status: OrderStatus.Delivering }),
+      );
       await expect(
         service.updateStatus(USER_ID, 'order-1', OrderStatus.Cancelled),
-      ).rejects.toThrow('boshlangandan keyin buyurtmani bekor qilib bo\'lmaydi');
+      ).rejects.toThrow("boshlangandan keyin buyurtmani bekor qilib bo'lmaydi");
     });
 
-    it('mijoz to\'langan buyurtmani do\'kon qabul qilgach bekor qila olmaydi (support)', async () => {
-      orders.findOne.mockResolvedValue(makeOrder({
-        status: OrderStatus.Accepted,
-        paymentMethod: PaymentMethod.ClickOnline,
-        paymentStatus: PaymentStatus.Paid,
-      }));
+    it("mijoz to'langan buyurtmani do'kon qabul qilgach bekor qila olmaydi (support)", async () => {
+      orders.findOne.mockResolvedValue(
+        makeOrder({
+          status: OrderStatus.Accepted,
+          paymentMethod: PaymentMethod.ClickOnline,
+          paymentStatus: PaymentStatus.Paid,
+        }),
+      );
       await expect(
         service.updateStatus(USER_ID, 'order-1', OrderStatus.Cancelled),
-      ).rejects.toThrow('qo\'llab-quvvatlash');
+      ).rejects.toThrow("qo'llab-quvvatlash");
       expect(dataSource.transaction).not.toHaveBeenCalled();
     });
 
-    it('mijoz to\'langan NEW buyurtmani bekor qilsa avto-refund chaqiriladi', async () => {
+    it("mijoz to'langan NEW buyurtmani bekor qilsa avto-refund chaqiriladi", async () => {
       const order = makeOrder({
         status: OrderStatus.New,
         paymentMethod: PaymentMethod.ClickOnline,
@@ -499,10 +622,16 @@ describe('OrdersService', () => {
       });
       orders.findOne.mockResolvedValue(order);
       const em = mockEntityManager({});
-      em.findOne.mockImplementation(async (Entity: unknown) => (Entity === Order ? order : null));
+      em.findOne.mockImplementation(async (Entity: unknown) =>
+        Entity === Order ? order : null,
+      );
       dataSource.transaction.mockImplementation((cb) => cb(em));
 
-      const result = await service.updateStatus(USER_ID, 'order-1', OrderStatus.Cancelled);
+      const result = await service.updateStatus(
+        USER_ID,
+        'order-1',
+        OrderStatus.Cancelled,
+      );
 
       expect(result.status).toBe(OrderStatus.Cancelled);
       expect(click.refundPaidOrder).toHaveBeenCalledWith('order-1');
@@ -515,23 +644,35 @@ describe('OrdersService', () => {
         orders.findOne.mockResolvedValue(order);
         const em = mockEntityManager({});
         // updateStatus re-reads the order under lock inside the transaction.
-        em.findOne.mockImplementation(async (Entity: unknown) => (Entity === Order ? order : null));
+        em.findOne.mockImplementation(async (Entity: unknown) =>
+          Entity === Order ? order : null,
+        );
         dataSource.transaction.mockImplementation((cb) => cb(em));
 
-        const result = await service.updateStatus(USER_ID, 'order-1', OrderStatus.Cancelled);
+        const result = await service.updateStatus(
+          USER_ID,
+          'order-1',
+          OrderStatus.Cancelled,
+        );
 
         expect(result.status).toBe(OrderStatus.Cancelled);
       },
     );
 
-    it('do\'kon egasi yetkazib berish boshlangandan keyin ham bekor qila oladi (mijozdan farqli)', async () => {
+    it("do'kon egasi yetkazib berish boshlangandan keyin ham bekor qila oladi (mijozdan farqli)", async () => {
       const order = makeOrder({ status: OrderStatus.Delivering });
       orders.findOne.mockResolvedValue(order);
       const em = mockEntityManager({});
-      em.findOne.mockImplementation(async (Entity: unknown) => (Entity === Order ? order : null));
+      em.findOne.mockImplementation(async (Entity: unknown) =>
+        Entity === Order ? order : null,
+      );
       dataSource.transaction.mockImplementation((cb) => cb(em));
 
-      const result = await service.updateStatus(OWNER_ID, 'order-1', OrderStatus.Cancelled);
+      const result = await service.updateStatus(
+        OWNER_ID,
+        'order-1',
+        OrderStatus.Cancelled,
+      );
 
       expect(result.status).toBe(OrderStatus.Cancelled);
     });
@@ -541,16 +682,21 @@ describe('OrdersService', () => {
       orders.findOne.mockResolvedValue(order);
       staff.findOne.mockResolvedValue(null);
 
-      await expect(service.updateStatus('random-staff', 'order-1', OrderStatus.Accepted)).rejects.toThrow(
-        ForbiddenException,
-      );
+      await expect(
+        service.updateStatus('random-staff', 'order-1', OrderStatus.Accepted),
+      ).rejects.toThrow(ForbiddenException);
     });
 
-    it('Delivered holatiga o\'tganda to\'lov hisob-kitobini ishga tushiradi', async () => {
-      const order = makeOrder({ status: OrderStatus.Delivering, paymentMethod: PaymentMethod.Cash });
+    it("Delivered holatiga o'tganda to'lov hisob-kitobini ishga tushiradi", async () => {
+      const order = makeOrder({
+        status: OrderStatus.Delivering,
+        paymentMethod: PaymentMethod.Cash,
+      });
       orders.findOne.mockResolvedValue(order);
       const em = mockEntityManager({});
-      em.findOne.mockImplementation(async (Entity: unknown) => (Entity === Order ? order : null));
+      em.findOne.mockImplementation(async (Entity: unknown) =>
+        Entity === Order ? order : null,
+      );
       dataSource.transaction.mockImplementation((cb) => cb(em));
 
       await service.updateStatus(USER_ID, 'order-1', OrderStatus.Delivered);
@@ -558,7 +704,11 @@ describe('OrdersService', () => {
       await new Promise(process.nextTick);
 
       expect(payments.recordCashOrderDelivery).toHaveBeenCalledWith(
-        expect.objectContaining({ sellerId: OWNER_ID, orderId: 'order-1', orderTotal: 20_000 }),
+        expect.objectContaining({
+          sellerId: OWNER_ID,
+          orderId: 'order-1',
+          orderTotal: 20_000,
+        }),
       );
     });
 
@@ -566,13 +716,26 @@ describe('OrdersService', () => {
       const order = makeOrder({ status: OrderStatus.Preparing });
       orders.findOne.mockResolvedValue(order);
       const em = mockEntityManager({});
-      em.findOne.mockImplementation(async (Entity: unknown) => (Entity === Order ? order : null));
+      em.findOne.mockImplementation(async (Entity: unknown) =>
+        Entity === Order ? order : null,
+      );
       dataSource.transaction.mockImplementation((cb) => cb(em));
 
-      const result = await service.updateStatus(OWNER_ID, 'order-1', OrderStatus.Delivering, undefined, {
-        evidence: { latitude: 41.0, longitude: 69.0, accuracy: 12, source: 'foreground' },
-        deviceId: 'device-1',
-      });
+      const result = await service.updateStatus(
+        OWNER_ID,
+        'order-1',
+        OrderStatus.Delivering,
+        undefined,
+        {
+          evidence: {
+            latitude: 41.0,
+            longitude: 69.0,
+            accuracy: 12,
+            source: 'foreground',
+          },
+          deviceId: 'device-1',
+        },
+      );
 
       expect(em.save).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -591,17 +754,33 @@ describe('OrdersService', () => {
       const order = makeOrder({ status: OrderStatus.Delivering });
       orders.findOne.mockResolvedValue(order);
       const em = mockEntityManager({});
-      em.findOne.mockImplementation(async (Entity: unknown) => (Entity === Order ? order : null));
+      em.findOne.mockImplementation(async (Entity: unknown) =>
+        Entity === Order ? order : null,
+      );
       dataSource.transaction.mockImplementation((cb) => cb(em));
 
-      const result = await service.updateStatus(OWNER_ID, 'order-1', OrderStatus.Delivered, undefined, {
-        evidence: { latitude: 41.01, longitude: 69.01, mocked: false, source: 'foreground' },
-      });
+      const result = await service.updateStatus(
+        OWNER_ID,
+        'order-1',
+        OrderStatus.Delivered,
+        undefined,
+        {
+          evidence: {
+            latitude: 41.01,
+            longitude: 69.01,
+            mocked: false,
+            source: 'foreground',
+          },
+        },
+      );
 
       expect(em.save).toHaveBeenCalledWith(
         expect.objectContaining({
           deliveredByUserId: OWNER_ID,
-          deliveredEvidence: expect.objectContaining({ latitude: 41.01, longitude: 69.01 }),
+          deliveredEvidence: expect.objectContaining({
+            latitude: 41.01,
+            longitude: 69.01,
+          }),
         }),
       );
       expect(result).not.toHaveProperty('deliveredEvidence');
@@ -609,10 +788,15 @@ describe('OrdersService', () => {
     });
 
     it('mijoz o\'zi "Yetkazib oldim" desa deliveredByUserId kuryerga tegishli qilib yozilmaydi', async () => {
-      const order = makeOrder({ status: OrderStatus.Delivering, userId: USER_ID });
+      const order = makeOrder({
+        status: OrderStatus.Delivering,
+        userId: USER_ID,
+      });
       orders.findOne.mockResolvedValue(order);
       const em = mockEntityManager({});
-      em.findOne.mockImplementation(async (Entity: unknown) => (Entity === Order ? order : null));
+      em.findOne.mockImplementation(async (Entity: unknown) =>
+        Entity === Order ? order : null,
+      );
       dataSource.transaction.mockImplementation((cb) => cb(em));
 
       await service.updateStatus(USER_ID, 'order-1', OrderStatus.Delivered);
@@ -624,7 +808,7 @@ describe('OrdersService', () => {
   });
 
   describe('getOne — location-evidence leakage', () => {
-    it('mijozga/do\'konga hech qachon lokatsiya dalilini qaytarmaydi', async () => {
+    it("mijozga/do'konga hech qachon lokatsiya dalilini qaytarmaydi", async () => {
       const order = {
         id: 'order-1',
         userId: USER_ID,
@@ -650,7 +834,7 @@ describe('OrdersService', () => {
   });
 
   describe('autoCancelStaleNewOrders (cron)', () => {
-    it('eskirgan buyurtma bo\'lmasa hech narsa qilmaydi', async () => {
+    it("eskirgan buyurtma bo'lmasa hech narsa qilmaydi", async () => {
       orders.find.mockResolvedValue([]);
       await service.autoCancelStaleNewOrders();
       expect(dataSource.transaction).not.toHaveBeenCalled();
@@ -680,12 +864,14 @@ describe('OrdersService', () => {
 
       expect(push.sendToUser).toHaveBeenCalledWith(
         USER_ID,
-        expect.objectContaining({ data: expect.objectContaining({ kind: 'order:seller_no_response' }) }),
+        expect.objectContaining({
+          data: expect.objectContaining({ kind: 'order:seller_no_response' }),
+        }),
       );
       expect(realtime.emitToShop).toHaveBeenCalled();
     });
 
-    it('tekshiruv bilan qulflash orasida qabul qilingan bo\'lsa bekor qilmaydi', async () => {
+    it("tekshiruv bilan qulflash orasida qabul qilingan bo'lsa bekor qilmaydi", async () => {
       const stale = {
         id: 'order-1',
         userId: USER_ID,
@@ -697,7 +883,8 @@ describe('OrdersService', () => {
       const em = mockEntityManager({});
       // Between the scan and the lock, the shop accepted it.
       em.findOne.mockImplementation(async (Entity: unknown) => {
-        if (Entity === Order) return { id: 'order-1', status: OrderStatus.Accepted };
+        if (Entity === Order)
+          return { id: 'order-1', status: OrderStatus.Accepted };
         return null;
       });
       dataSource.transaction.mockImplementation((cb) => cb(em));
@@ -707,7 +894,7 @@ describe('OrdersService', () => {
       expect(push.sendToUser).not.toHaveBeenCalled();
     });
 
-    it('to\'langan (Click) buyurtmani avtomatik bekor qilmaydi — do\'konga ogohlantirish yuboradi', async () => {
+    it("to'langan (Click) buyurtmani avtomatik bekor qilmaydi — do'konga ogohlantirish yuboradi", async () => {
       const stalePaid = {
         id: 'order-2',
         userId: USER_ID,
@@ -728,11 +915,16 @@ describe('OrdersService', () => {
         where: jest.fn().mockReturnThis(),
         andWhere: jest.fn().mockReturnThis(),
         take: jest.fn().mockReturnThis(),
-        getMany: jest.fn().mockResolvedValueOnce([stalePaid]).mockResolvedValue([]),
+        getMany: jest
+          .fn()
+          .mockResolvedValueOnce([stalePaid])
+          .mockResolvedValue([]),
       };
       // Only the four builder methods this code path touches are stubbed —
       // the cast avoids having to fake the whole SelectQueryBuilder surface.
-      orders.createQueryBuilder.mockReturnValue(qb as unknown as SelectQueryBuilder<Order>);
+      orders.createQueryBuilder.mockReturnValue(
+        qb as unknown as SelectQueryBuilder<Order>,
+      );
       staff.find.mockResolvedValue([]);
 
       await service.autoCancelStaleNewOrders();
@@ -740,11 +932,15 @@ describe('OrdersService', () => {
       expect(dataSource.transaction).not.toHaveBeenCalled();
       expect(push.sendToUsers).toHaveBeenCalledWith(
         [OWNER_ID],
-        expect.objectContaining({ data: expect.objectContaining({ kind: 'order:paid_unaccepted' }) }),
+        expect.objectContaining({
+          data: expect.objectContaining({ kind: 'order:paid_unaccepted' }),
+        }),
       );
       expect(orders.update).toHaveBeenCalledWith(
         { id: In(['order-2']) },
-        expect.objectContaining({ paidUnacceptedAlertSentAt: expect.any(Date) }),
+        expect.objectContaining({
+          paidUnacceptedAlertSentAt: expect.any(Date),
+        }),
       );
     });
   });
@@ -785,10 +981,14 @@ describe('OrdersService', () => {
       orders.findOne.mockResolvedValue(order);
       const em = mockEntityManager({});
       // The status check runs on the fresh, locked read inside the transaction.
-      em.findOne.mockImplementation(async (Entity: unknown) => (Entity === Order ? order : null));
+      em.findOne.mockImplementation(async (Entity: unknown) =>
+        Entity === Order ? order : null,
+      );
       dataSource.transaction.mockImplementation((cb) => cb(em));
       await expect(
-        service.partialReturn(OWNER_ID, 'order-1', [{ orderItemId: 'item-1', quantity: 1 }]),
+        service.partialReturn(OWNER_ID, 'order-1', [
+          { orderItemId: 'item-1', quantity: 1 },
+        ]),
       ).rejects.toThrow('Faqat yetkazib berilayotganda');
     });
 
@@ -796,24 +996,32 @@ describe('OrdersService', () => {
       orders.findOne.mockResolvedValue(makeDeliveringOrder());
       staff.findOne.mockResolvedValue(null);
       await expect(
-        service.partialReturn('intruder', 'order-1', [{ orderItemId: 'item-1', quantity: 1 }]),
+        service.partialReturn('intruder', 'order-1', [
+          { orderItemId: 'item-1', quantity: 1 },
+        ]),
       ).rejects.toThrow(ForbiddenException);
     });
 
-    it('qolganidan ko\'p miqdorni qaytarishga urinishni rad etadi', async () => {
+    it("qolganidan ko'p miqdorni qaytarishga urinishni rad etadi", async () => {
       const order = makeDeliveringOrder();
       orders.findOne.mockResolvedValue(order);
       const em = mockEntityManager({});
       // partialReturn re-reads the order under lock and its items inside the transaction.
-      em.findOne.mockImplementation(async (Entity: unknown) => (Entity === Order ? order : null));
-      em.find.mockImplementation(async (Entity: unknown) => (Entity === OrderItem ? order.items : []));
+      em.findOne.mockImplementation(async (Entity: unknown) =>
+        Entity === Order ? order : null,
+      );
+      em.find.mockImplementation(async (Entity: unknown) =>
+        Entity === OrderItem ? order.items : [],
+      );
       dataSource.transaction.mockImplementation((cb) => cb(em));
       await expect(
-        service.partialReturn(OWNER_ID, 'order-1', [{ orderItemId: 'item-1', quantity: 5 }]),
+        service.partialReturn(OWNER_ID, 'order-1', [
+          { orderItemId: 'item-1', quantity: 5 },
+        ]),
       ).rejects.toThrow(/faqat 2 ta qaytarish mumkin/);
     });
 
-    it('qisman qaytarishda order.total/subTotal va item holatini to\'g\'ri qayta hisoblaydi', async () => {
+    it("qisman qaytarishda order.total/subTotal va item holatini to'g'ri qayta hisoblaydi", async () => {
       const order = makeDeliveringOrder();
       orders.findOne.mockResolvedValue(order);
       orders.findOneOrFail.mockResolvedValue(order);
@@ -824,10 +1032,17 @@ describe('OrdersService', () => {
         if (Entity === ProductVariant) return variant;
         return null;
       });
-      em.find.mockImplementation(async (Entity: unknown) => (Entity === OrderItem ? order.items : []));
+      em.find.mockImplementation(async (Entity: unknown) =>
+        Entity === OrderItem ? order.items : [],
+      );
       dataSource.transaction.mockImplementation((cb) => cb(em));
 
-      const result = await service.partialReturn(OWNER_ID, 'order-1', [{ orderItemId: 'item-1', quantity: 1 }], 'Nosoz');
+      const result = await service.partialReturn(
+        OWNER_ID,
+        'order-1',
+        [{ orderItemId: 'item-1', quantity: 1 }],
+        'Nosoz',
+      );
 
       // 1 unit returned at unitPrice 10000 → total/subTotal drop by 10000.
       expect(result.total).toBe(10_000);
@@ -849,10 +1064,14 @@ describe('OrdersService', () => {
         if (Entity === ProductVariant) return variant;
         return null;
       });
-      em.find.mockImplementation(async (Entity: unknown) => (Entity === OrderItem ? order.items : []));
+      em.find.mockImplementation(async (Entity: unknown) =>
+        Entity === OrderItem ? order.items : [],
+      );
       dataSource.transaction.mockImplementation((cb) => cb(em));
 
-      const result = await service.partialReturn(OWNER_ID, 'order-1', [{ orderItemId: 'item-1', quantity: 2 }]);
+      const result = await service.partialReturn(OWNER_ID, 'order-1', [
+        { orderItemId: 'item-1', quantity: 2 },
+      ]);
 
       expect(result.total).toBe(0);
       expect(result.subTotal).toBe(0);

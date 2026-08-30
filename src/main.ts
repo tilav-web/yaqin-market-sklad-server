@@ -11,7 +11,8 @@ import { RedisIoAdapter } from './realtime/redis-io.adapter';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
   const configService = app.get(ConfigService<EnvironmentVariables, true>);
-  const isProd = configService.get('NODE_ENV', { infer: true }) === 'production';
+  const isProd =
+    configService.get('NODE_ENV', { infer: true }) === 'production';
 
   // Prod sits behind exactly one reverse-proxy hop (Nginx, per DEPLOY.md).
   // Without this, Express's req.ip is always Nginx's own address, so every
@@ -33,7 +34,6 @@ async function bootstrap() {
   // a Redis blip must not take the whole API down with it.
   for (const client of [pubClient, subClient]) {
     client.on('error', (err) => {
-      // eslint-disable-next-line no-console
       console.error(`Redis (socket.io adapter) error: ${err.message}`);
     });
   }
@@ -78,10 +78,8 @@ async function bootstrap() {
   const port = configService.get('PORT', { infer: true });
   await app.listen(port, '0.0.0.0');
 
-  // eslint-disable-next-line no-console
   console.log(`🚀 Yaqin Market API running on http://0.0.0.0:${port}`);
   if (!isProd) {
-    // eslint-disable-next-line no-console
     console.log(`📖 Swagger docs at http://0.0.0.0:${port}/docs`);
   }
 }

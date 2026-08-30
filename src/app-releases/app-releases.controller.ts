@@ -75,14 +75,19 @@ export class AdminAppReleasesController {
   }
 
   @Post()
-  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: APK_MAX_BYTES } }))
+  @UseInterceptors(
+    FileInterceptor('file', { limits: { fileSize: APK_MAX_BYTES } }),
+  )
   async create(
     @UploadedFile() file: Express.Multer.File | undefined,
     @Body() dto: CreateReleaseDto,
   ) {
     if (!file) throw new BadRequestException('APK fayli yuborilmadi');
     const name = file.originalname?.toLowerCase() ?? '';
-    if (!name.endsWith('.apk') && file.mimetype !== 'application/vnd.android.package-archive') {
+    if (
+      !name.endsWith('.apk') &&
+      file.mimetype !== 'application/vnd.android.package-archive'
+    ) {
       throw new BadRequestException('Faqat .apk fayl yuklash mumkin');
     }
     return this.releases.create(dto.version, dto.notes, file.buffer);

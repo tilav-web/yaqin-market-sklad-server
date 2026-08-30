@@ -41,7 +41,11 @@ export interface BoundingBox {
  * A lat/lng square roughly `radiusKm` around a point, for cheap SQL pre-filtering
  * before the exact haversine pass. Avoids loading every shop in the database.
  */
-export function boundingBox(lat: number, lng: number, radiusKm: number): BoundingBox {
+export function boundingBox(
+  lat: number,
+  lng: number,
+  radiusKm: number,
+): BoundingBox {
   const latDelta = radiusKm / 111; // ~111 km per degree of latitude
   const lngDelta = radiusKm / (111 * Math.max(Math.cos(toRad(lat)), 0.01));
   return {
@@ -82,14 +86,19 @@ export interface GeoJsonPolygon {
 }
 
 /** Ray-casting point-in-polygon check. polygon coords are [lng, lat] pairs (GeoJSON order). */
-export function pointInPolygon(lat: number, lng: number, polygon: GeoJsonPolygon): boolean {
+export function pointInPolygon(
+  lat: number,
+  lng: number,
+  polygon: GeoJsonPolygon,
+): boolean {
   const ring = polygon.coordinates[0];
   if (!ring || ring.length < 3) return false;
   let inside = false;
   for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
     const [xi, yi] = ring[i]; // xi=lng, yi=lat
     const [xj, yj] = ring[j];
-    const intersect = yi > lat !== yj > lat && lng < ((xj - xi) * (lat - yi)) / (yj - yi) + xi;
+    const intersect =
+      yi > lat !== yj > lat && lng < ((xj - xi) * (lat - yi)) / (yj - yi) + xi;
     if (intersect) inside = !inside;
   }
   return inside;

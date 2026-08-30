@@ -1,4 +1,14 @@
-import { Body, Controller, Get, Param, Post, Put, Query, Request, Res } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Put,
+  Query,
+  Request,
+  Res,
+} from '@nestjs/common';
 import type { Response } from 'express';
 
 import { Role } from '../auth/role.enum';
@@ -55,7 +65,10 @@ export class AdminBalanceController {
   }
 
   @Get('withdrawals/export')
-  async exportWithdrawals(@Query() query: AdminListWithdrawalsQuery, @Res() res: Response) {
+  async exportWithdrawals(
+    @Query() query: AdminListWithdrawalsQuery,
+    @Res() res: Response,
+  ) {
     const buf = await this.svc.adminExportWithdrawals(query.status);
     sendXlsx(res, buf, 'yechish-sorovlar.xlsx');
   }
@@ -66,7 +79,12 @@ export class AdminBalanceController {
     @Request() req: any,
     @Body() body: ProcessWithdrawalDto,
   ) {
-    return this.svc.adminProcessWithdrawal(id, req.user.sub, body.approve, body.note);
+    return this.svc.adminProcessWithdrawal(
+      id,
+      req.user.sub,
+      body.approve,
+      body.note,
+    );
   }
 
   @Get('sellers/:sellerId')
@@ -75,13 +93,25 @@ export class AdminBalanceController {
   }
 
   @Get('sellers/:sellerId/transactions')
-  sellerTransactions(@Param('sellerId') sellerId: string, @Query('page') page = 0) {
+  sellerTransactions(
+    @Param('sellerId') sellerId: string,
+    @Query('page') page = 0,
+  ) {
     return this.svc.adminGetTransactions(sellerId, Number(page));
   }
 
   @Post('sellers/:sellerId/adjust')
-  adjust(@Param('sellerId') sellerId: string, @Request() req: any, @Body() body: AdjustBalanceDto) {
-    return this.svc.adminAdjust(sellerId, body.amount, body.description, req.user.sub);
+  adjust(
+    @Param('sellerId') sellerId: string,
+    @Request() req: any,
+    @Body() body: AdjustBalanceDto,
+  ) {
+    return this.svc.adminAdjust(
+      sellerId,
+      body.amount,
+      body.description,
+      req.user.sub,
+    );
   }
 
   @Post('transactions/:txId/force-settle')
@@ -109,7 +139,11 @@ export class AdminBalanceController {
   }
 
   @Post('sellers/:sellerId/extend-debt')
-  extendDebt(@Param('sellerId') sellerId: string, @Request() req: any, @Body() body: ExtendDebtDto) {
+  extendDebt(
+    @Param('sellerId') sellerId: string,
+    @Request() req: any,
+    @Body() body: ExtendDebtDto,
+  ) {
     return this.svc.adminExtendDebtDue(sellerId, body.days, req.user.sub);
   }
 }

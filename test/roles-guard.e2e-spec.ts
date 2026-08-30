@@ -72,11 +72,11 @@ describe('RolesGuard (e2e)', () => {
     );
   }
 
-  it('Authorization header bo\'lmasa 401 qaytaradi', async () => {
+  it("Authorization header bo'lmasa 401 qaytaradi", async () => {
     await request(app.getHttpServer()).get(ADMIN_ROUTE).expect(401);
   });
 
-  it('oddiy mijoz (admin bo\'lmagan) JWT bilan 403 qaytaradi', async () => {
+  it("oddiy mijoz (admin bo'lmagan) JWT bilan 403 qaytaradi", async () => {
     const user = await createUser([Role.Customer]);
     const token = await tokenFor(user);
 

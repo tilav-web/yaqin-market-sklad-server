@@ -12,20 +12,36 @@ import { SettingsService } from '../settings/settings.service';
 import { SETTING_KEYS } from '../settings/entities/global-setting.entity';
 import { buildXlsxBuffer } from '../common/xlsx.util';
 
-import { boundingBox, calcDeliveryFee, haversineKm, pointInPolygon } from '../geo/geo.util';
+import {
+  boundingBox,
+  calcDeliveryFee,
+  haversineKm,
+  pointInPolygon,
+} from '../geo/geo.util';
 import { Review } from '../orders/entities/review.entity';
 import { PushService } from '../push/push.service';
 import { Shop } from '../shops/entities/shop.entity';
-import { ShopStaff, StaffPermission } from '../shops/entities/shop-staff.entity';
+import {
+  ShopStaff,
+  StaffPermission,
+} from '../shops/entities/shop-staff.entity';
 import { assertShopPermission } from '../shops/shop-access.util';
 import { isDeliveryOpenNow, isShopOpenNow } from '../shops/shop-hours.util';
 import { User } from '../users/entities/user.entity';
 import { Category } from '../categories/entities/category.entity';
 import { latinToCyrillic } from '../common/utils/transliteration.util';
 import { slugify } from '../common/utils/slug.util';
-import { LocalizedText, toLocalizedText, getLocalizedText } from '../common/types/localized-text.type';
+import {
+  LocalizedText,
+  toLocalizedText,
+  getLocalizedText,
+} from '../common/types/localized-text.type';
 import { GlobalProduct, UnitType } from './entities/global-product.entity';
-import { BrakReasonCode, InventoryMovement, MovementType } from './entities/inventory-movement.entity';
+import {
+  BrakReasonCode,
+  InventoryMovement,
+  MovementType,
+} from './entities/inventory-movement.entity';
 import { ProductVariant } from './entities/product-variant.entity';
 import { StockBatch } from './entities/stock-batch.entity';
 import { consumeFifo, receiveBatch } from './inventory.util';
@@ -99,14 +115,20 @@ export class ProductsService {
     shopId: string,
     permission: StaffPermission,
   ): Promise<Shop> {
-    return assertShopPermission(this.shops, this.staff, userId, shopId, permission);
+    return assertShopPermission(
+      this.shops,
+      this.staff,
+      userId,
+      shopId,
+      permission,
+    );
   }
 
   private async ensureShopOwner(userId: string, shopId: string): Promise<Shop> {
     const shop = await this.shops.findOne({ where: { id: shopId } });
-    if (!shop) throw new NotFoundException('Do\'kon topilmadi');
+    if (!shop) throw new NotFoundException("Do'kon topilmadi");
     if (shop.ownerId !== userId) {
-      throw new ForbiddenException('Bu amalni faqat do\'kon egasi bajara oladi');
+      throw new ForbiddenException("Bu amalni faqat do'kon egasi bajara oladi");
     }
     return shop;
   }
@@ -118,21 +140,29 @@ export class ProductsService {
    * display fields (name/brand/photos/unitType/unitSize/barcode/isVerified)
    * onto each variant. Prevents N+1 queries in list endpoints.
    */
-  private async attachGlobal(items: ProductVariant[]): Promise<VariantWithGlobal[]> {
+  private async attachGlobal(
+    items: ProductVariant[],
+  ): Promise<VariantWithGlobal[]> {
     if (!items.length) return [];
     const ids = [...new Set(items.map((v) => v.globalProductId))];
     const gps = await this.globalProducts.findBy({ id: In(ids) });
     const map = new Map(gps.map((g) => [g.id, g]));
     return items.map((v) => {
       const gp = map.get(v.globalProductId) ?? ({} as GlobalProduct);
-      const nameStr = (typeof gp.name === 'object' ? (gp.name?.uz || gp.name?.ru || gp.name?.kr) : gp.name) || '';
+      const nameStr =
+        (typeof gp.name === 'object'
+          ? gp.name?.uz || gp.name?.ru || gp.name?.kr
+          : gp.name) || '';
       return {
         ...v,
         name: nameStr,
-        nameI18n: typeof gp.name === 'object' ? gp.name : { uz: nameStr, kr: '', ru: '' },
-        nameUzLatn: typeof gp.name === 'object' ? (gp.name?.uz || '') : nameStr,
-        nameUzCyrl: typeof gp.name === 'object' ? (gp.name?.kr || '') : '',
-        nameRu: typeof gp.name === 'object' ? (gp.name?.ru || '') : '',
+        nameI18n:
+          typeof gp.name === 'object'
+            ? gp.name
+            : { uz: nameStr, kr: '', ru: '' },
+        nameUzLatn: typeof gp.name === 'object' ? gp.name?.uz || '' : nameStr,
+        nameUzCyrl: typeof gp.name === 'object' ? gp.name?.kr || '' : '',
+        nameRu: typeof gp.name === 'object' ? gp.name?.ru || '' : '',
         brand: gp.brand ?? null,
         photos: gp.photos ?? [],
         unitType: gp.unitType ?? 'piece',
@@ -210,12 +240,19 @@ export class ProductsService {
       } catch (e: any) {
         // PostgreSQL unique violation: (shopId, globalProductId)
         if (e?.code === '23505') {
-          throw new ConflictException('Bu mahsulot do\'koningizda allaqachon mavjud');
+          throw new ConflictException(
+            "Bu mahsulot do'koningizda allaqachon mavjud",
+          );
         }
         throw e;
       }
 
-      await manager.increment(GlobalProduct, { id: global.id }, 'usageCount', 1);
+      await manager.increment(
+        GlobalProduct,
+        { id: global.id },
+        'usageCount',
+        1,
+      );
 
       if (dto.stock > 0) {
         await receiveBatch(manager, {
@@ -224,7 +261,7 @@ export class ProductsService {
           costPrice: dto.costPrice ?? 0,
           expiryDate: dto.expiryDate ? new Date(dto.expiryDate) : null,
           userId,
-          reason: 'Katalogdan qo\'shildi',
+          reason: "Katalogdan qo'shildi",
         });
       }
       return (await this.attachGlobal([saved]))[0];
@@ -284,7 +321,9 @@ export class ProductsService {
             unitSize: dto.unitSize ?? 1,
             categoryId: dto.categoryId ?? null,
             photos: dto.photos ?? [],
-            description: dto.description ? toLocalizedText(dto.description) : null,
+            description: dto.description
+              ? toLocalizedText(dto.description)
+              : null,
             barcode: null,
             createdBySellerId: userId,
             ownerShopId: shopId,
@@ -311,7 +350,9 @@ export class ProductsService {
         saved = await manager.save(variant);
       } catch (e: any) {
         if (e?.code === '23505') {
-          throw new ConflictException('Bu mahsulot do\'koningizda allaqachon mavjud');
+          throw new ConflictException(
+            "Bu mahsulot do'koningizda allaqachon mavjud",
+          );
         }
         throw e;
       }
@@ -323,7 +364,7 @@ export class ProductsService {
           costPrice: dto.costPrice ?? 0,
           expiryDate: dto.expiryDate ? new Date(dto.expiryDate) : null,
           userId,
-          reason: 'Boshlang\'ich qoldiq',
+          reason: "Boshlang'ich qoldiq",
         });
       }
       return (await this.attachGlobal([saved]))[0];
@@ -343,11 +384,19 @@ export class ProductsService {
    * desired. Reuses createCustomProduct's private-product path rather than
    * duplicating its logic.
    */
-  async duplicateVariant(userId: string, variantId: string): Promise<VariantWithGlobal> {
+  async duplicateVariant(
+    userId: string,
+    variantId: string,
+  ): Promise<VariantWithGlobal> {
     const source = await this.getVariantWithGlobal(variantId);
-    await this.ensureShopAccess(userId, source.shopId, 'inventory.product.create');
+    await this.ensureShopAccess(
+      userId,
+      source.shopId,
+      'inventory.product.create',
+    );
 
-    const sourceNameStr = typeof source.name === 'object' ? source.name?.uz || '' : source.name;
+    const sourceNameStr =
+      typeof source.name === 'object' ? source.name?.uz || '' : source.name;
     const sourceDescStr = source.globalProduct?.description
       ? typeof source.globalProduct.description === 'object'
         ? source.globalProduct.description.uz
@@ -396,10 +445,13 @@ export class ProductsService {
     });
     if (existing) {
       existing.usageCount += 1;
-      if (!existing.photos?.length && data.photos.length) existing.photos = data.photos;
+      if (!existing.photos?.length && data.photos.length)
+        existing.photos = data.photos;
       if (!existing.brand && data.brand) existing.brand = data.brand;
-      if (!existing.categoryId && data.categoryId) existing.categoryId = data.categoryId;
-      if (!existing.description && data.description) existing.description = toLocalizedText(data.description);
+      if (!existing.categoryId && data.categoryId)
+        existing.categoryId = data.categoryId;
+      if (!existing.description && data.description)
+        existing.description = toLocalizedText(data.description);
       await manager.save(existing);
       return existing.id;
     }
@@ -409,13 +461,15 @@ export class ProductsService {
       .into(GlobalProduct)
       .values({
         barcode: data.barcode,
-        name: toLocalizedText(data.name) as any,
+        name: toLocalizedText(data.name),
         brand: data.brand,
         unitType: data.unitType,
         unitSize: data.unitSize,
         categoryId: data.categoryId,
         photos: data.photos,
-        description: (data.description ? toLocalizedText(data.description) : null) as any,
+        description: data.description
+          ? toLocalizedText(data.description)
+          : null,
         createdBySellerId: userId,
         usageCount: 1,
         isActive: true,
@@ -427,7 +481,9 @@ export class ProductsService {
 
     // Whether we just inserted it or a concurrent request won the race, a
     // row for this barcode is now guaranteed to exist.
-    const row = await manager.findOneOrFail(GlobalProduct, { where: { barcode: data.barcode } });
+    const row = await manager.findOneOrFail(GlobalProduct, {
+      where: { barcode: data.barcode },
+    });
     return row.id;
   }
 
@@ -455,38 +511,58 @@ export class ProductsService {
     },
   ): Promise<VariantWithGlobal> {
     const variant = await this.getVariant(variantId);
-    await this.ensureShopAccess(userId, variant.shopId, 'inventory.product.edit_info');
+    await this.ensureShopAccess(
+      userId,
+      variant.shopId,
+      'inventory.product.edit_info',
+    );
     if (dto.price !== undefined || dto.discountPrice !== undefined) {
-      await this.ensureShopAccess(userId, variant.shopId, 'inventory.product.edit_price');
+      await this.ensureShopAccess(
+        userId,
+        variant.shopId,
+        'inventory.product.edit_price',
+      );
     }
     if (dto.isActive !== undefined && dto.isActive !== variant.isActive) {
       await this.ensureShopOwner(userId, variant.shopId);
     }
 
     // Display-field edits → update GlobalProduct only if this shop owns it
-    const hasDisplayEdit = dto.name !== undefined || dto.photos !== undefined || dto.description !== undefined;
+    const hasDisplayEdit =
+      dto.name !== undefined ||
+      dto.photos !== undefined ||
+      dto.description !== undefined;
     if (hasDisplayEdit) {
-      const gp = await this.globalProducts.findOne({ where: { id: variant.globalProductId } });
+      const gp = await this.globalProducts.findOne({
+        where: { id: variant.globalProductId },
+      });
       if (!gp) throw new NotFoundException('Global mahsulot topilmadi');
       if (gp.ownerShopId !== variant.shopId) {
         throw new ForbiddenException(
-          'Umumiy katalog mahsulotini tahrirlash mumkin emas. Nom/rasm admin orqali o\'zgartiriladi.',
+          "Umumiy katalog mahsulotini tahrirlash mumkin emas. Nom/rasm admin orqali o'zgartiriladi.",
         );
       }
       if (dto.name !== undefined) gp.name = toLocalizedText(dto.name);
       if (dto.photos !== undefined) gp.photos = dto.photos;
-      if (dto.description !== undefined) gp.description = dto.description ? toLocalizedText(dto.description) : null;
+      if (dto.description !== undefined)
+        gp.description = dto.description
+          ? toLocalizedText(dto.description)
+          : null;
       await this.globalProducts.save(gp);
     }
 
     // Commercial fields update
-    const hadDiscount = variant.discountPrice !== null && variant.discountPrice !== undefined;
+    const hadDiscount =
+      variant.discountPrice !== null && variant.discountPrice !== undefined;
     const prevDiscount = variant.discountPrice;
     const commercialFields: Partial<ProductVariant> = {};
     if (dto.price !== undefined) commercialFields.price = dto.price;
-    if (dto.discountPrice !== undefined) commercialFields.discountPrice = dto.discountPrice;
-    if (dto.lowStockThreshold !== undefined) commercialFields.lowStockThreshold = dto.lowStockThreshold;
-    if (dto.criticalThreshold !== undefined) commercialFields.criticalThreshold = dto.criticalThreshold;
+    if (dto.discountPrice !== undefined)
+      commercialFields.discountPrice = dto.discountPrice;
+    if (dto.lowStockThreshold !== undefined)
+      commercialFields.lowStockThreshold = dto.lowStockThreshold;
+    if (dto.criticalThreshold !== undefined)
+      commercialFields.criticalThreshold = dto.criticalThreshold;
     if (dto.isActive !== undefined) commercialFields.isActive = dto.isActive;
     Object.assign(variant, commercialFields);
     const saved = await this.variants.save(variant);
@@ -501,7 +577,11 @@ export class ProductsService {
         where: { id: saved.globalProductId },
         select: { name: true },
       });
-      const nameStr = gp?.name ? (typeof gp.name === 'object' ? gp.name.uz : gp.name) : 'Mahsulot';
+      const nameStr = gp?.name
+        ? typeof gp.name === 'object'
+          ? gp.name.uz
+          : gp.name
+        : 'Mahsulot';
       void this.notifyFavoriteShopDiscount(
         saved.shopId,
         nameStr,
@@ -518,7 +598,10 @@ export class ProductsService {
     price: number,
     discountPrice: number,
   ): Promise<void> {
-    const shop = await this.shops.findOne({ where: { id: shopId }, select: { name: true } });
+    const shop = await this.shops.findOne({
+      where: { id: shopId },
+      select: { name: true },
+    });
     const favUsers = await this.users
       .createQueryBuilder('u')
       .where(':shopId = ANY(u.favoriteShopIds)', { shopId })
@@ -526,11 +609,14 @@ export class ProductsService {
       .getMany();
     if (favUsers.length === 0) return;
     const pct = Math.round(((price - discountPrice) / price) * 100);
-    void this.push.sendToUsers(favUsers.map((u) => u.id), {
-      title: `${shop?.name ?? 'Do\'koningiz'} — yangi aksiya!`,
-      body: `${productName}: ${discountPrice.toLocaleString('ru')} so'm (${pct}% chegirma)`,
-      data: { kind: 'shop_discount', shopId },
-    });
+    void this.push.sendToUsers(
+      favUsers.map((u) => u.id),
+      {
+        title: `${shop?.name ?? "Do'koningiz"} — yangi aksiya!`,
+        body: `${productName}: ${discountPrice.toLocaleString('ru')} so'm (${pct}% chegirma)`,
+        data: { kind: 'shop_discount', shopId },
+      },
+    );
   }
 
   async deleteVariant(userId: string, variantId: string): Promise<void> {
@@ -554,7 +640,11 @@ export class ProductsService {
     reason?: string,
   ): Promise<VariantWithGlobal> {
     const variant = await this.getVariant(variantId);
-    await this.ensureShopAccess(userId, variant.shopId, 'inventory.product.edit_stock');
+    await this.ensureShopAccess(
+      userId,
+      variant.shopId,
+      'inventory.product.edit_stock',
+    );
     if (delta === 0) return (await this.attachGlobal([variant]))[0];
 
     return this.dataSource.transaction(async (manager) => {
@@ -566,7 +656,8 @@ export class ProductsService {
         lock: { mode: 'pessimistic_write' },
       });
       if (!locked) throw new NotFoundException('Mahsulot topilmadi');
-      if (locked.stock + delta < 0) throw new BadRequestException('Qoldiq manfiy bo\'la olmaydi');
+      if (locked.stock + delta < 0)
+        throw new BadRequestException("Qoldiq manfiy bo'la olmaydi");
 
       if (delta > 0) {
         const lastCost = await this.lastCost(variantId);
@@ -575,32 +666,38 @@ export class ProductsService {
           quantity: delta,
           costPrice: lastCost,
           userId,
-          reason: reason ?? 'Qo\'lda tuzatish',
+          reason: reason ?? "Qo'lda tuzatish",
         });
       } else {
         const gp = await this.globalProducts.findOne({
           where: { id: locked.globalProductId },
           select: { name: true },
         });
-        const nameStr = gp?.name ? (typeof gp.name === 'object' ? gp.name.uz : gp.name) : undefined;
+        const nameStr = gp?.name
+          ? typeof gp.name === 'object'
+            ? gp.name.uz
+            : gp.name
+          : undefined;
         await consumeFifo(manager, {
           variant: locked,
           quantity: -delta,
           type: MovementType.Adjusted,
           userId,
           displayName: nameStr,
-          reason: reason ?? 'Qo\'lda tuzatish',
+          reason: reason ?? "Qo'lda tuzatish",
         });
       }
-      const updated = await manager.findOneOrFail(ProductVariant, { where: { id: variantId } });
+      const updated = await manager.findOneOrFail(ProductVariant, {
+        where: { id: variantId },
+      });
       return (await this.attachGlobal([updated]))[0];
     });
   }
 
   private static readonly BRAK_REASON_LABEL: Record<BrakReasonCode, string> = {
-    [BrakReasonCode.Expired]: 'Muddati o\'tdi',
+    [BrakReasonCode.Expired]: "Muddati o'tdi",
     [BrakReasonCode.Damaged]: 'Shikastlangan / singan',
-    [BrakReasonCode.Stolen]: 'Yo\'qolgan / o\'g\'irlangan',
+    [BrakReasonCode.Stolen]: "Yo'qolgan / o'g'irlangan",
     [BrakReasonCode.Other]: 'Boshqa',
   };
 
@@ -618,7 +715,11 @@ export class ProductsService {
     note?: string,
   ): Promise<VariantWithGlobal> {
     const variant = await this.getVariant(variantId);
-    await this.ensureShopAccess(userId, variant.shopId, 'inventory.product.edit_stock');
+    await this.ensureShopAccess(
+      userId,
+      variant.shopId,
+      'inventory.product.edit_stock',
+    );
 
     return this.dataSource.transaction(async (manager) => {
       const locked = await manager.findOne(ProductVariant, {
@@ -626,17 +727,25 @@ export class ProductsService {
         lock: { mode: 'pessimistic_write' },
       });
       if (!locked) throw new NotFoundException('Mahsulot topilmadi');
-      if (locked.stock <= 0) throw new BadRequestException('Qoldiq allaqachon 0');
+      if (locked.stock <= 0)
+        throw new BadRequestException('Qoldiq allaqachon 0');
 
       const gp = await this.globalProducts.findOne({
         where: { id: locked.globalProductId },
         select: { name: true },
       });
-      const nameStr = gp?.name ? (typeof gp.name === 'object' ? gp.name.uz : gp.name) : undefined;
+      const nameStr = gp?.name
+        ? typeof gp.name === 'object'
+          ? gp.name.uz
+          : gp.name
+        : undefined;
       // InventoryMovement.type only distinguishes expired/damaged (the two
       // spec'd movement kinds) — stolen/other are booked as Damaged too, with
       // the precise cause preserved in brakReasonCode/brakReasonNote.
-      const movementType = reasonCode === BrakReasonCode.Expired ? MovementType.Expired : MovementType.Damaged;
+      const movementType =
+        reasonCode === BrakReasonCode.Expired
+          ? MovementType.Expired
+          : MovementType.Damaged;
       await consumeFifo(manager, {
         variant: locked,
         quantity: locked.stock,
@@ -647,7 +756,9 @@ export class ProductsService {
         brakReasonCode: reasonCode,
         brakReasonNote: note ?? null,
       });
-      const updated = await manager.findOneOrFail(ProductVariant, { where: { id: variantId } });
+      const updated = await manager.findOneOrFail(ProductVariant, {
+        where: { id: variantId },
+      });
       return (await this.attachGlobal([updated]))[0];
     });
   }
@@ -664,7 +775,11 @@ export class ProductsService {
     },
   ): Promise<VariantWithGlobal> {
     const variant = await this.getVariant(variantId);
-    await this.ensureShopAccess(userId, variant.shopId, 'inventory.product.edit_stock');
+    await this.ensureShopAccess(
+      userId,
+      variant.shopId,
+      'inventory.product.edit_stock',
+    );
     return this.dataSource.transaction(async (manager) => {
       const locked = await manager.findOne(ProductVariant, {
         where: { id: variantId },
@@ -681,12 +796,18 @@ export class ProductsService {
         userId,
         reason: dto.supplierName ? `Kirim — ${dto.supplierName}` : 'Kirim',
       });
-      const updated = await manager.findOneOrFail(ProductVariant, { where: { id: variantId } });
+      const updated = await manager.findOneOrFail(ProductVariant, {
+        where: { id: variantId },
+      });
       return (await this.attachGlobal([updated]))[0];
     });
   }
 
-  async countStock(userId: string, variantId: string, actualQty: number): Promise<VariantWithGlobal> {
+  async countStock(
+    userId: string,
+    variantId: string,
+    actualQty: number,
+  ): Promise<VariantWithGlobal> {
     const variant = await this.getVariant(variantId);
     await this.ensureShopAccess(userId, variant.shopId, 'inventory.count');
     return this.dataSource.transaction(async (manager) => {
@@ -710,7 +831,11 @@ export class ProductsService {
           where: { id: locked.globalProductId },
           select: { name: true },
         });
-        const nameStr = gp?.name ? (typeof gp.name === 'object' ? gp.name.uz : gp.name) : undefined;
+        const nameStr = gp?.name
+          ? typeof gp.name === 'object'
+            ? gp.name.uz
+            : gp.name
+          : undefined;
         await consumeFifo(manager, {
           variant: locked,
           quantity: -delta,
@@ -720,7 +845,9 @@ export class ProductsService {
           reason: 'Inventarizatsiya (kamomad)',
         });
       }
-      const updated = await manager.findOneOrFail(ProductVariant, { where: { id: variantId } });
+      const updated = await manager.findOneOrFail(ProductVariant, {
+        where: { id: variantId },
+      });
       return (await this.attachGlobal([updated]))[0];
     });
   }
@@ -743,7 +870,9 @@ export class ProductsService {
     });
   }
 
-  private async costSummaries(variantIds: string[]): Promise<Map<string, VariantCost>> {
+  private async costSummaries(
+    variantIds: string[],
+  ): Promise<Map<string, VariantCost>> {
     const out = new Map<string, VariantCost>();
     if (variantIds.length === 0) return out;
     const rows = await this.batches
@@ -755,7 +884,9 @@ export class ProductsService {
       .andWhere('b.quantityRemaining > 0')
       .groupBy('b.productVariantId')
       .getRawMany<{ vid: string; qty: string; value: string }>();
-    const valueMap = new Map(rows.map((r) => [r.vid, { qty: Number(r.qty), value: Number(r.value) }]));
+    const valueMap = new Map(
+      rows.map((r) => [r.vid, { qty: Number(r.qty), value: Number(r.value) }]),
+    );
 
     const heads = await this.batches
       .createQueryBuilder('b')
@@ -766,7 +897,8 @@ export class ProductsService {
       .getMany();
     const nextCostMap = new Map<string, number>();
     for (const b of heads) {
-      if (!nextCostMap.has(b.productVariantId)) nextCostMap.set(b.productVariantId, b.costPrice);
+      if (!nextCostMap.has(b.productVariantId))
+        nextCostMap.set(b.productVariantId, b.costPrice);
     }
 
     for (const id of variantIds) {
@@ -785,7 +917,12 @@ export class ProductsService {
   async listVariantsWithCost(
     userId: string,
     shopId: string,
-    opts: { search?: string; limit?: number; offset?: number; lowOnly?: boolean } = {},
+    opts: {
+      search?: string;
+      limit?: number;
+      offset?: number;
+      lowOnly?: boolean;
+    } = {},
   ): Promise<VariantWithCost[]> {
     await this.ensureShopAccess(userId, shopId, 'inventory.view');
     const qb = this.variants
@@ -805,13 +942,18 @@ export class ProductsService {
 
     qb.orderBy('v.createdAt', 'DESC');
     if (opts.limit !== undefined) {
-      qb.skip(Math.max(opts.offset ?? 0, 0)).take(Math.min(Math.max(opts.limit, 1), 100));
+      qb.skip(Math.max(opts.offset ?? 0, 0)).take(
+        Math.min(Math.max(opts.limit, 1), 100),
+      );
     }
 
     const variants = await qb.getMany();
     const globalMap = new Map(
-      (variants as unknown as (ProductVariant & { globalProduct: GlobalProduct })[])
-        .map((v) => [v.id, v.globalProduct]),
+      (
+        variants as unknown as (ProductVariant & {
+          globalProduct: GlobalProduct;
+        })[]
+      ).map((v) => [v.id, v.globalProduct]),
     );
     const costs = await this.costSummaries(variants.map((v) => v.id));
     return (variants as unknown as VariantWithGlobal[]).map((v: any) => ({
@@ -828,7 +970,10 @@ export class ProductsService {
     }));
   }
 
-  listMovements(userId: string, variantId: string): Promise<InventoryMovement[]> {
+  listMovements(
+    userId: string,
+    variantId: string,
+  ): Promise<InventoryMovement[]> {
     return this.getVariant(variantId).then(async (v) => {
       await this.ensureShopAccess(userId, v.shopId, 'inventory.movement.view');
       return this.movements.find({
@@ -849,21 +994,30 @@ export class ProductsService {
     shopId: string,
   ): Promise<(VariantWithGlobal & { tier: 'critical' | 'warning' })[]> {
     await this.ensureShopAccess(userId, shopId, 'inventory.view');
-    const defaultWarning = this.settings.getNumber(SETTING_KEYS.LOW_STOCK_WARNING_DEFAULT, 10);
-    const defaultCritical = this.settings.getNumber(SETTING_KEYS.LOW_STOCK_CRITICAL_DEFAULT, 3);
+    const defaultWarning = this.settings.getNumber(
+      SETTING_KEYS.LOW_STOCK_WARNING_DEFAULT,
+      10,
+    );
+    const defaultCritical = this.settings.getNumber(
+      SETTING_KEYS.LOW_STOCK_CRITICAL_DEFAULT,
+      3,
+    );
 
     const vs = await this.variants
       .createQueryBuilder('v')
       .where('v.shopId = :shopId', { shopId })
       .andWhere('v.isActive = true')
-      .andWhere('(v.stock <= v.lowStockThreshold) OR (v.stock <= :defWarn)', { defWarn: defaultWarning })
+      .andWhere('(v.stock <= v.lowStockThreshold) OR (v.stock <= :defWarn)', {
+        defWarn: defaultWarning,
+      })
       .orderBy('v.stock', 'ASC')
       .getMany();
 
     const withGlobal = await this.attachGlobal(vs);
     return withGlobal.map((v) => {
       const criticalLine = v.criticalThreshold ?? defaultCritical;
-      const tier: 'critical' | 'warning' = v.stock <= criticalLine ? 'critical' : 'warning';
+      const tier: 'critical' | 'warning' =
+        v.stock <= criticalLine ? 'critical' : 'warning';
       return { ...v, tier };
     });
   }
@@ -882,7 +1036,9 @@ export class ProductsService {
       .andWhere('v.isActive = true');
 
     if (search) {
-      qb.andWhere('(gp.name ILIKE :q OR gp.brand ILIKE :q)', { q: `%${search}%` });
+      qb.andWhere('(gp.name ILIKE :q OR gp.brand ILIKE :q)', {
+        q: `%${search}%`,
+      });
     }
     if (categoryId) {
       qb.andWhere('gp.categoryId = :categoryId', { categoryId });
@@ -893,7 +1049,10 @@ export class ProductsService {
     return this.buildVariantWithGlobal(variants);
   }
 
-  async searchVariantsInShops(shopIds: string[], query: string): Promise<VariantWithGlobal[]> {
+  async searchVariantsInShops(
+    shopIds: string[],
+    query: string,
+  ): Promise<VariantWithGlobal[]> {
     if (shopIds.length === 0) return [];
     const variants = await this.variants
       .createQueryBuilder('v')
@@ -914,14 +1073,20 @@ export class ProductsService {
   ): VariantWithGlobal[] {
     return variants.map((v: any) => {
       const gp = v.globalProduct ?? {};
-      const nameStr = (typeof gp.name === 'object' ? (gp.name?.uz || gp.name?.ru || gp.name?.kr) : gp.name) || '';
+      const nameStr =
+        (typeof gp.name === 'object'
+          ? gp.name?.uz || gp.name?.ru || gp.name?.kr
+          : gp.name) || '';
       return {
         ...v,
         name: nameStr,
-        nameI18n: typeof gp.name === 'object' ? gp.name : { uz: nameStr, kr: '', ru: '' },
-        nameUzLatn: typeof gp.name === 'object' ? (gp.name?.uz || '') : nameStr,
-        nameUzCyrl: typeof gp.name === 'object' ? (gp.name?.kr || '') : '',
-        nameRu: typeof gp.name === 'object' ? (gp.name?.ru || '') : '',
+        nameI18n:
+          typeof gp.name === 'object'
+            ? gp.name
+            : { uz: nameStr, kr: '', ru: '' },
+        nameUzLatn: typeof gp.name === 'object' ? gp.name?.uz || '' : nameStr,
+        nameUzCyrl: typeof gp.name === 'object' ? gp.name?.kr || '' : '',
+        nameRu: typeof gp.name === 'object' ? gp.name?.ru || '' : '',
         brand: gp.brand ?? null,
         photos: gp.photos ?? [],
         unitType: gp.unitType ?? 'piece',
@@ -949,10 +1114,16 @@ export class ProductsService {
         { id: parentId, isActive: true },
         { parentGlobalProductId: parentId, isActive: true },
       ]);
-      const gpIds = groupGPs.map((g) => g.id).filter((id) => id !== variant.globalProductId);
+      const gpIds = groupGPs
+        .map((g) => g.id)
+        .filter((id) => id !== variant.globalProductId);
       if (gpIds.length > 0) {
         const siblingVariants = await this.variants.find({
-          where: { shopId: variant.shopId, globalProductId: In(gpIds), isActive: true },
+          where: {
+            shopId: variant.shopId,
+            globalProductId: In(gpIds),
+            isActive: true,
+          },
           order: { price: 'ASC' },
         });
         siblings = await this.attachGlobal(siblingVariants);
@@ -998,7 +1169,9 @@ export class ProductsService {
     userLng?: number,
     excludeShopId?: string,
   ) {
-    const gp = await this.globalProducts.findOne({ where: { id: globalProductId } });
+    const gp = await this.globalProducts.findOne({
+      where: { id: globalProductId },
+    });
     if (!gp) return [];
     const rootId = gp.parentGlobalProductId ?? gp.id;
     const family = await this.globalProducts.find({
@@ -1009,13 +1182,24 @@ export class ProductsService {
     const qb = this.variants
       .createQueryBuilder('v')
       .innerJoin('v.shop', 's')
-      .addSelect(['s.id', 's.name', 's.latitude', 's.longitude', 's.isActive', 's.photos'])
+      .addSelect([
+        's.id',
+        's.name',
+        's.latitude',
+        's.longitude',
+        's.isActive',
+        's.photos',
+      ])
       .where('v.globalProductId IN (:...familyIds)', { familyIds })
       .andWhere('v.isActive = true')
       .andWhere('v.stock > 0')
       .andWhere('s.isActive = true');
-    if (excludeShopId) qb.andWhere('v.shopId != :excludeShopId', { excludeShopId });
-    const variants = await qb.orderBy('COALESCE(v."discountPrice", v.price)', 'ASC').take(50).getMany();
+    if (excludeShopId)
+      qb.andWhere('v.shopId != :excludeShopId', { excludeShopId });
+    const variants = await qb
+      .orderBy('COALESCE(v."discountPrice", v.price)', 'ASC')
+      .take(50)
+      .getMany();
 
     return variants.map((v: any) => {
       const s = v.shop as Shop;
@@ -1048,7 +1232,12 @@ export class ProductsService {
       .createQueryBuilder('v')
       .innerJoin('v.shop', 's')
       .addSelect([
-        's.id', 's.name', 's.latitude', 's.longitude', 's.isActive', 's.photos',
+        's.id',
+        's.name',
+        's.latitude',
+        's.longitude',
+        's.isActive',
+        's.photos',
       ])
       .where('v.globalProductId = :globalProductId', { globalProductId })
       .andWhere('v.isActive = true')
@@ -1088,7 +1277,12 @@ export class ProductsService {
       .select(['v.id', 'gp.name'])
       .getMany();
     if (variants.length === 0) return [];
-    const nameMap = new Map(variants.map((v: any) => [v.id, (v.globalProduct as GlobalProduct)?.name ?? '']));
+    const nameMap = new Map(
+      variants.map((v: any) => [
+        v.id,
+        (v.globalProduct as GlobalProduct)?.name ?? '',
+      ]),
+    );
     const reviews = await this.reviews.find({
       where: { productVariantId: In([...nameMap.keys()]) },
       relations: { user: true },
@@ -1150,12 +1344,21 @@ export class ProductsService {
     const reachableShops = allShops
       .filter((s) => isDeliveryOpenNow(s))
       .map((s) => {
-        const distanceKm = haversineKm(opts.latitude, opts.longitude, s.latitude, s.longitude);
+        const distanceKm = haversineKm(
+          opts.latitude,
+          opts.longitude,
+          s.latitude,
+          s.longitude,
+        );
         return { shop: s, distanceKm };
       })
       .filter(({ shop, distanceKm }) => {
         if (shop.deliveryPolygon) {
-          return pointInPolygon(opts.latitude, opts.longitude, shop.deliveryPolygon);
+          return pointInPolygon(
+            opts.latitude,
+            opts.longitude,
+            shop.deliveryPolygon,
+          );
         }
         return distanceKm <= (shop.deliveryZone?.maxKm ?? 2);
       });
@@ -1175,7 +1378,9 @@ export class ProductsService {
       .andWhere('v.stock > 0');
 
     if (opts.q) {
-      qb.andWhere('(gp.name ILIKE :q OR gp.brand ILIKE :q)', { q: `%${opts.q}%` });
+      qb.andWhere('(gp.name ILIKE :q OR gp.brand ILIKE :q)', {
+        q: `%${opts.q}%`,
+      });
     }
     let categoryIds: string[] = [];
     if (opts.categoryIds?.length) categoryIds = opts.categoryIds;
@@ -1187,17 +1392,27 @@ export class ProductsService {
       qb.andWhere('v.discountPrice IS NOT NULL AND v.discountPrice < v.price');
     }
     if (opts.minPrice !== undefined) {
-      qb.andWhere('COALESCE(v.discountPrice, v.price) >= :minPrice', { minPrice: opts.minPrice });
+      qb.andWhere('COALESCE(v.discountPrice, v.price) >= :minPrice', {
+        minPrice: opts.minPrice,
+      });
     }
     if (opts.maxPrice !== undefined) {
-      qb.andWhere('COALESCE(v.discountPrice, v.price) <= :maxPrice', { maxPrice: opts.maxPrice });
+      qb.andWhere('COALESCE(v.discountPrice, v.price) <= :maxPrice', {
+        maxPrice: opts.maxPrice,
+      });
     }
 
-    const tokens = (opts.sort ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+    const tokens = (opts.sort ?? '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
     let applied = false;
     const order = (col: string, dir: 'ASC' | 'DESC') => {
       if (applied) qb.addOrderBy(col, dir);
-      else { qb.orderBy(col, dir); applied = true; }
+      else {
+        qb.orderBy(col, dir);
+        applied = true;
+      }
     };
     for (const token of tokens) {
       if (token === 'price_asc') order('v.price', 'ASC');
@@ -1212,25 +1427,30 @@ export class ProductsService {
     }
 
     const total = await qb.getCount();
-    const variants = await qb.skip((page - 1) * limit).take(limit).getMany();
+    const variants = await qb
+      .skip((page - 1) * limit)
+      .take(limit)
+      .getMany();
 
-    const items: FeedProduct[] = (variants as (ProductVariant & { globalProduct: GlobalProduct })[]).map((v) => {
+    const items: FeedProduct[] = (
+      variants as (ProductVariant & { globalProduct: GlobalProduct })[]
+    ).map((v) => {
       const ref = shopMap.get(v.shopId);
       const distanceKm = ref?.distanceKm ?? 0;
       const shop = ref?.shop;
       const isFreeByPolygon =
         shop?.freeDeliveryPolygon != null &&
         pointInPolygon(opts.latitude, opts.longitude, shop.freeDeliveryPolygon);
-      const deliveryFeeAtUser =
-        isFreeByPolygon ? 0
+      const deliveryFeeAtUser = isFreeByPolygon
+        ? 0
         : shop
-        ? calcDeliveryFee({
-            distanceKm,
-            freeKm: shop.deliveryZone.freeKm,
-            pricingType: shop.deliveryZone.pricingType,
-            pricePerStep: shop.deliveryZone.pricePerStep,
-          })
-        : 0;
+          ? calcDeliveryFee({
+              distanceKm,
+              freeKm: shop.deliveryZone.freeKm,
+              pricingType: shop.deliveryZone.pricingType,
+              pricePerStep: shop.deliveryZone.pricePerStep,
+            })
+          : 0;
       const gp = v.globalProduct;
       return {
         ...v,
@@ -1284,7 +1504,9 @@ export class ProductsService {
       .andWhere('v.isActive = true');
 
     if (dto.scope === 'category' && dto.categoryId) {
-      qb.andWhere('gp.categoryId = :categoryId', { categoryId: dto.categoryId });
+      qb.andWhere('gp.categoryId = :categoryId', {
+        categoryId: dto.categoryId,
+      });
     } else if (dto.scope === 'selected' && dto.variantIds?.length) {
       qb.andWhere('v.id IN (:...ids)', { ids: dto.variantIds });
     }
@@ -1296,7 +1518,9 @@ export class ProductsService {
     // Fixed (id-ascending) lock order — avoids deadlocking against another
     // concurrent price/stock change locking the same variants (see the
     // matching comment in orders.service.ts's create()).
-    const sortedIds = [...targets.map((v) => v.id)].sort((a, b) => a.localeCompare(b));
+    const sortedIds = [...targets.map((v) => v.id)].sort((a, b) =>
+      a.localeCompare(b),
+    );
 
     const updatedCount = await this.dataSource.transaction(async (manager) => {
       let count = 0;
@@ -1304,7 +1528,10 @@ export class ProductsService {
         // Re-read under lock — a concurrent edit (e.g. the seller manually
         // repricing one item mid-bulk-update) must not be silently
         // overwritten by a stale in-memory price read before the transaction.
-        const v = await manager.findOne(ProductVariant, { where: { id }, lock: { mode: 'pessimistic_write' } });
+        const v = await manager.findOne(ProductVariant, {
+          where: { id },
+          lock: { mode: 'pessimistic_write' },
+        });
         if (!v) continue;
         const delta =
           dto.adjustType === 'percent'
@@ -1351,10 +1578,21 @@ export class ProductsService {
     userId: string,
     shopId: string,
     days?: number,
-  ): Promise<(VariantWithGlobal & { tier: 'expired' | 'critical' | 'warning'; daysToExpiry: number })[]> {
+  ): Promise<
+    (VariantWithGlobal & {
+      tier: 'expired' | 'critical' | 'warning';
+      daysToExpiry: number;
+    })[]
+  > {
     await this.ensureShopAccess(userId, shopId, 'inventory.view');
-    const warningDays = this.settings.getNumber(SETTING_KEYS.EXPIRY_WARNING_DAYS, 7);
-    const criticalDays = this.settings.getNumber(SETTING_KEYS.EXPIRY_CRITICAL_DAYS, 2);
+    const warningDays = this.settings.getNumber(
+      SETTING_KEYS.EXPIRY_WARNING_DAYS,
+      7,
+    );
+    const criticalDays = this.settings.getNumber(
+      SETTING_KEYS.EXPIRY_CRITICAL_DAYS,
+      2,
+    );
     const windowDays = days ?? warningDays;
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() + windowDays);
@@ -1373,9 +1611,15 @@ export class ProductsService {
     today.setHours(0, 0, 0, 0);
     return withGlobal.map((v) => {
       const exp = new Date(v.expiryDate!);
-      const daysToExpiry = Math.round((exp.getTime() - today.getTime()) / (24 * 60 * 60 * 1000));
+      const daysToExpiry = Math.round(
+        (exp.getTime() - today.getTime()) / (24 * 60 * 60 * 1000),
+      );
       const tier: 'expired' | 'critical' | 'warning' =
-        daysToExpiry <= 0 ? 'expired' : daysToExpiry <= criticalDays ? 'critical' : 'warning';
+        daysToExpiry <= 0
+          ? 'expired'
+          : daysToExpiry <= criticalDays
+            ? 'critical'
+            : 'warning';
       return { ...v, daysToExpiry, tier };
     });
   }
@@ -1390,7 +1634,9 @@ export class ProductsService {
     const qb = this.globalProducts
       .createQueryBuilder('gp')
       .where('gp.isActive = true')
-      .andWhere('(gp.ownerShopId IS NULL OR gp.ownerShopId = :shopId)', { shopId })
+      .andWhere('(gp.ownerShopId IS NULL OR gp.ownerShopId = :shopId)', {
+        shopId,
+      })
       // Verified products float to the top; then sorted by popularity
       .orderBy('gp.isVerified', 'DESC')
       .addOrderBy('gp.usageCount', 'DESC')
@@ -1399,17 +1645,24 @@ export class ProductsService {
 
     const q = query.trim();
     if (q) {
-      qb.andWhere('(gp.name ILIKE :q OR gp.barcode = :exact OR gp.brand ILIKE :q)', {
-        q: `%${q}%`,
-        exact: q,
-      });
+      qb.andWhere(
+        '(gp.name ILIKE :q OR gp.barcode = :exact OR gp.brand ILIKE :q)',
+        {
+          q: `%${q}%`,
+          exact: q,
+        },
+      );
     }
     return qb.getMany();
   }
 
   // ─── Admin: GlobalProduct CRUD ────────────────────────────────────────────
 
-  private adminGlobalProductsFilterQuery(opts: { q?: string; activeOnly?: boolean; categoryId?: string }) {
+  private adminGlobalProductsFilterQuery(opts: {
+    q?: string;
+    activeOnly?: boolean;
+    categoryId?: string;
+  }) {
     const qb = this.globalProducts
       .createQueryBuilder('gp')
       // Only shared products in admin view by default
@@ -1427,7 +1680,10 @@ export class ProductsService {
       );
     }
     if (opts.activeOnly) qb.andWhere('gp.isActive = true');
-    if (opts.categoryId) qb.andWhere('gp.categoryId = :categoryId', { categoryId: opts.categoryId });
+    if (opts.categoryId)
+      qb.andWhere('gp.categoryId = :categoryId', {
+        categoryId: opts.categoryId,
+      });
     return qb;
   }
 
@@ -1445,8 +1701,14 @@ export class ProductsService {
     return { items, total };
   }
 
-  async adminExportGlobalProducts(opts: { q?: string; activeOnly?: boolean; categoryId?: string }): Promise<Buffer> {
-    const rows = await this.adminGlobalProductsFilterQuery(opts).take(5000).getMany();
+  async adminExportGlobalProducts(opts: {
+    q?: string;
+    activeOnly?: boolean;
+    categoryId?: string;
+  }): Promise<Buffer> {
+    const rows = await this.adminGlobalProductsFilterQuery(opts)
+      .take(5000)
+      .getMany();
     return buildXlsxBuffer(
       'Katalog',
       [
@@ -1475,8 +1737,14 @@ export class ProductsService {
   }
 
   /** Aggregate counters for the catalog page's summary bar (shared products only). */
-  async adminGetCatalogStats(): Promise<{ total: number; verified: number; active: number }> {
-    const base = this.globalProducts.createQueryBuilder('gp').where('gp.ownerShopId IS NULL');
+  async adminGetCatalogStats(): Promise<{
+    total: number;
+    verified: number;
+    active: number;
+  }> {
+    const base = this.globalProducts
+      .createQueryBuilder('gp')
+      .where('gp.ownerShopId IS NULL');
     const [total, verified, active] = await Promise.all([
       base.clone().getCount(),
       base.clone().andWhere('gp.isVerified = true').getCount(),
@@ -1485,14 +1753,19 @@ export class ProductsService {
     return { total, verified, active };
   }
 
-  async ensureUniqueSlug(rawNameOrSlug: string, excludeId?: string): Promise<string> {
+  async ensureUniqueSlug(
+    rawNameOrSlug: string,
+    excludeId?: string,
+  ): Promise<string> {
     let base = slugify(rawNameOrSlug);
     if (!base) base = 'product';
     let candidate = base;
     let counter = 1;
 
     while (true) {
-      const qb = this.globalProducts.createQueryBuilder('gp').where('gp.slug = :candidate', { candidate });
+      const qb = this.globalProducts
+        .createQueryBuilder('gp')
+        .where('gp.slug = :candidate', { candidate });
       if (excludeId) {
         qb.andWhere('gp.id != :excludeId', { excludeId });
       }
@@ -1525,11 +1798,16 @@ export class ProductsService {
     isVerified?: boolean;
   }): Promise<GlobalProduct> {
     if (dto.barcode) {
-      const existing = await this.globalProducts.findOne({ where: { barcode: dto.barcode } });
-      if (existing) throw new BadRequestException('Bu barcode allaqachon katalogda mavjud');
+      const existing = await this.globalProducts.findOne({
+        where: { barcode: dto.barcode },
+      });
+      if (existing)
+        throw new BadRequestException('Bu barcode allaqachon katalogda mavjud');
     }
     if (dto.parentGlobalProductId) {
-      const parent = await this.globalProducts.findOne({ where: { id: dto.parentGlobalProductId } });
+      const parent = await this.globalProducts.findOne({
+        where: { id: dto.parentGlobalProductId },
+      });
       if (!parent) throw new NotFoundException('Asosiy mahsulot topilmadi');
     }
 
@@ -1541,7 +1819,11 @@ export class ProductsService {
       },
     );
 
-    const hasDesc = dto.descriptionI18n || dto.descriptionUzLatn || dto.description || dto.descriptionRu;
+    const hasDesc =
+      dto.descriptionI18n ||
+      dto.descriptionUzLatn ||
+      dto.description ||
+      dto.descriptionRu;
     const localizedDesc = hasDesc
       ? toLocalizedText(
           dto.descriptionI18n || {
@@ -1552,7 +1834,8 @@ export class ProductsService {
         )
       : null;
 
-    const rawSlug = dto.slug || localizedName.uz || localizedName.ru || 'product';
+    const rawSlug =
+      dto.slug || localizedName.uz || localizedName.ru || 'product';
     const slug = await this.ensureUniqueSlug(rawSlug);
 
     const gp = this.globalProducts.create({
@@ -1601,19 +1884,34 @@ export class ProductsService {
     const gp = await this.globalProducts.findOne({ where: { id } });
     if (!gp) throw new NotFoundException('Global mahsulot topilmadi');
     if (dto.barcode && dto.barcode !== gp.barcode) {
-      const existing = await this.globalProducts.findOne({ where: { barcode: dto.barcode } });
-      if (existing) throw new BadRequestException('Bu barcode allaqachon katalogda mavjud');
+      const existing = await this.globalProducts.findOne({
+        where: { barcode: dto.barcode },
+      });
+      if (existing)
+        throw new BadRequestException('Bu barcode allaqachon katalogda mavjud');
     }
-    if (dto.parentGlobalProductId && dto.parentGlobalProductId !== gp.parentGlobalProductId) {
+    if (
+      dto.parentGlobalProductId &&
+      dto.parentGlobalProductId !== gp.parentGlobalProductId
+    ) {
       if (dto.parentGlobalProductId === id) {
-        throw new BadRequestException('Mahsulot o\'z-o\'ziga ota bo\'la olmaydi');
+        throw new BadRequestException("Mahsulot o'z-o'ziga ota bo'la olmaydi");
       }
-      const parent = await this.globalProducts.findOne({ where: { id: dto.parentGlobalProductId } });
+      const parent = await this.globalProducts.findOne({
+        where: { id: dto.parentGlobalProductId },
+      });
       if (!parent) throw new NotFoundException('Asosiy mahsulot topilmadi');
     }
 
-    if (dto.nameUzLatn !== undefined || dto.name !== undefined || dto.nameRu !== undefined || dto.nameUzCyrl !== undefined || dto.nameI18n !== undefined) {
-      const cur = typeof gp.name === 'object' ? gp.name : { uz: gp.name, kr: '', ru: '' };
+    if (
+      dto.nameUzLatn !== undefined ||
+      dto.name !== undefined ||
+      dto.nameRu !== undefined ||
+      dto.nameUzCyrl !== undefined ||
+      dto.nameI18n !== undefined
+    ) {
+      const cur =
+        typeof gp.name === 'object' ? gp.name : { uz: gp.name, kr: '', ru: '' };
       gp.name = toLocalizedText(
         dto.nameI18n || {
           uz: dto.nameUzLatn ?? dto.name ?? cur?.uz,
@@ -1630,9 +1928,17 @@ export class ProductsService {
       dto.descriptionUzCyrl !== undefined ||
       dto.descriptionI18n !== undefined
     ) {
-      const cur = typeof gp.description === 'object' ? gp.description : { uz: gp.description || '', kr: '', ru: '' };
+      const cur =
+        typeof gp.description === 'object'
+          ? gp.description
+          : { uz: gp.description || '', kr: '', ru: '' };
       const uz = dto.descriptionUzLatn ?? dto.description ?? cur?.uz;
-      if (dto.descriptionI18n || uz || dto.descriptionRu || dto.descriptionUzCyrl) {
+      if (
+        dto.descriptionI18n ||
+        uz ||
+        dto.descriptionRu ||
+        dto.descriptionUzCyrl
+      ) {
         gp.description = toLocalizedText(
           dto.descriptionI18n || {
             uz,
@@ -1658,7 +1964,8 @@ export class ProductsService {
     if (dto.unitType !== undefined) gp.unitType = dto.unitType;
     if (dto.unitSize !== undefined) gp.unitSize = dto.unitSize;
     if (dto.photos !== undefined) gp.photos = dto.photos;
-    if (dto.parentGlobalProductId !== undefined) gp.parentGlobalProductId = dto.parentGlobalProductId;
+    if (dto.parentGlobalProductId !== undefined)
+      gp.parentGlobalProductId = dto.parentGlobalProductId;
     if (dto.isVerified !== undefined) gp.isVerified = dto.isVerified;
     if (dto.isActive !== undefined) gp.isActive = dto.isActive;
 
@@ -1678,7 +1985,9 @@ export class ProductsService {
       order: { price: 'ASC' },
     });
 
-    const prices = variants.map((v) => v.price).filter((p) => typeof p === 'number' && p > 0);
+    const prices = variants
+      .map((v) => v.price)
+      .filter((p) => typeof p === 'number' && p > 0);
     const minPrice = prices.length > 0 ? Math.min(...prices) : null;
     const maxPrice = prices.length > 0 ? Math.max(...prices) : null;
     const inStock = variants.some((v) => v.stock > 0);
@@ -1731,7 +2040,10 @@ export class ProductsService {
 
     return {
       products: products.map((p) => ({ slug: p.slug, updatedAt: p.updatedAt })),
-      categories: categories.map((c) => ({ slug: c.slug, updatedAt: c.updatedAt })),
+      categories: categories.map((c) => ({
+        slug: c.slug,
+        updatedAt: c.updatedAt,
+      })),
     };
   }
 

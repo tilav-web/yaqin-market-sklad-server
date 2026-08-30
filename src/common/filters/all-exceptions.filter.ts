@@ -45,7 +45,10 @@ export class AllExceptionsFilter implements ExceptionFilter {
     }
 
     if (status >= 500) {
-      this.logger.error(`${request.method} ${request.url} -> ${status}`, (exception as Error)?.stack);
+      this.logger.error(
+        `${request.method} ${request.url} -> ${status}`,
+        (exception as Error)?.stack,
+      );
     }
 
     const body: ErrorBody = {

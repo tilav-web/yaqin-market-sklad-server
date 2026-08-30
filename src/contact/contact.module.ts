@@ -1,7 +1,10 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
-import { AdminContactController, ContactController } from './contact.controller';
+import {
+  AdminContactController,
+  ContactController,
+} from './contact.controller';
 import { ContactService } from './contact.service';
 import { ContactInquiry } from './entities/contact-inquiry.entity';
 

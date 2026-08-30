@@ -1,4 +1,11 @@
-import { Body, Controller, Delete, HttpCode, HttpStatus, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  HttpCode,
+  HttpStatus,
+  Post,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiProperty, ApiTags } from '@nestjs/swagger';
 import { IsOptional, IsString, MaxLength } from 'class-validator';
 
@@ -36,13 +43,23 @@ export class PushController {
   // (attaches a token that may have been registered anonymously before login).
   @Post()
   @HttpCode(HttpStatus.NO_CONTENT)
-  async register(@CurrentUser() user: JwtPayload, @Body() dto: RegisterDeviceDto) {
-    await this.push.registerToken(user.sub, dto.token, dto.platform ?? 'android');
+  async register(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: RegisterDeviceDto,
+  ) {
+    await this.push.registerToken(
+      user.sub,
+      dto.token,
+      dto.platform ?? 'android',
+    );
   }
 
   @Delete()
   @HttpCode(HttpStatus.NO_CONTENT)
-  async unregister(@CurrentUser() user: JwtPayload, @Body() dto: UnregisterDeviceDto) {
+  async unregister(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: UnregisterDeviceDto,
+  ) {
     await this.push.removeToken(user.sub, dto.token);
   }
 }

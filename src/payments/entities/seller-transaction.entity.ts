@@ -1,15 +1,21 @@
-import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn } from 'typeorm';
+import {
+  Column,
+  CreateDateColumn,
+  Entity,
+  Index,
+  PrimaryGeneratedColumn,
+} from 'typeorm';
 
 export enum SellerTxType {
-  CashOrderCommission = 'cash_order_commission',   // naqd buyurtma → qarzga
-  OnlineOrderPending  = 'online_order_pending',    // online buyurtma → pending
-  PendingSettled      = 'pending_settled',          // 24h → available
-  DebtRepaid          = 'debt_repaid',              // qarz so'ndirildi
-  WithdrawalRequested = 'withdrawal_requested',    // yechib olish so'rovi
-  WithdrawalCompleted = 'withdrawal_completed',    // yechib olish bajarildi
-  PrimePayment        = 'prime_payment',            // prime obuna to'lovi
-  AdminAdjustment     = 'admin_adjustment',         // admin qo'lda tuzatish
-  RefundDebit         = 'refund_debit',             // qaytarish (online)
+  CashOrderCommission = 'cash_order_commission', // naqd buyurtma → qarzga
+  OnlineOrderPending = 'online_order_pending', // online buyurtma → pending
+  PendingSettled = 'pending_settled', // 24h → available
+  DebtRepaid = 'debt_repaid', // qarz so'ndirildi
+  WithdrawalRequested = 'withdrawal_requested', // yechib olish so'rovi
+  WithdrawalCompleted = 'withdrawal_completed', // yechib olish bajarildi
+  PrimePayment = 'prime_payment', // prime obuna to'lovi
+  AdminAdjustment = 'admin_adjustment', // admin qo'lda tuzatish
+  RefundDebit = 'refund_debit', // qaytarish (online)
 }
 
 @Entity({ name: 'seller_transactions' })

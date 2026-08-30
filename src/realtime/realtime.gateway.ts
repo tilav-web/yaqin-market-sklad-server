@@ -56,10 +56,15 @@ export class RealtimeGateway implements OnGatewayConnection {
 
   /** Only the shop owner or an active staff member may watch a shop's stream. */
   private async canWatchShop(userId: string, shopId: string): Promise<boolean> {
-    const shop = await this.shops.findOne({ where: { id: shopId }, select: { id: true, ownerId: true } });
+    const shop = await this.shops.findOne({
+      where: { id: shopId },
+      select: { id: true, ownerId: true },
+    });
     if (!shop) return false;
     if (shop.ownerId === userId) return true;
-    const member = await this.staff.findOne({ where: { shopId, userId, isActive: true } });
+    const member = await this.staff.findOne({
+      where: { shopId, userId, isActive: true },
+    });
     return !!member;
   }
 
@@ -69,18 +74,32 @@ export class RealtimeGateway implements OnGatewayConnection {
    * OrdersService.staffCanViewOrder — merely being active shop staff isn't
    * enough, e.g. a warehouse-only hire shouldn't follow another order's chat).
    */
-  private async canWatchOrder(userId: string, orderId: string): Promise<boolean> {
+  private async canWatchOrder(
+    userId: string,
+    orderId: string,
+  ): Promise<boolean> {
     const order = await this.orders.findOne({
       where: { id: orderId },
       relations: { shop: true },
-      select: { id: true, userId: true, shopId: true, assignedStaffId: true, shop: { id: true, ownerId: true } },
+      select: {
+        id: true,
+        userId: true,
+        shopId: true,
+        assignedStaffId: true,
+        shop: { id: true, ownerId: true },
+      },
     });
     if (!order) return false;
     if (order.userId === userId || order.shop.ownerId === userId) return true;
-    const member = await this.staff.findOne({ where: { shopId: order.shopId, userId, isActive: true } });
+    const member = await this.staff.findOne({
+      where: { shopId: order.shopId, userId, isActive: true },
+    });
     if (!member) return false;
     if (member.permissions.includes('orders.view_all')) return true;
-    return member.permissions.includes('orders.view_assigned') && order.assignedStaffId === member.id;
+    return (
+      member.permissions.includes('orders.view_assigned') &&
+      order.assignedStaffId === member.id
+    );
   }
 
   async handleConnection(client: Socket): Promise<void> {

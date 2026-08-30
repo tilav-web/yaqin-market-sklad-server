@@ -44,7 +44,10 @@ export class CreateDebtDto {
   @Type(() => DebtLineInputDto)
   lines?: DebtLineInputDto[];
 
-  @ApiPropertyOptional({ example: 3000, description: 'Tizimda yo\'q tovarlar uchun qo\'shimcha narx' })
+  @ApiPropertyOptional({
+    example: 3000,
+    description: "Tizimda yo'q tovarlar uchun qo'shimcha narx",
+  })
   @IsOptional()
   @IsInt()
   @Min(0)

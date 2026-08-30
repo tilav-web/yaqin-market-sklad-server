@@ -39,8 +39,10 @@ async function toBuffer(wb: Workbook): Promise<Buffer> {
 @Injectable()
 export class AdminCatalogImportService {
   constructor(
-    @InjectRepository(GlobalProduct) private readonly globalProducts: Repository<GlobalProduct>,
-    @InjectRepository(Category) private readonly categories: Repository<Category>,
+    @InjectRepository(GlobalProduct)
+    private readonly globalProducts: Repository<GlobalProduct>,
+    @InjectRepository(Category)
+    private readonly categories: Repository<Category>,
   ) {}
 
   async downloadTemplate(): Promise<Buffer> {
@@ -58,15 +60,21 @@ export class AdminCatalogImportService {
     return toBuffer(wb);
   }
 
-  async previewImport(buffer: Buffer): Promise<AdminCatalogImportPreviewResult> {
+  async previewImport(
+    buffer: Buffer,
+  ): Promise<AdminCatalogImportPreviewResult> {
     const wb = new Workbook();
     try {
       // See excel.service.ts for why this cast is needed — exceljs's bundled
       // typings declare their own minimal ambient Buffer that structurally
       // conflicts with this project's newer @types/node Buffer.
-      await wb.xlsx.load(buffer as unknown as Parameters<typeof wb.xlsx.load>[0]);
+      await wb.xlsx.load(
+        buffer as unknown as Parameters<typeof wb.xlsx.load>[0],
+      );
     } catch {
-      throw new BadRequestException('Excel fayl o\'qib bo\'lmadi — .xlsx formatida ekanini tekshiring');
+      throw new BadRequestException(
+        "Excel fayl o'qib bo'lmadi — .xlsx formatida ekanini tekshiring",
+      );
     }
     const ws = wb.worksheets[0];
     if (!ws) throw new BadRequestException('Excel faylda varaq topilmadi');
@@ -92,7 +100,9 @@ export class AdminCatalogImportService {
       return raw;
     };
 
-    const categories = await this.categories.find({ select: { id: true, slug: true } });
+    const categories = await this.categories.find({
+      select: { id: true, slug: true },
+    });
     const categoryBySlug = new Map(categories.map((c) => [c.slug, c.id]));
 
     const errors: { row: number; message: string }[] = [];
@@ -113,15 +123,25 @@ export class AdminCatalogImportService {
       }
 
       const warnings: string[] = [];
-      const barcode = !isBlank(barcodeRaw) ? String(barcodeRaw).trim() : undefined;
+      const barcode = !isBlank(barcodeRaw)
+        ? String(barcodeRaw).trim()
+        : undefined;
       if (barcode) {
         if (seenBarcodes.has(barcode)) {
-          errors.push({ row: r, message: `Barkod "${barcode}" faylda takrorlangan` });
+          errors.push({
+            row: r,
+            message: `Barkod "${barcode}" faylda takrorlangan`,
+          });
           hasError = true;
         }
         seenBarcodes.add(barcode);
-        const existing = await this.globalProducts.findOne({ where: { barcode } });
-        if (existing) warnings.push(`Bu barkod katalogda allaqachon mavjud — o'tkazib yuboriladi`);
+        const existing = await this.globalProducts.findOne({
+          where: { barcode },
+        });
+        if (existing)
+          warnings.push(
+            `Bu barkod katalogda allaqachon mavjud — o'tkazib yuboriladi`,
+          );
       }
 
       const brandRaw = cell(r, 'brend');
@@ -133,15 +153,23 @@ export class AdminCatalogImportService {
         const key = String(unitRaw).trim().toLowerCase();
         unitType = UNIT_LABEL_TO_TYPE[key];
         if (!unitType) {
-          warnings.push(`Noma'lum o'lchov birligi "${String(unitRaw)}" — "dona" qo'llanildi`);
+          warnings.push(
+            `Noma'lum o'lchov birligi "${String(unitRaw)}" — "dona" qo'llanildi`,
+          );
           unitType = 'piece';
         }
       }
 
       const unitSizeRaw = cell(r, 'olchov_hajmi');
       const unitSize = !isBlank(unitSizeRaw) ? Number(unitSizeRaw) : undefined;
-      if (unitSize !== undefined && (!Number.isFinite(unitSize) || unitSize <= 0)) {
-        errors.push({ row: r, message: '"olchov_hajmi" musbat son bo\'lishi kerak' });
+      if (
+        unitSize !== undefined &&
+        (!Number.isFinite(unitSize) || unitSize <= 0)
+      ) {
+        errors.push({
+          row: r,
+          message: '"olchov_hajmi" musbat son bo\'lishi kerak',
+        });
         hasError = true;
       }
 
@@ -155,13 +183,25 @@ export class AdminCatalogImportService {
 
       if (hasError) continue;
 
-      rows.push({ rowNumber: r, name, barcode, brand, categoryId, unitType, unitSize, isVerified: true, warnings });
+      rows.push({
+        rowNumber: r,
+        name,
+        barcode,
+        brand,
+        categoryId,
+        unitType,
+        unitSize,
+        isVerified: true,
+        warnings,
+      });
     }
 
     return { willCreate: rows.length, errors, rows };
   }
 
-  async confirmImport(rows: AdminCatalogImportRowDto[]): Promise<AdminCatalogImportConfirmResult> {
+  async confirmImport(
+    rows: AdminCatalogImportRowDto[],
+  ): Promise<AdminCatalogImportConfirmResult> {
     let created = 0;
     let skipped = 0;
     const failed: { row: number; message: string }[] = [];
@@ -177,7 +217,9 @@ export class AdminCatalogImportService {
         // concurrent request, claiming the same barcode first) — that case
         // is also a legitimate "skip", not a failure.
         if (row.barcode) {
-          const existing = await this.globalProducts.findOne({ where: { barcode: row.barcode } });
+          const existing = await this.globalProducts.findOne({
+            where: { barcode: row.barcode },
+          });
           if (existing) {
             skipped++;
             continue;
@@ -202,7 +244,10 @@ export class AdminCatalogImportService {
           skipped++;
           continue;
         }
-        failed.push({ row: row.rowNumber, message: e instanceof Error ? e.message : 'Noma\'lum xato' });
+        failed.push({
+          row: row.rowNumber,
+          message: e instanceof Error ? e.message : "Noma'lum xato",
+        });
       }
     }
 

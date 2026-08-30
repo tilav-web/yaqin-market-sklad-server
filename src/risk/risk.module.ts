@@ -23,13 +23,24 @@ import { RiskService } from './risk.service';
  */
 @Module({
   imports: [
-    TypeOrmModule.forFeature([RiskFlag, CourierLocationPing, DeviceAccount, User, Order]),
+    TypeOrmModule.forFeature([
+      RiskFlag,
+      CourierLocationPing,
+      DeviceAccount,
+      User,
+      Order,
+    ]),
     RedisModule,
     SettingsModule,
     AuditLogModule,
   ],
   controllers: [AdminRiskController],
-  providers: [RiskFlagsService, RiskPingService, RiskHandshakeService, RiskService],
+  providers: [
+    RiskFlagsService,
+    RiskPingService,
+    RiskHandshakeService,
+    RiskService,
+  ],
   exports: [RiskService],
 })
 export class RiskModule {}

@@ -8,7 +8,10 @@ import { SettingsModule } from '../settings/settings.module';
 import { Shop } from '../shops/entities/shop.entity';
 import { ShopStaff } from '../shops/entities/shop-staff.entity';
 import { User } from '../users/entities/user.entity';
-import { AdminComplaintsController, OrderComplaintController } from './complaints.controller';
+import {
+  AdminComplaintsController,
+  OrderComplaintController,
+} from './complaints.controller';
 import { ComplaintsService } from './complaints.service';
 import { OrderComplaint } from './entities/order-complaint.entity';
 

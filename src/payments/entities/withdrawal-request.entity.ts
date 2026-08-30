@@ -1,10 +1,16 @@
-import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn } from 'typeorm';
+import {
+  Column,
+  CreateDateColumn,
+  Entity,
+  Index,
+  PrimaryGeneratedColumn,
+} from 'typeorm';
 
 export enum WithdrawalStatus {
-  Pending    = 'pending',
+  Pending = 'pending',
   Processing = 'processing',
-  Completed  = 'completed',
-  Rejected   = 'rejected',
+  Completed = 'completed',
+  Rejected = 'rejected',
 }
 
 @Entity({ name: 'withdrawal_requests' })
@@ -26,7 +32,11 @@ export class WithdrawalRequest {
   @Column({ type: 'varchar', length: 128 })
   bankCardHolderName!: string;
 
-  @Column({ type: 'enum', enum: WithdrawalStatus, default: WithdrawalStatus.Pending })
+  @Column({
+    type: 'enum',
+    enum: WithdrawalStatus,
+    default: WithdrawalStatus.Pending,
+  })
   status!: WithdrawalStatus;
 
   @CreateDateColumn({ type: 'timestamptz' })

@@ -44,7 +44,8 @@ import {
 import { ProductsService } from './products.service';
 
 const MAX_IMPORT_BYTES = 5 * 1024 * 1024; // 5 MB
-const XLSX_CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+const XLSX_CONTENT_TYPE =
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
 @ApiBearerAuth()
 @ApiTags('seller-products')
@@ -112,7 +113,12 @@ export class SellerProductsController {
     @Param('variantId', ParseUUIDPipe) variantId: string,
     @Body() dto: AdjustStockDto,
   ) {
-    return this.products.adjustStock(user.sub, variantId, dto.delta, dto.reason);
+    return this.products.adjustStock(
+      user.sub,
+      variantId,
+      dto.delta,
+      dto.reason,
+    );
   }
 
   /** Write off a variant's entire stock — expired/damaged/stolen/other (SPEC.md §26.3). */
@@ -122,7 +128,12 @@ export class SellerProductsController {
     @Param('variantId', ParseUUIDPipe) variantId: string,
     @Body() dto: BrakStockDto,
   ) {
-    return this.products.brakStock(user.sub, variantId, dto.reasonCode, dto.note);
+    return this.products.brakStock(
+      user.sub,
+      variantId,
+      dto.reasonCode,
+      dto.note,
+    );
   }
 
   @Post('variants/:variantId/receive')
@@ -202,7 +213,10 @@ export class CatalogController {
   feed(@Query() query: FeedQueryDto) {
     let categoryIds: string[] = [];
     if (query.categoryIds) {
-      categoryIds = query.categoryIds.split(',').map((s) => s.trim()).filter(Boolean);
+      categoryIds = query.categoryIds
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
     } else if (query.categoryId) {
       categoryIds = [query.categoryId];
     }
@@ -338,7 +352,11 @@ export class SellerProductsExtraController {
     @Param('shopId', ParseUUIDPipe) shopId: string,
     @Query('days') days?: string,
   ) {
-    return this.products.listExpiring(user.sub, shopId, days ? Number(days) : undefined);
+    return this.products.listExpiring(
+      user.sub,
+      shopId,
+      days ? Number(days) : undefined,
+    );
   }
 }
 
@@ -383,7 +401,11 @@ export class AdminGlobalCatalogController {
     @Query('categoryId') categoryId: string | undefined,
     @Res() res: Response,
   ) {
-    const buf = await this.products.adminExportGlobalProducts({ q, activeOnly: activeOnly === 'true', categoryId });
+    const buf = await this.products.adminExportGlobalProducts({
+      q,
+      activeOnly: activeOnly === 'true',
+      categoryId,
+    });
     res.setHeader('Content-Type', XLSX_CONTENT_TYPE);
     res.setHeader('Content-Disposition', 'attachment; filename="katalog.xlsx"');
     res.send(buf);
@@ -393,13 +415,18 @@ export class AdminGlobalCatalogController {
   async importTemplate(@Res() res: Response) {
     const buf = await this.catalogImport.downloadTemplate();
     res.setHeader('Content-Type', XLSX_CONTENT_TYPE);
-    res.setHeader('Content-Disposition', 'attachment; filename="katalog-shabloni.xlsx"');
+    res.setHeader(
+      'Content-Disposition',
+      'attachment; filename="katalog-shabloni.xlsx"',
+    );
     res.send(buf);
   }
 
   /** Upload a filled-in `.xlsx` for validation — does NOT create anything yet. */
   @Post('import/preview')
-  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: MAX_IMPORT_BYTES } }))
+  @UseInterceptors(
+    FileInterceptor('file', { limits: { fileSize: MAX_IMPORT_BYTES } }),
+  )
   async previewImport(@UploadedFile() file: Express.Multer.File | undefined) {
     if (!file) throw new BadRequestException('Fayl yuborilmadi');
     return this.catalogImport.previewImport(file.buffer);

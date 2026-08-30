@@ -22,7 +22,12 @@ import { AdminJwtStrategy } from './strategies/admin-jwt.strategy';
     SmsModule,
   ],
   controllers: [AdminAuthController],
-  providers: [AdminAuthService, AdminJwtStrategy, AdminJwtGuard, AdminRolesGuard],
+  providers: [
+    AdminAuthService,
+    AdminJwtStrategy,
+    AdminJwtGuard,
+    AdminRolesGuard,
+  ],
   exports: [AdminAuthService, AdminJwtGuard, AdminRolesGuard],
 })
 export class AdminAuthModule {}

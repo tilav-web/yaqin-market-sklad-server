@@ -24,14 +24,26 @@ import { StaffInvitation } from './entities/staff-invitation.entity';
 @Module({
   imports: [
     TypeOrmModule.forFeature([
-      Shop, ShopStaff, ShopStaffPreset, StaffInvitation, User, Order, ProductVariant, GlobalProduct,
+      Shop,
+      ShopStaff,
+      ShopStaffPreset,
+      StaffInvitation,
+      User,
+      Order,
+      ProductVariant,
+      GlobalProduct,
     ]),
     ComplaintsModule,
     AuditLogModule,
     SettingsModule,
     RiskModule,
   ],
-  controllers: [ShopsController, SellerShopsController, StaffController, AdminShopsController],
+  controllers: [
+    ShopsController,
+    SellerShopsController,
+    StaffController,
+    AdminShopsController,
+  ],
   providers: [ShopsService],
   exports: [ShopsService],
 })

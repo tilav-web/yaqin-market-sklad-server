@@ -15,5 +15,7 @@ export const buildTypeOrmOptions = (
   autoLoadEntities: true,
   synchronize: config.get('NODE_ENV', { infer: true }) !== 'production',
   logging:
-    config.get('NODE_ENV', { infer: true }) === 'development' ? ['warn', 'error'] : ['error'],
+    config.get('NODE_ENV', { infer: true }) === 'development'
+      ? ['warn', 'error']
+      : ['error'],
 });

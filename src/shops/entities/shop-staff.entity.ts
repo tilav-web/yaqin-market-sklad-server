@@ -13,8 +13,20 @@ import {
 import { User } from '../../users/entities/user.entity';
 import { Shop } from './shop.entity';
 
-export type StaffRole = 'cashier' | 'storekeeper' | 'courier' | 'manager' | 'custom';
-export type StaffPreset = StaffRole | 'kassir' | 'sklad' | 'yetkazib_beruvchi' | 'menejer' | 'omborchi' | 'kuryer';
+export type StaffRole =
+  | 'cashier'
+  | 'storekeeper'
+  | 'courier'
+  | 'manager'
+  | 'custom';
+export type StaffPreset =
+  | StaffRole
+  | 'kassir'
+  | 'sklad'
+  | 'yetkazib_beruvchi'
+  | 'menejer'
+  | 'omborchi'
+  | 'kuryer';
 
 export const ALL_STAFF_PERMISSIONS = [
   // inventory
@@ -54,7 +66,10 @@ export const ALL_STAFF_PERMISSIONS = [
 
 export type StaffPermission = (typeof ALL_STAFF_PERMISSIONS)[number];
 
-export const ROLE_PERMISSIONS: Record<'cashier' | 'storekeeper' | 'courier' | 'manager', StaffPermission[]> = {
+export const ROLE_PERMISSIONS: Record<
+  'cashier' | 'storekeeper' | 'courier' | 'manager',
+  StaffPermission[]
+> = {
   cashier: [
     'inventory.view',
     'inventory.product.edit_stock',
@@ -128,7 +143,9 @@ export function computePermissionsForRoles(
 ): StaffPermission[] {
   const permSet = new Set<StaffPermission>(customPerms);
   for (const role of roles) {
-    const perms = PRESET_PERMISSIONS[role] || ROLE_PERMISSIONS[role as keyof typeof ROLE_PERMISSIONS];
+    const perms =
+      PRESET_PERMISSIONS[role] ||
+      ROLE_PERMISSIONS[role as keyof typeof ROLE_PERMISSIONS];
     if (perms) {
       for (const p of perms) {
         permSet.add(p);

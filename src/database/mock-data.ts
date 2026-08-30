@@ -19,12 +19,22 @@ import { DataSource } from 'typeorm';
 
 import { haversineKm, calcDeliveryFee } from '../geo/geo.util';
 import { Category } from '../categories/entities/category.entity';
-import { Order, OrderStatus, PaymentMethod } from '../orders/entities/order.entity';
+import {
+  Order,
+  OrderStatus,
+  PaymentMethod,
+} from '../orders/entities/order.entity';
 import { OrderItem } from '../orders/entities/order-item.entity';
 import { Review } from '../orders/entities/review.entity';
-import { InventoryMovement, MovementType } from '../products/entities/inventory-movement.entity';
+import {
+  InventoryMovement,
+  MovementType,
+} from '../products/entities/inventory-movement.entity';
 import { toLocalizedText } from '../common/types/localized-text.type';
-import { GlobalProduct, UnitType } from '../products/entities/global-product.entity';
+import {
+  GlobalProduct,
+  UnitType,
+} from '../products/entities/global-product.entity';
 import { ProductVariant } from '../products/entities/product-variant.entity';
 import { StockBatch } from '../products/entities/stock-batch.entity';
 import {
@@ -104,15 +114,16 @@ function pick<T>(arr: readonly T[]): T {
 const img = (text: string, bg = '0046AD') =>
   `https://placehold.co/600x600/${bg}/FFFFFF?text=${encodeURIComponent(text)}`;
 
-const STD_HOURS: WorkingHourSlot[] = ([0, 1, 2, 3, 4, 5, 6] as const).map((d) => ({
-  dayOfWeek: d,
-  openTime: '08:00',
-  closeTime: '22:00',
-  isOpen: true,
-}));
+const STD_HOURS: WorkingHourSlot[] = ([0, 1, 2, 3, 4, 5, 6] as const).map(
+  (d) => ({
+    dayOfWeek: d,
+    openTime: '08:00',
+    closeTime: '22:00',
+    isOpen: true,
+  }),
+);
 
-const orderNo = () =>
-  `YM-${Math.floor(rnd() * 900000 + 100000)}`;
+const orderNo = () => `YM-${Math.floor(rnd() * 900000 + 100000)}`;
 
 // ---------------------------------------------------------------------------
 // Category tree
@@ -132,13 +143,38 @@ const CATEGORY_TREE: CatNode[] = [
     cy: 'Озиқ-овқат',
     ru: 'Продукты',
     children: [
-      { slug: 'sut-mahsulotlari', uz: 'Sut mahsulotlari', cy: 'Сут маҳсулотлари', ru: 'Молочные продукты' },
-      { slug: 'non-nonvoy', uz: 'Non va nonvoy', cy: 'Нон ва нонвой', ru: 'Хлеб и выпечка' },
-      { slug: 'gosht-parranda', uz: "Go'sht va parranda", cy: 'Гўшт ва парранда', ru: 'Мясо и птица' },
+      {
+        slug: 'sut-mahsulotlari',
+        uz: 'Sut mahsulotlari',
+        cy: 'Сут маҳсулотлари',
+        ru: 'Молочные продукты',
+      },
+      {
+        slug: 'non-nonvoy',
+        uz: 'Non va nonvoy',
+        cy: 'Нон ва нонвой',
+        ru: 'Хлеб и выпечка',
+      },
+      {
+        slug: 'gosht-parranda',
+        uz: "Go'sht va parranda",
+        cy: 'Гўшт ва парранда',
+        ru: 'Мясо и птица',
+      },
       { slug: 'mevalar', uz: 'Mevalar', cy: 'Мевалар', ru: 'Фрукты' },
-      { slug: 'sabzavotlar', uz: 'Sabzavotlar', cy: 'Сабзавотлар', ru: 'Овощи' },
+      {
+        slug: 'sabzavotlar',
+        uz: 'Sabzavotlar',
+        cy: 'Сабзавотлар',
+        ru: 'Овощи',
+      },
       { slug: 'bakaleya', uz: 'Bakaleya', cy: 'Бакалея', ru: 'Бакалея' },
-      { slug: 'shirinliklar', uz: 'Shirinliklar', cy: 'Ширинликлар', ru: 'Сладости' },
+      {
+        slug: 'shirinliklar',
+        uz: 'Shirinliklar',
+        cy: 'Ширинликлар',
+        ru: 'Сладости',
+      },
     ],
   },
   {
@@ -147,9 +183,19 @@ const CATEGORY_TREE: CatNode[] = [
     cy: 'Ичимликлар',
     ru: 'Напитки',
     children: [
-      { slug: 'suv-gazli', uz: 'Suv va gazli ichimliklar', cy: 'Сув ва газли ичимликлар', ru: 'Вода и газировка' },
+      {
+        slug: 'suv-gazli',
+        uz: 'Suv va gazli ichimliklar',
+        cy: 'Сув ва газли ичимликлар',
+        ru: 'Вода и газировка',
+      },
       { slug: 'sharbatlar', uz: 'Sharbatlar', cy: 'Шарбатлар', ru: 'Соки' },
-      { slug: 'choy-kofe', uz: 'Choy va kofe', cy: 'Чой ва кофе', ru: 'Чай и кофе' },
+      {
+        slug: 'choy-kofe',
+        uz: 'Choy va kofe',
+        cy: 'Чой ва кофе',
+        ru: 'Чай и кофе',
+      },
     ],
   },
   {
@@ -158,8 +204,18 @@ const CATEGORY_TREE: CatNode[] = [
     cy: 'Уй-рўзғор',
     ru: 'Для дома',
     children: [
-      { slug: 'gigiena', uz: 'Shaxsiy gigiena', cy: 'Шахсий гигиена', ru: 'Гигиена' },
-      { slug: 'tozalash', uz: 'Tozalash vositalari', cy: 'Тозалаш воситалари', ru: 'Бытовая химия' },
+      {
+        slug: 'gigiena',
+        uz: 'Shaxsiy gigiena',
+        cy: 'Шахсий гигиена',
+        ru: 'Гигиена',
+      },
+      {
+        slug: 'tozalash',
+        uz: 'Tozalash vositalari',
+        cy: 'Тозалаш воситалари',
+        ru: 'Бытовая химия',
+      },
     ],
   },
 ];
@@ -187,129 +243,374 @@ interface ProductTpl {
 
 const CATALOG: ProductTpl[] = [
   // Dairy
-  { family: 'Sut', brand: 'Nestlé', categorySlug: 'sut-mahsulotlari', bg: '1E88E5', desc: 'Tabiiy pasterizatsiyalangan sut', variants: [
-    { label: 'Sut 0.5L', unitType: 'liter', unitSize: 0.5, price: 7000 },
-    { label: 'Sut 1L', unitType: 'liter', unitSize: 1, price: 12000 },
-  ]},
-  { family: 'Qatiq', brand: 'Milline', categorySlug: 'sut-mahsulotlari', bg: '1E88E5', variants: [
-    { label: 'Qatiq 0.5L', unitType: 'liter', unitSize: 0.5, price: 8000 },
-  ]},
-  { family: 'Smetana', brand: 'Nestlé', categorySlug: 'sut-mahsulotlari', bg: '1E88E5', variants: [
-    { label: 'Smetana 400g', unitType: 'gram', unitSize: 400, price: 15000 },
-  ]},
-  { family: 'Tvorog', categorySlug: 'sut-mahsulotlari', bg: '1E88E5', variants: [
-    { label: 'Tvorog 500g', unitType: 'gram', unitSize: 500, price: 22000 },
-  ]},
+  {
+    family: 'Sut',
+    brand: 'Nestlé',
+    categorySlug: 'sut-mahsulotlari',
+    bg: '1E88E5',
+    desc: 'Tabiiy pasterizatsiyalangan sut',
+    variants: [
+      { label: 'Sut 0.5L', unitType: 'liter', unitSize: 0.5, price: 7000 },
+      { label: 'Sut 1L', unitType: 'liter', unitSize: 1, price: 12000 },
+    ],
+  },
+  {
+    family: 'Qatiq',
+    brand: 'Milline',
+    categorySlug: 'sut-mahsulotlari',
+    bg: '1E88E5',
+    variants: [
+      { label: 'Qatiq 0.5L', unitType: 'liter', unitSize: 0.5, price: 8000 },
+    ],
+  },
+  {
+    family: 'Smetana',
+    brand: 'Nestlé',
+    categorySlug: 'sut-mahsulotlari',
+    bg: '1E88E5',
+    variants: [
+      { label: 'Smetana 400g', unitType: 'gram', unitSize: 400, price: 15000 },
+    ],
+  },
+  {
+    family: 'Tvorog',
+    categorySlug: 'sut-mahsulotlari',
+    bg: '1E88E5',
+    variants: [
+      { label: 'Tvorog 500g', unitType: 'gram', unitSize: 500, price: 22000 },
+    ],
+  },
   // Bakery
-  { family: 'Oddiy non', categorySlug: 'non-nonvoy', bg: 'C0853B', desc: 'Tandirda yopilgan issiq non', variants: [
-    { label: 'Oddiy non', unitType: 'piece', unitSize: 1, price: 2500 },
-  ]},
-  { family: 'Bulochka', categorySlug: 'non-nonvoy', bg: 'C0853B', variants: [
-    { label: 'Bulochka', unitType: 'piece', unitSize: 1, price: 1500 },
-  ]},
-  { family: 'Lavash', categorySlug: 'non-nonvoy', bg: 'C0853B', variants: [
-    { label: 'Lavash', unitType: 'piece', unitSize: 1, price: 3000 },
-  ]},
+  {
+    family: 'Oddiy non',
+    categorySlug: 'non-nonvoy',
+    bg: 'C0853B',
+    desc: 'Tandirda yopilgan issiq non',
+    variants: [
+      { label: 'Oddiy non', unitType: 'piece', unitSize: 1, price: 2500 },
+    ],
+  },
+  {
+    family: 'Bulochka',
+    categorySlug: 'non-nonvoy',
+    bg: 'C0853B',
+    variants: [
+      { label: 'Bulochka', unitType: 'piece', unitSize: 1, price: 1500 },
+    ],
+  },
+  {
+    family: 'Lavash',
+    categorySlug: 'non-nonvoy',
+    bg: 'C0853B',
+    variants: [
+      { label: 'Lavash', unitType: 'piece', unitSize: 1, price: 3000 },
+    ],
+  },
   // Meat
-  { family: "Mol go'shti", categorySlug: 'gosht-parranda', bg: 'C62828', desc: 'Yangi mol goʼshti', variants: [
-    { label: "Mol go'shti 1kg", unitType: 'kg', unitSize: 1, price: 95000 },
-  ]},
-  { family: "Tovuq go'shti", categorySlug: 'gosht-parranda', bg: 'C62828', variants: [
-    { label: "Tovuq go'shti 1kg", unitType: 'kg', unitSize: 1, price: 38000, discount: 34000 },
-  ]},
-  { family: 'Tuxum', categorySlug: 'gosht-parranda', bg: 'C62828', variants: [
-    { label: 'Tuxum 10 dona', unitType: 'pack', unitSize: 10, price: 16000 },
-  ]},
+  {
+    family: "Mol go'shti",
+    categorySlug: 'gosht-parranda',
+    bg: 'C62828',
+    desc: 'Yangi mol goʼshti',
+    variants: [
+      { label: "Mol go'shti 1kg", unitType: 'kg', unitSize: 1, price: 95000 },
+    ],
+  },
+  {
+    family: "Tovuq go'shti",
+    categorySlug: 'gosht-parranda',
+    bg: 'C62828',
+    variants: [
+      {
+        label: "Tovuq go'shti 1kg",
+        unitType: 'kg',
+        unitSize: 1,
+        price: 38000,
+        discount: 34000,
+      },
+    ],
+  },
+  {
+    family: 'Tuxum',
+    categorySlug: 'gosht-parranda',
+    bg: 'C62828',
+    variants: [
+      { label: 'Tuxum 10 dona', unitType: 'pack', unitSize: 10, price: 16000 },
+    ],
+  },
   // Fruits
-  { family: 'Olma', categorySlug: 'mevalar', bg: '43A047', variants: [
-    { label: 'Olma 1kg', unitType: 'kg', unitSize: 1, price: 12000 },
-  ]},
-  { family: 'Banan', categorySlug: 'mevalar', bg: '43A047', variants: [
-    { label: 'Banan 1kg', unitType: 'kg', unitSize: 1, price: 22000 },
-  ]},
-  { family: 'Apelsin', categorySlug: 'mevalar', bg: '43A047', variants: [
-    { label: 'Apelsin 1kg', unitType: 'kg', unitSize: 1, price: 18000, discount: 15000 },
-  ]},
+  {
+    family: 'Olma',
+    categorySlug: 'mevalar',
+    bg: '43A047',
+    variants: [
+      { label: 'Olma 1kg', unitType: 'kg', unitSize: 1, price: 12000 },
+    ],
+  },
+  {
+    family: 'Banan',
+    categorySlug: 'mevalar',
+    bg: '43A047',
+    variants: [
+      { label: 'Banan 1kg', unitType: 'kg', unitSize: 1, price: 22000 },
+    ],
+  },
+  {
+    family: 'Apelsin',
+    categorySlug: 'mevalar',
+    bg: '43A047',
+    variants: [
+      {
+        label: 'Apelsin 1kg',
+        unitType: 'kg',
+        unitSize: 1,
+        price: 18000,
+        discount: 15000,
+      },
+    ],
+  },
   // Vegetables
-  { family: 'Kartoshka', categorySlug: 'sabzavotlar', bg: '6D4C41', variants: [
-    { label: 'Kartoshka 1kg', unitType: 'kg', unitSize: 1, price: 6000 },
-  ]},
-  { family: 'Piyoz', categorySlug: 'sabzavotlar', bg: '6D4C41', variants: [
-    { label: 'Piyoz 1kg', unitType: 'kg', unitSize: 1, price: 5000 },
-  ]},
-  { family: 'Pomidor', categorySlug: 'sabzavotlar', bg: '6D4C41', variants: [
-    { label: 'Pomidor 1kg', unitType: 'kg', unitSize: 1, price: 14000 },
-  ]},
-  { family: 'Bodring', categorySlug: 'sabzavotlar', bg: '6D4C41', variants: [
-    { label: 'Bodring 1kg', unitType: 'kg', unitSize: 1, price: 12000 },
-  ]},
+  {
+    family: 'Kartoshka',
+    categorySlug: 'sabzavotlar',
+    bg: '6D4C41',
+    variants: [
+      { label: 'Kartoshka 1kg', unitType: 'kg', unitSize: 1, price: 6000 },
+    ],
+  },
+  {
+    family: 'Piyoz',
+    categorySlug: 'sabzavotlar',
+    bg: '6D4C41',
+    variants: [
+      { label: 'Piyoz 1kg', unitType: 'kg', unitSize: 1, price: 5000 },
+    ],
+  },
+  {
+    family: 'Pomidor',
+    categorySlug: 'sabzavotlar',
+    bg: '6D4C41',
+    variants: [
+      { label: 'Pomidor 1kg', unitType: 'kg', unitSize: 1, price: 14000 },
+    ],
+  },
+  {
+    family: 'Bodring',
+    categorySlug: 'sabzavotlar',
+    bg: '6D4C41',
+    variants: [
+      { label: 'Bodring 1kg', unitType: 'kg', unitSize: 1, price: 12000 },
+    ],
+  },
   // Bakaleya
-  { family: 'Guruch', brand: 'Laser', categorySlug: 'bakaleya', bg: '8D6E63', variants: [
-    { label: 'Guruch 1kg', unitType: 'kg', unitSize: 1, price: 18000 },
-    { label: 'Guruch 5kg', unitType: 'kg', unitSize: 5, price: 85000, discount: 79000 },
-  ]},
-  { family: 'Makaron', brand: 'Makfa', categorySlug: 'bakaleya', bg: '8D6E63', variants: [
-    { label: 'Makaron 450g', unitType: 'gram', unitSize: 450, price: 9000 },
-  ]},
-  { family: "O'simlik yog'i", brand: 'Oleyna', categorySlug: 'bakaleya', bg: '8D6E63', variants: [
-    { label: "Yog' 1L", unitType: 'liter', unitSize: 1, price: 24000 },
-  ]},
-  { family: 'Un', brand: 'Oltin Boshoq', categorySlug: 'bakaleya', bg: '8D6E63', variants: [
-    { label: 'Un 2kg', unitType: 'kg', unitSize: 2, price: 16000 },
-  ]},
-  { family: 'Shakar', categorySlug: 'bakaleya', bg: '8D6E63', variants: [
-    { label: 'Shakar 1kg', unitType: 'kg', unitSize: 1, price: 12000 },
-  ]},
+  {
+    family: 'Guruch',
+    brand: 'Laser',
+    categorySlug: 'bakaleya',
+    bg: '8D6E63',
+    variants: [
+      { label: 'Guruch 1kg', unitType: 'kg', unitSize: 1, price: 18000 },
+      {
+        label: 'Guruch 5kg',
+        unitType: 'kg',
+        unitSize: 5,
+        price: 85000,
+        discount: 79000,
+      },
+    ],
+  },
+  {
+    family: 'Makaron',
+    brand: 'Makfa',
+    categorySlug: 'bakaleya',
+    bg: '8D6E63',
+    variants: [
+      { label: 'Makaron 450g', unitType: 'gram', unitSize: 450, price: 9000 },
+    ],
+  },
+  {
+    family: "O'simlik yog'i",
+    brand: 'Oleyna',
+    categorySlug: 'bakaleya',
+    bg: '8D6E63',
+    variants: [
+      { label: "Yog' 1L", unitType: 'liter', unitSize: 1, price: 24000 },
+    ],
+  },
+  {
+    family: 'Un',
+    brand: 'Oltin Boshoq',
+    categorySlug: 'bakaleya',
+    bg: '8D6E63',
+    variants: [{ label: 'Un 2kg', unitType: 'kg', unitSize: 2, price: 16000 }],
+  },
+  {
+    family: 'Shakar',
+    categorySlug: 'bakaleya',
+    bg: '8D6E63',
+    variants: [
+      { label: 'Shakar 1kg', unitType: 'kg', unitSize: 1, price: 12000 },
+    ],
+  },
   // Sweets
-  { family: 'Snickers', brand: 'Mars', categorySlug: 'shirinliklar', bg: 'EC407A', variants: [
-    { label: 'Snickers 50g', unitType: 'piece', unitSize: 1, price: 6000 },
-  ]},
-  { family: 'Oreo', categorySlug: 'shirinliklar', bg: 'EC407A', variants: [
-    { label: 'Oreo pechenye', unitType: 'pack', unitSize: 1, price: 12000 },
-  ]},
-  { family: 'Konfet', brand: 'Roshen', categorySlug: 'shirinliklar', bg: 'EC407A', variants: [
-    { label: 'Konfet 1kg', unitType: 'kg', unitSize: 1, price: 45000 },
-  ]},
+  {
+    family: 'Snickers',
+    brand: 'Mars',
+    categorySlug: 'shirinliklar',
+    bg: 'EC407A',
+    variants: [
+      { label: 'Snickers 50g', unitType: 'piece', unitSize: 1, price: 6000 },
+    ],
+  },
+  {
+    family: 'Oreo',
+    categorySlug: 'shirinliklar',
+    bg: 'EC407A',
+    variants: [
+      { label: 'Oreo pechenye', unitType: 'pack', unitSize: 1, price: 12000 },
+    ],
+  },
+  {
+    family: 'Konfet',
+    brand: 'Roshen',
+    categorySlug: 'shirinliklar',
+    bg: 'EC407A',
+    variants: [
+      { label: 'Konfet 1kg', unitType: 'kg', unitSize: 1, price: 45000 },
+    ],
+  },
   // Drinks - water/soda
-  { family: 'Coca-Cola', brand: 'Coca-Cola', categorySlug: 'suv-gazli', bg: 'D32F2F', desc: 'Gazlangan tarogʼlama ichimlik', variants: [
-    { label: 'Coca-Cola 0.5L', unitType: 'liter', unitSize: 0.5, price: 6000 },
-    { label: 'Coca-Cola 1L', unitType: 'liter', unitSize: 1, price: 9000 },
-    { label: 'Coca-Cola 1.5L', unitType: 'liter', unitSize: 1.5, price: 12000, discount: 10000 },
-  ]},
-  { family: 'Ichimlik suvi', brand: 'Hydrolife', categorySlug: 'suv-gazli', bg: '0288D1', variants: [
-    { label: 'Suv 1.5L', unitType: 'liter', unitSize: 1.5, price: 4000 },
-  ]},
-  { family: 'Fanta', brand: 'Coca-Cola', categorySlug: 'suv-gazli', bg: 'F9A825', variants: [
-    { label: 'Fanta 1L', unitType: 'liter', unitSize: 1, price: 9000 },
-  ]},
+  {
+    family: 'Coca-Cola',
+    brand: 'Coca-Cola',
+    categorySlug: 'suv-gazli',
+    bg: 'D32F2F',
+    desc: 'Gazlangan tarogʼlama ichimlik',
+    variants: [
+      {
+        label: 'Coca-Cola 0.5L',
+        unitType: 'liter',
+        unitSize: 0.5,
+        price: 6000,
+      },
+      { label: 'Coca-Cola 1L', unitType: 'liter', unitSize: 1, price: 9000 },
+      {
+        label: 'Coca-Cola 1.5L',
+        unitType: 'liter',
+        unitSize: 1.5,
+        price: 12000,
+        discount: 10000,
+      },
+    ],
+  },
+  {
+    family: 'Ichimlik suvi',
+    brand: 'Hydrolife',
+    categorySlug: 'suv-gazli',
+    bg: '0288D1',
+    variants: [
+      { label: 'Suv 1.5L', unitType: 'liter', unitSize: 1.5, price: 4000 },
+    ],
+  },
+  {
+    family: 'Fanta',
+    brand: 'Coca-Cola',
+    categorySlug: 'suv-gazli',
+    bg: 'F9A825',
+    variants: [
+      { label: 'Fanta 1L', unitType: 'liter', unitSize: 1, price: 9000 },
+    ],
+  },
   // Drinks - juice
-  { family: 'Sharbat', brand: 'Jaffa', categorySlug: 'sharbatlar', bg: 'F57F17', variants: [
-    { label: 'Apelsin sharbati 1L', unitType: 'liter', unitSize: 1, price: 14000 },
-  ]},
+  {
+    family: 'Sharbat',
+    brand: 'Jaffa',
+    categorySlug: 'sharbatlar',
+    bg: 'F57F17',
+    variants: [
+      {
+        label: 'Apelsin sharbati 1L',
+        unitType: 'liter',
+        unitSize: 1,
+        price: 14000,
+      },
+    ],
+  },
   // Drinks - tea/coffee
-  { family: 'Choy', brand: 'Greenfield', categorySlug: 'choy-kofe', bg: '2E7D32', variants: [
-    { label: 'Choy 100g', unitType: 'gram', unitSize: 100, price: 28000 },
-  ]},
-  { family: 'Kofe', brand: 'Nescafé', categorySlug: 'choy-kofe', bg: '4E342E', variants: [
-    { label: 'Kofe 100g', unitType: 'gram', unitSize: 100, price: 42000 },
-  ]},
+  {
+    family: 'Choy',
+    brand: 'Greenfield',
+    categorySlug: 'choy-kofe',
+    bg: '2E7D32',
+    variants: [
+      { label: 'Choy 100g', unitType: 'gram', unitSize: 100, price: 28000 },
+    ],
+  },
+  {
+    family: 'Kofe',
+    brand: 'Nescafé',
+    categorySlug: 'choy-kofe',
+    bg: '4E342E',
+    variants: [
+      { label: 'Kofe 100g', unitType: 'gram', unitSize: 100, price: 42000 },
+    ],
+  },
   // Household - hygiene
-  { family: 'Shampun', brand: 'Head & Shoulders', categorySlug: 'gigiena', bg: '00838F', variants: [
-    { label: 'Shampun 400ml', unitType: 'gram', unitSize: 400, price: 38000 },
-  ]},
-  { family: 'Tish pastasi', brand: 'Colgate', categorySlug: 'gigiena', bg: '00838F', variants: [
-    { label: 'Tish pastasi 100ml', unitType: 'gram', unitSize: 100, price: 18000 },
-  ]},
-  { family: 'Sovun', brand: 'Safeguard', categorySlug: 'gigiena', bg: '00838F', variants: [
-    { label: 'Sovun', unitType: 'piece', unitSize: 1, price: 7000 },
-  ]},
+  {
+    family: 'Shampun',
+    brand: 'Head & Shoulders',
+    categorySlug: 'gigiena',
+    bg: '00838F',
+    variants: [
+      { label: 'Shampun 400ml', unitType: 'gram', unitSize: 400, price: 38000 },
+    ],
+  },
+  {
+    family: 'Tish pastasi',
+    brand: 'Colgate',
+    categorySlug: 'gigiena',
+    bg: '00838F',
+    variants: [
+      {
+        label: 'Tish pastasi 100ml',
+        unitType: 'gram',
+        unitSize: 100,
+        price: 18000,
+      },
+    ],
+  },
+  {
+    family: 'Sovun',
+    brand: 'Safeguard',
+    categorySlug: 'gigiena',
+    bg: '00838F',
+    variants: [{ label: 'Sovun', unitType: 'piece', unitSize: 1, price: 7000 }],
+  },
   // Household - cleaning
-  { family: 'Kir yuvish kukuni', brand: 'Ariel', categorySlug: 'tozalash', bg: '283593', variants: [
-    { label: 'Ariel 1.5kg', unitType: 'kg', unitSize: 1.5, price: 65000, discount: 58000 },
-  ]},
-  { family: 'Idish yuvish vositasi', brand: 'Fairy', categorySlug: 'tozalash', bg: '283593', variants: [
-    { label: 'Fairy 500ml', unitType: 'gram', unitSize: 500, price: 22000 },
-  ]},
+  {
+    family: 'Kir yuvish kukuni',
+    brand: 'Ariel',
+    categorySlug: 'tozalash',
+    bg: '283593',
+    variants: [
+      {
+        label: 'Ariel 1.5kg',
+        unitType: 'kg',
+        unitSize: 1.5,
+        price: 65000,
+        discount: 58000,
+      },
+    ],
+  },
+  {
+    family: 'Idish yuvish vositasi',
+    brand: 'Fairy',
+    categorySlug: 'tozalash',
+    bg: '283593',
+    variants: [
+      { label: 'Fairy 500ml', unitType: 'gram', unitSize: 500, price: 22000 },
+    ],
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -357,12 +658,98 @@ interface ShopDef {
 }
 
 const SHOPS: ShopDef[] = [
-  { name: 'Yaqin Mahalla Market', description: "Mahalla doʼkonimiz sizning xizmatingizda — yangi mahsulotlar har kuni.", address: 'Qarshi, Mustaqillik koʼchasi 12', km: { north: 0.28, east: 0.26 }, ownerIdx: 0, maxKm: 4, freeKm: 2, pricingType: 'per_km', pricePerStep: 3000, minOrderPrice: 20000, bg: '0046AD', productCount: 18, isOpenManual: true },
-  { name: 'Bahor Supermarket', description: 'Keng assortiment, qulay narxlar.', address: 'Qarshi, Navoiy shoh koʼchasi 45', km: { north: -0.4, east: 0.45 }, ownerIdx: 0, maxKm: 3, freeKm: 1.5, pricingType: 'flat', pricePerStep: 5000, minOrderPrice: 15000, bg: '2E7D32', productCount: 16, isOpenManual: true },
-  { name: 'Oila Market', description: 'Oilaviy doʼkon — bolalar uchun ham, katta yoshlilar uchun ham.', address: 'Qarshi, Ulugʼbek koʼchasi 8', km: { north: 0.85, east: -0.6 }, ownerIdx: 1, maxKm: 4, freeKm: 2, pricingType: 'per_500m', pricePerStep: 2000, minOrderPrice: 25000, bg: 'E1251B', productCount: 20, isOpenManual: true },
-  { name: 'Salom Oziq-ovqat', description: 'Tez yetkazib berish, sifatli mahsulotlar.', address: 'Qarshi, Amir Temur koʼchasi 30', km: { north: -1.0, east: -0.8 }, ownerIdx: 1, maxKm: 3, freeKm: 1, pricingType: 'per_km', pricePerStep: 2500, minOrderPrice: 0, bg: 'F9A825', productCount: 14, isOpenManual: true },
-  { name: 'Mega Store Qarshi', description: 'Shahardagi eng katta tanlov.', address: 'Qarshi, Nasaf koʼchasi 102', km: { north: 1.2, east: 1.35 }, ownerIdx: 2, maxKm: 5, freeKm: 3, pricingType: 'flat', pricePerStep: 7000, minOrderPrice: 30000, bg: '6A1B9A', productCount: 24, isOpenManual: true },
-  { name: 'Tong Market', description: 'Ertalabdan kechgacha ochiq.', address: 'Qarshi, Bunyodkor koʼchasi 5', km: { north: 0.2, east: -1.55 }, ownerIdx: 3, maxKm: 3, freeKm: 2, pricingType: 'per_km', pricePerStep: 3000, minOrderPrice: 18000, bg: '00838F', productCount: 15, isOpenManual: false },
+  {
+    name: 'Yaqin Mahalla Market',
+    description:
+      'Mahalla doʼkonimiz sizning xizmatingizda — yangi mahsulotlar har kuni.',
+    address: 'Qarshi, Mustaqillik koʼchasi 12',
+    km: { north: 0.28, east: 0.26 },
+    ownerIdx: 0,
+    maxKm: 4,
+    freeKm: 2,
+    pricingType: 'per_km',
+    pricePerStep: 3000,
+    minOrderPrice: 20000,
+    bg: '0046AD',
+    productCount: 18,
+    isOpenManual: true,
+  },
+  {
+    name: 'Bahor Supermarket',
+    description: 'Keng assortiment, qulay narxlar.',
+    address: 'Qarshi, Navoiy shoh koʼchasi 45',
+    km: { north: -0.4, east: 0.45 },
+    ownerIdx: 0,
+    maxKm: 3,
+    freeKm: 1.5,
+    pricingType: 'flat',
+    pricePerStep: 5000,
+    minOrderPrice: 15000,
+    bg: '2E7D32',
+    productCount: 16,
+    isOpenManual: true,
+  },
+  {
+    name: 'Oila Market',
+    description:
+      'Oilaviy doʼkon — bolalar uchun ham, katta yoshlilar uchun ham.',
+    address: 'Qarshi, Ulugʼbek koʼchasi 8',
+    km: { north: 0.85, east: -0.6 },
+    ownerIdx: 1,
+    maxKm: 4,
+    freeKm: 2,
+    pricingType: 'per_500m',
+    pricePerStep: 2000,
+    minOrderPrice: 25000,
+    bg: 'E1251B',
+    productCount: 20,
+    isOpenManual: true,
+  },
+  {
+    name: 'Salom Oziq-ovqat',
+    description: 'Tez yetkazib berish, sifatli mahsulotlar.',
+    address: 'Qarshi, Amir Temur koʼchasi 30',
+    km: { north: -1.0, east: -0.8 },
+    ownerIdx: 1,
+    maxKm: 3,
+    freeKm: 1,
+    pricingType: 'per_km',
+    pricePerStep: 2500,
+    minOrderPrice: 0,
+    bg: 'F9A825',
+    productCount: 14,
+    isOpenManual: true,
+  },
+  {
+    name: 'Mega Store Qarshi',
+    description: 'Shahardagi eng katta tanlov.',
+    address: 'Qarshi, Nasaf koʼchasi 102',
+    km: { north: 1.2, east: 1.35 },
+    ownerIdx: 2,
+    maxKm: 5,
+    freeKm: 3,
+    pricingType: 'flat',
+    pricePerStep: 7000,
+    minOrderPrice: 30000,
+    bg: '6A1B9A',
+    productCount: 24,
+    isOpenManual: true,
+  },
+  {
+    name: 'Tong Market',
+    description: 'Ertalabdan kechgacha ochiq.',
+    address: 'Qarshi, Bunyodkor koʼchasi 5',
+    km: { north: 0.2, east: -1.55 },
+    ownerIdx: 3,
+    maxKm: 3,
+    freeKm: 2,
+    pricingType: 'per_km',
+    pricePerStep: 3000,
+    minOrderPrice: 18000,
+    bg: '00838F',
+    productCount: 15,
+    isOpenManual: false,
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -461,7 +848,9 @@ async function seed() {
     }
     globalProductMap.set(tpl.family, familyGps);
   }
-  console.log(`📋 Global products: ${[...globalProductMap.values()].flat().length}`);
+  console.log(
+    `📋 Global products: ${[...globalProductMap.values()].flat().length}`,
+  );
 
   // 4. Users ------------------------------------------------------------------
   const admin = await userRepo.save(
@@ -518,7 +907,9 @@ async function seed() {
       ),
     );
   }
-  console.log(`👤 Users: ${1 + owners.length + staffUsers.length + customers.length}`);
+  console.log(
+    `👤 Users: ${1 + owners.length + staffUsers.length + customers.length}`,
+  );
 
   // 5. Addresses (customers near CENTER so deliveries are in-zone) -------------
   const addrByUser = new Map<string, UserAddress>();
@@ -526,7 +917,10 @@ async function seed() {
   const allRegularUsers = [...customers, ...owners, ...staffUsers];
   for (let i = 0; i < allRegularUsers.length; i++) {
     const u = allRegularUsers[i];
-    const loc = offset({ north: (rnd() - 0.5) * 1.2, east: (rnd() - 0.5) * 1.2 });
+    const loc = offset({
+      north: (rnd() - 0.5) * 1.2,
+      east: (rnd() - 0.5) * 1.2,
+    });
     const addr = await addrRepo.save(
       addrRepo.create({
         userId: u.id,
@@ -632,11 +1026,12 @@ async function seed() {
       const gps = globalProductMap.get(tpl.family) ?? [];
 
       // Per-shop price jitter (±10%)
-      const jitter = 0.92 + (rnd() * 0.16);
+      const jitter = 0.92 + rnd() * 0.16;
       for (const gp of gps) {
         // Find template variant matching this GlobalProduct's name
         const nameUz = typeof gp.name === 'object' ? gp.name?.uz : gp.name;
-        const vtpl = tpl.variants.find((v) => v.label === nameUz) ?? tpl.variants[0];
+        const vtpl =
+          tpl.variants.find((v) => v.label === nameUz) ?? tpl.variants[0];
         const price = Math.round((vtpl.price * jitter) / 500) * 500;
         const discount = vtpl.discount
           ? Math.round((vtpl.discount * jitter) / 500) * 500
@@ -656,7 +1051,10 @@ async function seed() {
           }),
         );
         shopVariants.push(variant);
-        variantNameMap.set(variant.id, typeof gp.name === 'object' ? gp.name?.uz || '' : gp.name);
+        variantNameMap.set(
+          variant.id,
+          typeof gp.name === 'object' ? gp.name?.uz || '' : gp.name,
+        );
         variantCount++;
 
         // FIFO stock batch
@@ -739,7 +1137,12 @@ async function seed() {
         );
       }
 
-      const distanceKm = haversineKm(shop.latitude, shop.longitude, addr.latitude, addr.longitude);
+      const distanceKm = haversineKm(
+        shop.latitude,
+        shop.longitude,
+        addr.latitude,
+        addr.longitude,
+      );
       const deliveryFee = calcDeliveryFee({
         distanceKm,
         freeKm: shop.deliveryZone.freeKm,
@@ -747,7 +1150,8 @@ async function seed() {
         pricePerStep: shop.deliveryZone.pricePerStep,
       });
       const createdAt = new Date(Date.now() - randInt(1, 20) * 86_400_000);
-      const ts = (mins: number) => new Date(createdAt.getTime() + mins * 60_000).toISOString();
+      const ts = (mins: number) =>
+        new Date(createdAt.getTime() + mins * 60_000).toISOString();
 
       const order = await orderRepo.save(
         orderRepo.create({
@@ -775,9 +1179,21 @@ async function seed() {
           timeline: [
             { status: OrderStatus.New, at: ts(0) },
             { status: OrderStatus.Accepted, at: ts(3), byUserId: shop.ownerId },
-            { status: OrderStatus.Preparing, at: ts(8), byUserId: shop.ownerId },
-            { status: OrderStatus.Delivering, at: ts(20), byUserId: shop.ownerId },
-            { status: OrderStatus.Delivered, at: ts(45), byUserId: shop.ownerId },
+            {
+              status: OrderStatus.Preparing,
+              at: ts(8),
+              byUserId: shop.ownerId,
+            },
+            {
+              status: OrderStatus.Delivering,
+              at: ts(20),
+              byUserId: shop.ownerId,
+            },
+            {
+              status: OrderStatus.Delivered,
+              at: ts(45),
+              byUserId: shop.ownerId,
+            },
           ],
           createdAt,
         }),
@@ -829,9 +1245,15 @@ async function seed() {
   // Summary -------------------------------------------------------------------
   console.log('\n✅ Seed complete. Test logins (phone + dev OTP):');
   console.log(`   Admin:    ${ADMIN.phone}`);
-  OWNERS.forEach((o, i) => console.log(`   Owner ${i + 1}:  ${o.phone}  (${o.name})`));
-  CUSTOMERS.forEach((c, i) => console.log(`   Customer: ${c.phone}  (${c.name})`));
-  console.log(`\n   Shops are within ~2km of ${CENTER.lat}, ${CENTER.lng} (Qarshi).`);
+  OWNERS.forEach((o, i) =>
+    console.log(`   Owner ${i + 1}:  ${o.phone}  (${o.name})`),
+  );
+  CUSTOMERS.forEach((c, i) =>
+    console.log(`   Customer: ${c.phone}  (${c.name})`),
+  );
+  console.log(
+    `\n   Shops are within ~2km of ${CENTER.lat}, ${CENTER.lng} (Qarshi).`,
+  );
 
   await AppDataSource.destroy();
 }

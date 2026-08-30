@@ -17,7 +17,11 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { JwtPayload } from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '../auth/role.enum';
-import { BroadcastDto, TemplateDto, UpdateTemplateDto } from './dto/notification.dto';
+import {
+  BroadcastDto,
+  TemplateDto,
+  UpdateTemplateDto,
+} from './dto/notification.dto';
 import { NotificationsService } from './notifications.service';
 
 @ApiBearerAuth()
@@ -47,7 +51,10 @@ export class NotificationsController {
 
   @Patch(':id/read')
   @HttpCode(HttpStatus.NO_CONTENT)
-  markRead(@CurrentUser() user: JwtPayload, @Param('id', ParseUUIDPipe) id: string) {
+  markRead(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
     return this.notifications.markRead(user.sub, id);
   }
 
@@ -81,7 +88,10 @@ export class AdminNotificationsController {
   }
 
   @Patch('templates/:id')
-  updateTemplate(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateTemplateDto) {
+  updateTemplate(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateTemplateDto,
+  ) {
     return this.notifications.updateTemplate(id, dto);
   }
 

@@ -95,7 +95,9 @@ export class UsersService {
     // recompute it from firstName/lastName instead of also threading the
     // split fields through every one of them.
     if (dto.firstName !== undefined || dto.lastName !== undefined) {
-      user.name = [user.firstName, user.lastName].filter(Boolean).join(' ').trim() || null;
+      user.name =
+        [user.firstName, user.lastName].filter(Boolean).join(' ').trim() ||
+        null;
     } else if (dto.name !== undefined) {
       user.name = dto.name;
     }
@@ -104,7 +106,10 @@ export class UsersService {
 
   // Addresses
   listAddresses(userId: string): Promise<UserAddress[]> {
-    return this.addresses.find({ where: { userId }, order: { isDefault: 'DESC', createdAt: 'ASC' } });
+    return this.addresses.find({
+      where: { userId },
+      order: { isDefault: 'DESC', createdAt: 'ASC' },
+    });
   }
 
   async createAddress(
@@ -128,7 +133,11 @@ export class UsersService {
       await this.addresses.update({ userId }, { isDefault: false });
     }
     const existing = await this.addresses.count({ where: { userId } });
-    const pinEvidence = buildEvidence(dto.evidence, { deviceId: deviceId ?? null, actorUserId: userId, actorRole: 'customer' });
+    const pinEvidence = buildEvidence(dto.evidence, {
+      deviceId: deviceId ?? null,
+      actorUserId: userId,
+      actorRole: 'customer',
+    });
     const address = this.addresses.create({
       userId,
       label: dto.label,
@@ -172,7 +181,9 @@ export class UsersService {
     }>,
     deviceId?: string | null,
   ): Promise<UserAddress> {
-    const address = await this.addresses.findOne({ where: { id: addressId, userId } });
+    const address = await this.addresses.findOne({
+      where: { id: addressId, userId },
+    });
     if (!address) throw new NotFoundException('Manzil topilmadi');
     if (dto.isDefault) {
       await this.addresses.update({ userId }, { isDefault: false });
@@ -184,7 +195,11 @@ export class UsersService {
     Object.assign(address, rest);
     let pinEvidence = address.pinEvidence;
     if (coordsChanged) {
-      pinEvidence = buildEvidence(evidenceDto, { deviceId: deviceId ?? null, actorUserId: userId, actorRole: 'customer' });
+      pinEvidence = buildEvidence(evidenceDto, {
+        deviceId: deviceId ?? null,
+        actorUserId: userId,
+        actorRole: 'customer',
+      });
       address.pinEvidence = pinEvidence;
       address.pinSetCount += 1;
     }
@@ -209,7 +224,12 @@ export class UsersService {
 
   // ---- Admin ---------------------------------------------------------------
 
-  private adminUsersFilterQuery(opts: { search?: string; sellerOnly?: boolean; customerOnly?: boolean; adminOnly?: boolean }) {
+  private adminUsersFilterQuery(opts: {
+    search?: string;
+    sellerOnly?: boolean;
+    customerOnly?: boolean;
+    adminOnly?: boolean;
+  }) {
     const qb = this.users
       .createQueryBuilder('u')
       .select([
@@ -226,12 +246,20 @@ export class UsersService {
     const s = opts.search?.trim();
     if (s) qb.where('(u.phone ILIKE :q OR u.name ILIKE :q)', { q: `%${s}%` });
     if (opts.sellerOnly) qb.andWhere('u.isSellerApproved = true');
-    if (opts.customerOnly) qb.andWhere('u.isSellerApproved = false AND u.isAdmin = false');
+    if (opts.customerOnly)
+      qb.andWhere('u.isSellerApproved = false AND u.isAdmin = false');
     if (opts.adminOnly) qb.andWhere('u.isAdmin = true');
     return qb;
   }
 
-  async adminListUsers(opts: { search?: string; limit?: number; offset?: number; sellerOnly?: boolean; customerOnly?: boolean; adminOnly?: boolean }) {
+  async adminListUsers(opts: {
+    search?: string;
+    limit?: number;
+    offset?: number;
+    sellerOnly?: boolean;
+    customerOnly?: boolean;
+    adminOnly?: boolean;
+  }) {
     const qb = this.adminUsersFilterQuery(opts)
       .take(Math.min(opts.limit ?? 50, 100))
       .skip(Math.max(opts.offset ?? 0, 0));
@@ -241,8 +269,15 @@ export class UsersService {
 
   private static readonly EXPORT_ROW_CAP = 5000;
 
-  async adminExportUsers(opts: { search?: string; sellerOnly?: boolean; customerOnly?: boolean; adminOnly?: boolean }): Promise<Buffer> {
-    const rows = await this.adminUsersFilterQuery(opts).take(UsersService.EXPORT_ROW_CAP).getMany();
+  async adminExportUsers(opts: {
+    search?: string;
+    sellerOnly?: boolean;
+    customerOnly?: boolean;
+    adminOnly?: boolean;
+  }): Promise<Buffer> {
+    const rows = await this.adminUsersFilterQuery(opts)
+      .take(UsersService.EXPORT_ROW_CAP)
+      .getMany();
     return buildXlsxBuffer(
       'Foydalanuvchilar',
       [
@@ -322,7 +357,9 @@ export class UsersService {
 
   /* ─── Favorites ─── */
 
-  async getFavorites(userId: string): Promise<{ shopIds: string[]; productIds: string[] }> {
+  async getFavorites(
+    userId: string,
+  ): Promise<{ shopIds: string[]; productIds: string[] }> {
     const user = await this.users.findOne({ where: { id: userId } });
     return {
       shopIds: user?.favoriteShopIds ?? [],
@@ -330,7 +367,11 @@ export class UsersService {
     };
   }
 
-  async toggleFavoriteShop(userId: string, shopId: string, add: boolean): Promise<{ shopIds: string[] }> {
+  async toggleFavoriteShop(
+    userId: string,
+    shopId: string,
+    add: boolean,
+  ): Promise<{ shopIds: string[] }> {
     const user = await this.users.findOne({ where: { id: userId } });
     if (!user) throw new NotFoundException();
     const ids = new Set(user.favoriteShopIds ?? []);
@@ -340,7 +381,11 @@ export class UsersService {
     return { shopIds: user.favoriteShopIds };
   }
 
-  async toggleFavoriteProduct(userId: string, productId: string, add: boolean): Promise<{ productIds: string[] }> {
+  async toggleFavoriteProduct(
+    userId: string,
+    productId: string,
+    add: boolean,
+  ): Promise<{ productIds: string[] }> {
     const user = await this.users.findOne({ where: { id: userId } });
     if (!user) throw new NotFoundException();
     const ids = new Set(user.favoriteProductIds ?? []);

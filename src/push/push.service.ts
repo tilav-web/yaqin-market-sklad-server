@@ -44,7 +44,11 @@ export class PushService {
    * device; passing a userId for an existing token LINKS that device to the
    * user — this is how a token registered before login gets attached on login.
    */
-  async registerToken(userId: string | null, token: string, platform = 'android'): Promise<void> {
+  async registerToken(
+    userId: string | null,
+    token: string,
+    platform = 'android',
+  ): Promise<void> {
     const existing = await this.tokens.findOne({ where: { token } });
     if (existing) {
       // Never downgrade a linked token back to anonymous.
@@ -86,7 +90,10 @@ export class PushService {
     try {
       await this.saveInbox(userIds, payload);
       const rows = await this.tokens.find({ where: { userId: In(userIds) } });
-      await this.pushToTokens(rows.map((r) => r.token), payload);
+      await this.pushToTokens(
+        rows.map((r) => r.token),
+        payload,
+      );
     } catch (err) {
       // Callers fire this and forget (order/chat/alert flows) — never let a
       // DB hiccup here become an unhandled rejection that kills the process.
@@ -100,11 +107,17 @@ export class PushService {
     const rawKind = payload.data?.kind;
     const kind = typeof rawKind === 'string' ? rawKind : 'general';
     const data = payload.imageUrl
-      ? { ...payload.data ?? {}, imageUrl: payload.imageUrl }
-      : payload.data ?? {};
+      ? { ...(payload.data ?? {}), imageUrl: payload.imageUrl }
+      : (payload.data ?? {});
     await this.notifications.save(
       userIds.map((userId) =>
-        this.notifications.create({ userId, title: payload.title, body: payload.body, data, kind }),
+        this.notifications.create({
+          userId,
+          title: payload.title,
+          body: payload.body,
+          data,
+          kind,
+        }),
       ),
     );
   }
@@ -158,8 +171,15 @@ export class PushService {
    * ask Expo whether delivery actually succeeded — most `DeviceNotRegistered`
    * failures only surface at that point, not in this immediate response.
    */
-  private async handleTickets(chunkTokens: string[], body: unknown): Promise<void> {
-    const tickets = (body as { data?: { status?: string; id?: string; details?: { error?: string } }[] } | null)?.data;
+  private async handleTickets(
+    chunkTokens: string[],
+    body: unknown,
+  ): Promise<void> {
+    const tickets = (
+      body as {
+        data?: { status?: string; id?: string; details?: { error?: string } }[];
+      } | null
+    )?.data;
     if (!Array.isArray(tickets)) return;
 
     const dead: string[] = [];
@@ -168,11 +188,13 @@ export class PushService {
       const token = chunkTokens[idx];
       if (!token) return;
       if (t?.details?.error === 'DeviceNotRegistered') dead.push(token);
-      else if (t?.status === 'ok' && t.id) pending.push(JSON.stringify({ id: t.id, token }));
+      else if (t?.status === 'ok' && t.id)
+        pending.push(JSON.stringify({ id: t.id, token }));
     });
 
     if (dead.length > 0) await this.tokens.delete({ token: In(dead) });
-    if (pending.length > 0) await this.redis.client.rpush(PENDING_RECEIPTS_KEY, ...pending);
+    if (pending.length > 0)
+      await this.redis.client.rpush(PENDING_RECEIPTS_KEY, ...pending);
   }
 
   /**
@@ -197,11 +219,16 @@ export class PushService {
           body: JSON.stringify({ ids: [...idToToken.keys()] }),
         });
         if (!res.ok) {
-          this.logger.warn(`Expo receipts HTTP ${res.status}: ${await res.text()}`);
+          this.logger.warn(
+            `Expo receipts HTTP ${res.status}: ${await res.text()}`,
+          );
           continue;
         }
         const json = (await res.json()) as {
-          data?: Record<string, { status?: string; details?: { error?: string } }>;
+          data?: Record<
+            string,
+            { status?: string; details?: { error?: string } }
+          >;
         };
         const dead = Object.entries(json.data ?? {})
           .filter(([, r]) => r?.details?.error === 'DeviceNotRegistered')
@@ -212,15 +239,23 @@ export class PushService {
           prunedTotal += dead.length;
         }
       } catch (err) {
-        this.logger.warn(`Expo receipts check failed: ${(err as Error).message}`);
+        this.logger.warn(
+          `Expo receipts check failed: ${(err as Error).message}`,
+        );
       }
     }
-    if (prunedTotal > 0) this.logger.log(`Pruned ${prunedTotal} dead push token(s) via receipts`);
-    if (batch === 50) this.logger.warn('Receipt queue backlog exceeds one pass (5000) — will continue next run');
+    if (prunedTotal > 0)
+      this.logger.log(`Pruned ${prunedTotal} dead push token(s) via receipts`);
+    if (batch === 50)
+      this.logger.warn(
+        'Receipt queue backlog exceeds one pass (5000) — will continue next run',
+      );
   }
 
   /** Atomically pop up to `count` pending `{id, token}` entries queued by {@link handleTickets}. */
-  private async drainPendingReceipts(count: number): Promise<{ id: string; token: string }[]> {
+  private async drainPendingReceipts(
+    count: number,
+  ): Promise<{ id: string; token: string }[]> {
     const results = await this.redis.client
       .multi()
       .lrange(PENDING_RECEIPTS_KEY, 0, count - 1)

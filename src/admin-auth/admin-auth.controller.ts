@@ -45,7 +45,7 @@ export class AdminAuthController {
   @Get('me')
   @UseGuards(AdminJwtGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Tizimga kirgan xodim profil ma\'lumotlarini olish' })
+  @ApiOperation({ summary: "Tizimga kirgan xodim profil ma'lumotlarini olish" })
   getProfile(@CurrentAdmin() admin: AdminUser) {
     const { passwordHash: _, ...safeAdmin } = admin;
     return safeAdmin;
@@ -54,7 +54,9 @@ export class AdminAuthController {
   @Public()
   @Post('forgot-password/request')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Parolni unutganda telefon raqamga SMS OTP so\'rash' })
+  @ApiOperation({
+    summary: "Parolni unutganda telefon raqamga SMS OTP so'rash",
+  })
   requestPasswordResetOtp(@Body() dto: AdminForgotPasswordRequestDto) {
     return this.authService.requestPasswordResetOtp(dto);
   }
@@ -71,7 +73,7 @@ export class AdminAuthController {
   @UseGuards(AdminJwtGuard)
   @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Xodim o\'z parolini o\'zgartirishi' })
+  @ApiOperation({ summary: "Xodim o'z parolini o'zgartirishi" })
   changePassword(
     @CurrentAdmin('id') adminId: string,
     @Body() dto: AdminChangePasswordDto,

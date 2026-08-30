@@ -20,7 +20,9 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     });
   }
 
-  async validate(payload: JwtPayload & { tokenType?: string }): Promise<JwtPayload | null> {
+  async validate(
+    payload: JwtPayload & { tokenType?: string },
+  ): Promise<JwtPayload | null> {
     // If the token is an admin token, skip user lookup to allow admin-jwt strategy to handle it
     if (payload.tokenType === 'admin_access') {
       return null;
@@ -32,6 +34,10 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     }
     // Use the CURRENT roles from the DB (not the token) so a revoked admin /
     // staff loses access immediately rather than until the token expires.
-    return { sub: user.id, phone: user.phone, roles: (user.roles ?? []) as JwtPayload['roles'] };
+    return {
+      sub: user.id,
+      phone: user.phone,
+      roles: (user.roles ?? []) as JwtPayload['roles'],
+    };
   }
 }

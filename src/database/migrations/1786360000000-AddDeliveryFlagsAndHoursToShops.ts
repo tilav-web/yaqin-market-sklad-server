@@ -19,9 +19,17 @@ export class AddDeliveryFlagsAndHoursToShops1786360000000 implements MigrationIn
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`ALTER TABLE "shops" DROP COLUMN IF EXISTS "phone";`);
-    await queryRunner.query(`ALTER TABLE "shops" DROP COLUMN IF EXISTS "deliveryHours";`);
-    await queryRunner.query(`ALTER TABLE "shops" DROP COLUMN IF EXISTS "isPickupEnabled";`);
-    await queryRunner.query(`ALTER TABLE "shops" DROP COLUMN IF EXISTS "isDeliveryEnabled";`);
+    await queryRunner.query(
+      `ALTER TABLE "shops" DROP COLUMN IF EXISTS "phone";`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "shops" DROP COLUMN IF EXISTS "deliveryHours";`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "shops" DROP COLUMN IF EXISTS "isPickupEnabled";`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "shops" DROP COLUMN IF EXISTS "isDeliveryEnabled";`,
+    );
   }
 }

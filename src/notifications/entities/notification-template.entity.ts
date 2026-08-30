@@ -17,10 +17,16 @@ export class NotificationTemplate {
   @Column({ type: 'varchar', length: 128 })
   name!: string;
 
-  @Column({ type: 'jsonb', default: () => "'{\"uz\":\"\",\"kr\":\"\",\"ru\":\"\"}'::jsonb" })
+  @Column({
+    type: 'jsonb',
+    default: () => '\'{"uz":"","kr":"","ru":""}\'::jsonb',
+  })
   title!: LocalizedText;
 
-  @Column({ type: 'jsonb', default: () => "'{\"uz\":\"\",\"kr\":\"\",\"ru\":\"\"}'::jsonb" })
+  @Column({
+    type: 'jsonb',
+    default: () => '\'{"uz":"","kr":"","ru":""}\'::jsonb',
+  })
   body!: LocalizedText;
 
   @Column({ type: 'text', nullable: true })

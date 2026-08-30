@@ -52,7 +52,10 @@ export class CategoriesController {
   @Roles(Role.Admin)
   @ApiBearerAuth()
   @Patch(':id')
-  update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateCategoryDto) {
+  update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateCategoryDto,
+  ) {
     return this.categories.update(id, dto);
   }
 

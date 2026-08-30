@@ -38,7 +38,10 @@ interface TasnifRawItem {
 @Injectable()
 export class TasnifService {
   private readonly logger = new Logger(TasnifService.name);
-  private readonly cache = new Map<string, { at: number; entries: TasnifEntry[] }>();
+  private readonly cache = new Map<
+    string,
+    { at: number; entries: TasnifEntry[] }
+  >();
 
   async search(text: string, size = 10): Promise<TasnifEntry[]> {
     const key = `${text.trim().toLowerCase()}:${size}`;
@@ -50,7 +53,9 @@ export class TasnifService {
     try {
       const res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
       if (!res.ok) throw new Error(`tasnif HTTP ${res.status}`);
-      const body = (await res.json()) as { data?: { content?: TasnifRawItem[] } };
+      const body = (await res.json()) as {
+        data?: { content?: TasnifRawItem[] };
+      };
       entries = (body.data?.content ?? []).map((x) => ({
         mxikCode: x.mxikCode,
         name: x.mxikName ?? x.subPositionName ?? '',
@@ -61,7 +66,9 @@ export class TasnifService {
         unitCode: x.unitCode ?? null,
       }));
     } catch (err) {
-      this.logger.warn(`tasnif search "${text}" xato: ${(err as Error).message}`);
+      this.logger.warn(
+        `tasnif search "${text}" xato: ${(err as Error).message}`,
+      );
       throw new NotFoundException(
         "tasnif.soliq.uz javob bermadi — birozdan so'ng qayta urinib ko'ring",
       );
@@ -74,15 +81,22 @@ export class TasnifService {
    * Mahsulot uchun MXIK takliflari: avval barcode bo'yicha (aniq moslik),
    * topilmasa nomi bo'yicha qidiradi.
    */
-  async suggestForProduct(opts: { barcode: string | null; name: string }): Promise<{
+  async suggestForProduct(opts: {
+    barcode: string | null;
+    name: string;
+  }): Promise<{
     matchedBy: 'barcode' | 'name';
     entries: TasnifEntry[];
   }> {
     if (opts.barcode) {
-      const byBarcode = await this.search(opts.barcode, 5).catch(() => [] as TasnifEntry[]);
+      const byBarcode = await this.search(opts.barcode, 5).catch(
+        () => [] as TasnifEntry[],
+      );
       // Barcode bo'yicha faqat haqiqiy moslikni qabul qilamiz — tasnif topilmasa
       // ommabop tovarlar ro'yxatini qaytaradi, u taklif emas.
-      const exact = byBarcode.filter((e) => e.internationalCode === opts.barcode);
+      const exact = byBarcode.filter(
+        (e) => e.internationalCode === opts.barcode,
+      );
       if (exact.length) return { matchedBy: 'barcode', entries: exact };
     }
     const byName = await this.search(opts.name, 8);

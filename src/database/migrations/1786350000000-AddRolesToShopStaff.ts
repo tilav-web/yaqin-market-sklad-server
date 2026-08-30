@@ -26,7 +26,11 @@ export class AddRolesToShopStaff1786350000000 implements MigrationInterface {
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`ALTER TABLE "shop_staff" DROP COLUMN IF EXISTS "roles";`);
-    await queryRunner.query(`ALTER TABLE "staff_invitations" DROP COLUMN IF EXISTS "roles";`);
+    await queryRunner.query(
+      `ALTER TABLE "shop_staff" DROP COLUMN IF EXISTS "roles";`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "staff_invitations" DROP COLUMN IF EXISTS "roles";`,
+    );
   }
 }

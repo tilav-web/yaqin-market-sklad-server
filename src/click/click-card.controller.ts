@@ -46,13 +46,19 @@ export class ClickCardController {
   }
 
   @Patch(':id/default')
-  setDefault(@CurrentUser() user: JwtPayload, @Param('id', ParseUUIDPipe) id: string) {
+  setDefault(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
     return this.cards.setDefaultCard(user.sub, id);
   }
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  remove(@CurrentUser() user: JwtPayload, @Param('id', ParseUUIDPipe) id: string) {
+  remove(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
     return this.cards.deleteCard(user.sub, id);
   }
 }

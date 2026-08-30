@@ -6,12 +6,23 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Not, Repository } from 'typeorm';
 
-import { Order, PaymentMethod, PaymentStatus, isTerminalOrderStatus } from '../orders/entities/order.entity';
+import {
+  Order,
+  PaymentMethod,
+  PaymentStatus,
+  isTerminalOrderStatus,
+} from '../orders/entities/order.entity';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { AddCardDto } from './dto/add-card.dto';
 import { VerifyCardDto } from './dto/verify-card.dto';
-import { ClickDeclinedException, ClickMerchantService } from './click-merchant.service';
-import { ClickPaymentTransaction, ClickTxStatus } from './click-payment-transaction.entity';
+import {
+  ClickDeclinedException,
+  ClickMerchantService,
+} from './click-merchant.service';
+import {
+  ClickPaymentTransaction,
+  ClickTxStatus,
+} from './click-payment-transaction.entity';
 import { SavedCard, SavedCardStatus } from './saved-card.entity';
 
 /** A user can't hoard unlimited card tokens — this is a cheap abuse guard, not a product limit. */
@@ -48,13 +59,23 @@ export class ClickCardService {
   }
 
   /** Step 1: sends card_number+expire_date to Click, which SMSes a code to the card's phone. */
-  async addCard(userId: string, dto: AddCardDto): Promise<{ cardId: string; phoneNumber: string | null }> {
-    const activeCount = await this.cardRepo.count({ where: { userId, status: SavedCardStatus.Active } });
+  async addCard(
+    userId: string,
+    dto: AddCardDto,
+  ): Promise<{ cardId: string; phoneNumber: string | null }> {
+    const activeCount = await this.cardRepo.count({
+      where: { userId, status: SavedCardStatus.Active },
+    });
     if (activeCount >= MAX_CARDS_PER_USER) {
-      throw new BadRequestException(`Bir foydalanuvchi uchun eng ko'pi bilan ${MAX_CARDS_PER_USER} ta karta saqlanishi mumkin`);
+      throw new BadRequestException(
+        `Bir foydalanuvchi uchun eng ko'pi bilan ${MAX_CARDS_PER_USER} ta karta saqlanishi mumkin`,
+      );
     }
 
-    const { cardToken, phoneNumber } = await this.merchant.requestToken(dto.card_number, dto.expire_date);
+    const { cardToken, phoneNumber } = await this.merchant.requestToken(
+      dto.card_number,
+      dto.expire_date,
+    );
 
     const card = await this.cardRepo.save(
       this.cardRepo.create({
@@ -69,13 +90,21 @@ export class ClickCardService {
   }
 
   /** Step 2: confirms the SMS code, activating the card for payments. */
-  async verifyCard(userId: string, cardId: string, dto: VerifyCardDto): Promise<PublicSavedCard> {
+  async verifyCard(
+    userId: string,
+    cardId: string,
+    dto: VerifyCardDto,
+  ): Promise<PublicSavedCard> {
     const card = await this.cardRepo.findOne({
       where: { id: cardId, userId, status: SavedCardStatus.PendingVerify },
     });
-    if (!card) throw new NotFoundException("Tasdiqlanishi kutilayotgan karta topilmadi");
+    if (!card)
+      throw new NotFoundException('Tasdiqlanishi kutilayotgan karta topilmadi');
 
-    const { cardNumberMasked } = await this.merchant.verifyToken(card.cardToken, dto.sms_code);
+    const { cardNumberMasked } = await this.merchant.verifyToken(
+      card.cardToken,
+      dto.sms_code,
+    );
 
     // Same physical card already saved — Click doesn't dedupe card_token
     // requests for us, so without this a user could burn multiple of their
@@ -94,7 +123,9 @@ export class ClickCardService {
     card.status = SavedCardStatus.Active;
     card.cardNumberMasked = cardNumberMasked;
     // First verified card becomes the default automatically.
-    const hasOtherActive = await this.cardRepo.count({ where: { userId, status: SavedCardStatus.Active } });
+    const hasOtherActive = await this.cardRepo.count({
+      where: { userId, status: SavedCardStatus.Active },
+    });
     if (hasOtherActive === 0) card.isDefault = true;
 
     const saved = await this.cardRepo.save(card);
@@ -102,7 +133,10 @@ export class ClickCardService {
   }
 
   /** Switches which saved card pre-fills as the checkout default. */
-  async setDefaultCard(userId: string, cardId: string): Promise<PublicSavedCard> {
+  async setDefaultCard(
+    userId: string,
+    cardId: string,
+  ): Promise<PublicSavedCard> {
     const card = await this.cardRepo.findOne({
       where: { id: cardId, userId, status: SavedCardStatus.Active },
     });
@@ -122,20 +156,32 @@ export class ClickCardService {
   }
 
   /** Charges a saved card directly — no my.click.uz redirect. */
-  async payOrderWithCard(userId: string, orderId: string, cardId: string): Promise<{ orderId: string; paymentId: string }> {
-    const order = await this.orderRepo.findOne({ where: { id: orderId, userId } });
+  async payOrderWithCard(
+    userId: string,
+    orderId: string,
+    cardId: string,
+  ): Promise<{ orderId: string; paymentId: string }> {
+    const order = await this.orderRepo.findOne({
+      where: { id: orderId, userId },
+    });
     if (!order) throw new NotFoundException('Buyurtma topilmadi');
     if (order.paymentMethod !== PaymentMethod.ClickOnline) {
-      throw new BadRequestException("Bu buyurtma uchun online to'lov yoqilmagan");
+      throw new BadRequestException(
+        "Bu buyurtma uchun online to'lov yoqilmagan",
+      );
     }
     if (order.paymentStatus === PaymentStatus.Paid) {
       throw new BadRequestException("Buyurtma allaqachon to'langan");
     }
     if (isTerminalOrderStatus(order.status)) {
-      throw new BadRequestException("Bekor qilingan buyurtma uchun to'lov qilib bo'lmaydi");
+      throw new BadRequestException(
+        "Bekor qilingan buyurtma uchun to'lov qilib bo'lmaydi",
+      );
     }
 
-    const card = await this.cardRepo.findOne({ where: { id: cardId, userId, status: SavedCardStatus.Active } });
+    const card = await this.cardRepo.findOne({
+      where: { id: cardId, userId, status: SavedCardStatus.Active },
+    });
     if (!card) throw new NotFoundException('Karta topilmadi');
 
     // Reserve the transaction row before calling out to Click, mirroring
@@ -177,15 +223,24 @@ export class ClickCardService {
       }
     });
 
-    if (!reserved) throw new BadRequestException("Buyurtma allaqachon to'langan");
+    if (!reserved)
+      throw new BadRequestException("Buyurtma allaqachon to'langan");
 
     let paymentId: string;
     try {
-      const result = await this.merchant.payWithToken(card.cardToken, order.total, order.id);
+      const result = await this.merchant.payWithToken(
+        card.cardToken,
+        order.total,
+        order.id,
+      );
       paymentId = result.paymentId;
     } catch (err) {
-      const errorCode = err instanceof ClickDeclinedException ? err.errorCode : null;
-      const errorNote = err instanceof ClickDeclinedException ? err.errorNote : (err as Error)?.message ?? null;
+      const errorCode =
+        err instanceof ClickDeclinedException ? err.errorCode : null;
+      const errorNote =
+        err instanceof ClickDeclinedException
+          ? err.errorNote
+          : ((err as Error)?.message ?? null);
       // The prepare/complete webhooks for this very charge arrive BEFORE the
       // card_token/payment HTTP call returns — so this call can fail (e.g. a
       // timeout) for a payment Click actually completed. Never let the local
@@ -202,10 +257,18 @@ export class ClickCardService {
       throw err;
     }
 
-    await this.txRepo.update({ orderId: order.id }, { status: ClickTxStatus.Success, clickPaymentId: paymentId });
-    await this.orderRepo.update(order.id, { paymentStatus: PaymentStatus.Paid });
+    await this.txRepo.update(
+      { orderId: order.id },
+      { status: ClickTxStatus.Success, clickPaymentId: paymentId },
+    );
+    await this.orderRepo.update(order.id, {
+      paymentStatus: PaymentStatus.Paid,
+    });
 
-    if (order.userId) this.realtime.emitToUser(order.userId, 'order:payment_confirmed', { orderId: order.id });
+    if (order.userId)
+      this.realtime.emitToUser(order.userId, 'order:payment_confirmed', {
+        orderId: order.id,
+      });
 
     return { orderId: order.id, paymentId };
   }

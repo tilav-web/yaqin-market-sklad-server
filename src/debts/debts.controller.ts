@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -13,12 +21,18 @@ export class DebtsController {
   constructor(private readonly debts: DebtsService) {}
 
   @Get()
-  listAccounts(@CurrentUser() user: JwtPayload, @Param('shopId', ParseUUIDPipe) shopId: string) {
+  listAccounts(
+    @CurrentUser() user: JwtPayload,
+    @Param('shopId', ParseUUIDPipe) shopId: string,
+  ) {
     return this.debts.listAccounts(user.sub, shopId);
   }
 
   @Get('summary')
-  summary(@CurrentUser() user: JwtPayload, @Param('shopId', ParseUUIDPipe) shopId: string) {
+  summary(
+    @CurrentUser() user: JwtPayload,
+    @Param('shopId', ParseUUIDPipe) shopId: string,
+  ) {
     return this.debts.summary(user.sub, shopId);
   }
 

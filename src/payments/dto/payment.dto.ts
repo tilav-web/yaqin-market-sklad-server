@@ -17,14 +17,19 @@ import {
 import { WithdrawalStatus } from '../entities/withdrawal-request.entity';
 
 export class RequestWithdrawalDto {
-  @ApiProperty({ example: 500000, description: 'Yechib olinadigan miqdor (so\'m)' })
+  @ApiProperty({
+    example: 500000,
+    description: "Yechib olinadigan miqdor (so'm)",
+  })
   @IsNumber({ maxDecimalPlaces: 2 })
   @IsPositive()
   amount!: number;
 
   @ApiProperty({ example: '8600123456781234' })
   @IsString()
-  @Matches(/^\d{12,19}$/, { message: 'Karta raqami 12-19 ta raqamdan iborat bo\'lishi kerak' })
+  @Matches(/^\d{12,19}$/, {
+    message: "Karta raqami 12-19 ta raqamdan iborat bo'lishi kerak",
+  })
   bankCardNumber!: string;
 
   @ApiProperty({ example: 'MUHAMMAD MUHAMMADOV' })
@@ -46,7 +51,10 @@ export class ProcessWithdrawalDto {
 }
 
 export class AdjustBalanceDto {
-  @ApiProperty({ example: -20000, description: 'Musbat — qo\'shish, manfiy — ayirish' })
+  @ApiProperty({
+    example: -20000,
+    description: "Musbat — qo'shish, manfiy — ayirish",
+  })
   @IsNumber({ maxDecimalPlaces: 2 })
   amount!: number;
 

@@ -37,7 +37,10 @@ export function isTerminalOrderStatus(status: OrderStatus): boolean {
   );
 }
 
-export type OrderEvidenceKey = 'orderEvidence' | 'dispatchedEvidence' | 'deliveredEvidence';
+export type OrderEvidenceKey =
+  | 'orderEvidence'
+  | 'dispatchedEvidence'
+  | 'deliveredEvidence';
 
 /**
  * Strip the anti-fraud location-evidence columns before an order reaches a
@@ -48,7 +51,12 @@ export type OrderEvidenceKey = 'orderEvidence' | 'dispatchedEvidence' | 'deliver
 export function omitOrderEvidence<T extends Record<OrderEvidenceKey, unknown>>(
   order: T,
 ): Omit<T, OrderEvidenceKey> {
-  const { orderEvidence: _oe, dispatchedEvidence: _de, deliveredEvidence: _dve, ...rest } = order;
+  const {
+    orderEvidence: _oe,
+    dispatchedEvidence: _de,
+    deliveredEvidence: _dve,
+    ...rest
+  } = order;
   return rest;
 }
 
@@ -175,7 +183,11 @@ export class Order {
   @Column({ type: 'enum', enum: PaymentMethod, default: PaymentMethod.Cash })
   paymentMethod!: PaymentMethod;
 
-  @Column({ type: 'enum', enum: PaymentStatus, default: PaymentStatus.NotRequired })
+  @Column({
+    type: 'enum',
+    enum: PaymentStatus,
+    default: PaymentStatus.NotRequired,
+  })
   paymentStatus!: PaymentStatus;
 
   @Column({ type: 'uuid', nullable: true })

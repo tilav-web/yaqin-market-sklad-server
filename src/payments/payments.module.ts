@@ -10,12 +10,21 @@ import { User } from '../users/entities/user.entity';
 import { SellerBalance } from './entities/seller-balance.entity';
 import { SellerTransaction } from './entities/seller-transaction.entity';
 import { WithdrawalRequest } from './entities/withdrawal-request.entity';
-import { AdminBalanceController, SellerBalanceController } from './payments.controller';
+import {
+  AdminBalanceController,
+  SellerBalanceController,
+} from './payments.controller';
 import { PaymentsService } from './payments.service';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([SellerBalance, SellerTransaction, WithdrawalRequest, Shop, User]),
+    TypeOrmModule.forFeature([
+      SellerBalance,
+      SellerTransaction,
+      WithdrawalRequest,
+      Shop,
+      User,
+    ]),
     SettingsModule,
     PushModule,
     ComplaintsModule,

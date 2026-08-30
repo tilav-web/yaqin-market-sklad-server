@@ -40,16 +40,20 @@ export class AdminAuthService {
   async login(dto: AdminLoginDto) {
     const admin = await this.adminUsers.findByUsername(dto.username);
     if (!admin) {
-      throw new UnauthorizedException('Username yoki parol noto\'g\'ri');
+      throw new UnauthorizedException("Username yoki parol noto'g'ri");
     }
 
     if (!admin.isActive) {
-      throw new UnauthorizedException('Hisobingiz nofaol qilingan. Superadminga murojaat qiling');
+      throw new UnauthorizedException(
+        'Hisobingiz nofaol qilingan. Superadminga murojaat qiling',
+      );
     }
 
-    const isValid = await argon2.verify(admin.passwordHash, dto.password).catch(() => false);
+    const isValid = await argon2
+      .verify(admin.passwordHash, dto.password)
+      .catch(() => false);
     if (!isValid) {
-      throw new UnauthorizedException('Username yoki parol noto\'g\'ri');
+      throw new UnauthorizedException("Username yoki parol noto'g'ri");
     }
 
     await this.adminUsers.updateLastLogin(admin.id);
@@ -81,7 +85,9 @@ export class AdminAuthService {
       const tokens = this.generateTokens(admin);
       return { tokens };
     } catch {
-      throw new UnauthorizedException('Refresh token muddati tugagan yoki yaroqsiz');
+      throw new UnauthorizedException(
+        'Refresh token muddati tugagan yoki yaroqsiz',
+      );
     }
   }
 
@@ -93,7 +99,7 @@ export class AdminAuthService {
     }
 
     if (!admin) {
-      throw new BadRequestException('Ushbu ma\'lumot bo\'yicha xodim topilmadi');
+      throw new BadRequestException("Ushbu ma'lumot bo'yicha xodim topilmadi");
     }
 
     if (!admin.phone) {
@@ -110,7 +116,9 @@ export class AdminAuthService {
     const inCooldown = await this.redis.client.exists(cooldownKey);
     if (inCooldown) {
       const ttl = await this.redis.client.ttl(cooldownKey);
-      throw new BadRequestException(`${ttl} soniyadan keyin qayta kod so'rashingiz mumkin`);
+      throw new BadRequestException(
+        `${ttl} soniyadan keyin qayta kod so'rashingiz mumkin`,
+      );
     }
 
     const fixed = this.config.get('FIXED_OTP_CODE', { infer: true });
@@ -124,7 +132,9 @@ export class AdminAuthService {
       await this.sms.sendOtp(admin.phone, code);
     }
 
-    this.logger.log(`Admin ${admin.username} uchun parolni tiklash kodi yuborildi`);
+    this.logger.log(
+      `Admin ${admin.username} uchun parolni tiklash kodi yuborildi`,
+    );
 
     return {
       success: true,
@@ -149,29 +159,38 @@ export class AdminAuthService {
     const storedCode = await this.redis.client.get(key);
 
     if (!storedCode || storedCode !== dto.code.trim()) {
-      throw new BadRequestException('Tasdiqlash kodi noto\'g\'ri yoki muddati tugagan');
+      throw new BadRequestException(
+        "Tasdiqlash kodi noto'g'ri yoki muddati tugagan",
+      );
     }
 
-    await this.adminUsers.resetPassword(admin.id, { newPassword: dto.newPassword });
+    await this.adminUsers.resetPassword(admin.id, {
+      newPassword: dto.newPassword,
+    });
     await this.redis.client.del(key);
 
     return {
       success: true,
-      message: 'Parol muvaffaqiyatli yangilandi. Endi yangi parol bilan kirishingiz mumkin.',
+      message:
+        'Parol muvaffaqiyatli yangilandi. Endi yangi parol bilan kirishingiz mumkin.',
     };
   }
 
   async changePassword(adminId: string, dto: AdminChangePasswordDto) {
     const admin = await this.adminUsers.findById(adminId);
-    const isValid = await argon2.verify(admin.passwordHash, dto.oldPassword).catch(() => false);
+    const isValid = await argon2
+      .verify(admin.passwordHash, dto.oldPassword)
+      .catch(() => false);
     if (!isValid) {
-      throw new BadRequestException('Eski parol noto\'g\'ri kiritildi');
+      throw new BadRequestException("Eski parol noto'g'ri kiritildi");
     }
 
-    await this.adminUsers.resetPassword(adminId, { newPassword: dto.newPassword });
+    await this.adminUsers.resetPassword(adminId, {
+      newPassword: dto.newPassword,
+    });
     return {
       success: true,
-      message: 'Parol muvaffaqiyatli o\'zgartirildi',
+      message: "Parol muvaffaqiyatli o'zgartirildi",
     };
   }
 

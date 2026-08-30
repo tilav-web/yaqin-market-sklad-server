@@ -51,7 +51,9 @@ export class FeedQueryDto {
    * Sort spec. Single token (`price_asc`) or a comma-separated ordered combo
    * (`price_asc,rating`) — the first token is primary, the rest tiebreakers.
    */
-  @ApiPropertyOptional({ description: 'e.g. "price_asc", "rating", "price_asc,rating"' })
+  @ApiPropertyOptional({
+    description: 'e.g. "price_asc", "rating", "price_asc,rating"',
+  })
   @IsOptional()
   @IsString()
   sort?: string;

@@ -28,12 +28,26 @@ export class AddSellerApplicationFields1786370000000 implements MigrationInterfa
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`ALTER TABLE "seller_applications" DROP COLUMN IF EXISTS "ofertaAccepted";`);
-    await queryRunner.query(`ALTER TABLE "seller_applications" DROP COLUMN IF EXISTS "soliqConfirmed";`);
-    await queryRunner.query(`ALTER TABLE "seller_applications" DROP COLUMN IF EXISTS "bankCardHolderName";`);
-    await queryRunner.query(`ALTER TABLE "seller_applications" DROP COLUMN IF EXISTS "bankCardNumber";`);
-    await queryRunner.query(`ALTER TABLE "seller_applications" DROP COLUMN IF EXISTS "legalAddress";`);
-    await queryRunner.query(`ALTER TABLE "seller_applications" DROP COLUMN IF EXISTS "entityType";`);
-    await queryRunner.query(`ALTER TABLE "seller_applications" DROP COLUMN IF EXISTS "companyName";`);
+    await queryRunner.query(
+      `ALTER TABLE "seller_applications" DROP COLUMN IF EXISTS "ofertaAccepted";`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "seller_applications" DROP COLUMN IF EXISTS "soliqConfirmed";`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "seller_applications" DROP COLUMN IF EXISTS "bankCardHolderName";`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "seller_applications" DROP COLUMN IF EXISTS "bankCardNumber";`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "seller_applications" DROP COLUMN IF EXISTS "legalAddress";`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "seller_applications" DROP COLUMN IF EXISTS "entityType";`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "seller_applications" DROP COLUMN IF EXISTS "companyName";`,
+    );
   }
 }

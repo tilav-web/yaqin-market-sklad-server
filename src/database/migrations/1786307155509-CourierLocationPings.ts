@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner } from "typeorm";
+import { MigrationInterface, QueryRunner } from 'typeorm';
 
 /**
  * Anti-fraud location-evidence layer, phase 2: a courier's live GPS trail
@@ -10,10 +10,10 @@ import { MigrationInterface, QueryRunner } from "typeorm";
  * independently of the order it came from.
  */
 export class CourierLocationPings1786307155509 implements MigrationInterface {
-    name = 'CourierLocationPings1786307155509'
+  name = 'CourierLocationPings1786307155509';
 
-    public async up(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`
             CREATE TABLE "courier_location_pings" (
                 "id" BIGSERIAL PRIMARY KEY,
                 "orderId" uuid NOT NULL,
@@ -31,16 +31,21 @@ export class CourierLocationPings1786307155509 implements MigrationInterface {
                 "segmentKmh" double precision
             )
         `);
-        await queryRunner.query(`CREATE INDEX "IDX_clp_order_received" ON "courier_location_pings" ("orderId", "receivedAt")`);
-        await queryRunner.query(`CREATE INDEX "IDX_clp_courier_received" ON "courier_location_pings" ("courierUserId", "receivedAt")`);
-        await queryRunner.query(`CREATE INDEX "IDX_clp_received" ON "courier_location_pings" ("receivedAt")`);
-    }
+    await queryRunner.query(
+      `CREATE INDEX "IDX_clp_order_received" ON "courier_location_pings" ("orderId", "receivedAt")`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "IDX_clp_courier_received" ON "courier_location_pings" ("courierUserId", "receivedAt")`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "IDX_clp_received" ON "courier_location_pings" ("receivedAt")`,
+    );
+  }
 
-    public async down(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`DROP INDEX "IDX_clp_received"`);
-        await queryRunner.query(`DROP INDEX "IDX_clp_courier_received"`);
-        await queryRunner.query(`DROP INDEX "IDX_clp_order_received"`);
-        await queryRunner.query(`DROP TABLE "courier_location_pings"`);
-    }
-
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`DROP INDEX "IDX_clp_received"`);
+    await queryRunner.query(`DROP INDEX "IDX_clp_courier_received"`);
+    await queryRunner.query(`DROP INDEX "IDX_clp_order_received"`);
+    await queryRunner.query(`DROP TABLE "courier_location_pings"`);
+  }
 }

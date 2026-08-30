@@ -7,7 +7,10 @@ import { SellerProfile } from '../sellers/entities/seller-profile.entity';
 import { SettingsModule } from '../settings/settings.module';
 import { FiscalReceipt } from './entities/fiscal-receipt.entity';
 import { TaxCategory } from './entities/tax-category.entity';
-import { FISCAL_PROVIDER, NoopFiscalProvider } from './fiscal-provider.interface';
+import {
+  FISCAL_PROVIDER,
+  NoopFiscalProvider,
+} from './fiscal-provider.interface';
 import { FiscalController } from './fiscal.controller';
 import { FiscalService } from './fiscal.service';
 import { TasnifService } from './tasnif.service';

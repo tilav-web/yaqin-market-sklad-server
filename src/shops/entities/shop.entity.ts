@@ -106,7 +106,11 @@ export class Shop {
   @Column({ type: 'int', default: 0 })
   minOrderPrice!: number;
 
-  @Column({ type: 'jsonb', default: () => "'{\"maxKm\":2,\"freeKm\":2,\"pricingType\":\"flat\",\"pricePerStep\":0}'::jsonb" })
+  @Column({
+    type: 'jsonb',
+    default: () =>
+      '\'{"maxKm":2,"freeKm":2,"pricingType":"flat","pricePerStep":0}\'::jsonb',
+  })
   deliveryZone!: DeliveryZone;
 
   /** Customer yetkazib berish hududi (GeoJSON Polygon, null = faqat km asosida ishlaydi). */

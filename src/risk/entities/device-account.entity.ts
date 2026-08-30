@@ -1,4 +1,10 @@
-import { Column, CreateDateColumn, Entity, Index, PrimaryColumn } from 'typeorm';
+import {
+  Column,
+  CreateDateColumn,
+  Entity,
+  Index,
+  PrimaryColumn,
+} from 'typeorm';
 
 /**
  * Append-only (deviceId, userId) pairs seen at login — deliberately NOT

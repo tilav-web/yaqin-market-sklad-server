@@ -70,7 +70,11 @@ export class FiscalReceiptPlatformIdentity1786314992572 implements MigrationInte
 
   public async down(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`DROP TABLE IF EXISTS "fiscal_receipts"`);
-    await queryRunner.query(`DROP TYPE IF EXISTS "public"."fiscal_receipts_status_enum"`);
-    await queryRunner.query(`DROP TYPE IF EXISTS "public"."fiscal_receipts_type_enum"`);
+    await queryRunner.query(
+      `DROP TYPE IF EXISTS "public"."fiscal_receipts_status_enum"`,
+    );
+    await queryRunner.query(
+      `DROP TYPE IF EXISTS "public"."fiscal_receipts_type_enum"`,
+    );
   }
 }

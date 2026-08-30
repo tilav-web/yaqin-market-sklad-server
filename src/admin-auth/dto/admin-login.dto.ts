@@ -7,7 +7,7 @@ export class AdminLoginDto {
 
   @IsString()
   @IsNotEmpty({ message: 'Parol kiritilishi shart' })
-  @MinLength(6, { message: 'Parol kamida 6 ta belgidan iborat bo\'lishi kerak' })
+  @MinLength(6, { message: "Parol kamida 6 ta belgidan iborat bo'lishi kerak" })
   password!: string;
 }
 

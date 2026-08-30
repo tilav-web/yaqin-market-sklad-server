@@ -45,7 +45,11 @@ export class UploadsService implements OnModuleInit {
   }
 
   /** Store an arbitrary file under a caller-chosen key (e.g. APK releases). */
-  async uploadBuffer(buffer: Buffer, key: string, contentType: string): Promise<void> {
+  async uploadBuffer(
+    buffer: Buffer,
+    key: string,
+    contentType: string,
+  ): Promise<void> {
     await this.client.putObject(this.bucket, key, buffer, buffer.length, {
       'Content-Type': contentType,
     });
@@ -56,16 +60,21 @@ export class UploadsService implements OnModuleInit {
     try {
       await this.client.removeObject(this.bucket, key);
     } catch (e) {
-      this.logger.warn(`MinIO remove failed for ${key}: ${(e as Error).message}`);
+      this.logger.warn(
+        `MinIO remove failed for ${key}: ${(e as Error).message}`,
+      );
     }
   }
 
-  async getObject(key: string): Promise<{ stream: Readable; contentType: string; size: number }> {
+  async getObject(
+    key: string,
+  ): Promise<{ stream: Readable; contentType: string; size: number }> {
     const stat = await this.client.statObject(this.bucket, key);
     const stream = await this.client.getObject(this.bucket, key);
     return {
       stream,
-      contentType: stat.metaData?.['content-type'] ?? 'application/octet-stream',
+      contentType:
+        stat.metaData?.['content-type'] ?? 'application/octet-stream',
       size: stat.size,
     };
   }

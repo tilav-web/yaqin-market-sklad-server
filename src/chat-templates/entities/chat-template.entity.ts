@@ -18,7 +18,10 @@ export class ChatTemplate {
   @Column({ type: 'uuid', nullable: true })
   shopId!: string | null;
 
-  @Column({ type: 'jsonb', default: () => "'{\"uz\":\"\",\"kr\":\"\",\"ru\":\"\"}'::jsonb" })
+  @Column({
+    type: 'jsonb',
+    default: () => '\'{"uz":"","kr":"","ru":""}\'::jsonb',
+  })
   text!: LocalizedText;
 
   /** true bo'lsa tahrirlash va o'chirish mumkin emas. */

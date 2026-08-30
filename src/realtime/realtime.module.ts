@@ -12,7 +12,10 @@ import { RealtimeGateway } from './realtime.gateway';
  * {@link RealtimeGateway} to push real-time events.
  */
 @Module({
-  imports: [JwtModule.register({}), TypeOrmModule.forFeature([Shop, ShopStaff, Order])],
+  imports: [
+    JwtModule.register({}),
+    TypeOrmModule.forFeature([Shop, ShopStaff, Order]),
+  ],
   providers: [RealtimeGateway],
   exports: [RealtimeGateway],
 })

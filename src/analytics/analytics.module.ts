@@ -11,7 +11,11 @@ import { PushModule } from '../push/push.module';
 import { SettingsModule } from '../settings/settings.module';
 import { Shop } from '../shops/entities/shop.entity';
 import { User } from '../users/entities/user.entity';
-import { AdminAnalyticsController, AnalyticsController, AnalyticsEventsController } from './analytics.controller';
+import {
+  AdminAnalyticsController,
+  AnalyticsController,
+  AnalyticsEventsController,
+} from './analytics.controller';
 import { AnalyticsService } from './analytics.service';
 import { AnalyticsEvent } from './entities/analytics-event.entity';
 import { ExpiryAlertService } from './expiry-alert.service';
@@ -19,11 +23,25 @@ import { LowStockAlertService } from './low-stock-alert.service';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Order, OrderItem, GlobalProduct, ProductVariant, StockBatch, InventoryMovement, Shop, User, AnalyticsEvent]),
+    TypeOrmModule.forFeature([
+      Order,
+      OrderItem,
+      GlobalProduct,
+      ProductVariant,
+      StockBatch,
+      InventoryMovement,
+      Shop,
+      User,
+      AnalyticsEvent,
+    ]),
     PushModule,
     SettingsModule,
   ],
-  controllers: [AnalyticsController, AdminAnalyticsController, AnalyticsEventsController],
+  controllers: [
+    AnalyticsController,
+    AdminAnalyticsController,
+    AnalyticsEventsController,
+  ],
   providers: [AnalyticsService, ExpiryAlertService, LowStockAlertService],
 })
 export class AnalyticsModule {}

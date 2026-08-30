@@ -13,10 +13,14 @@ export class AdminForgotPasswordResetDto {
   identifier!: string;
 
   @IsString()
-  @Length(6, 6, { message: 'Tasdiqlash kodi 6 ta raqamdan iborat bo\'lishi kerak' })
+  @Length(6, 6, {
+    message: "Tasdiqlash kodi 6 ta raqamdan iborat bo'lishi kerak",
+  })
   code!: string;
 
   @IsString()
-  @MinLength(6, { message: 'Yangi parol kamida 6 ta belgidan iborat bo\'lishi kerak' })
+  @MinLength(6, {
+    message: "Yangi parol kamida 6 ta belgidan iborat bo'lishi kerak",
+  })
   newPassword!: string;
 }

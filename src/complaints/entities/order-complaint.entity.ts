@@ -41,7 +41,11 @@ export class OrderComplaint {
   @Column({ type: 'text', nullable: true })
   description!: string | null;
 
-  @Column({ type: 'enum', enum: ComplaintStatus, default: ComplaintStatus.Open })
+  @Column({
+    type: 'enum',
+    enum: ComplaintStatus,
+    default: ComplaintStatus.Open,
+  })
   status!: ComplaintStatus;
 
   @Column({ type: 'text', nullable: true })

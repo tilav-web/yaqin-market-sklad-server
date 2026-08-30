@@ -28,7 +28,10 @@ export class TaxCategory {
   id!: string;
 
   /** Admin uchun tushunarli nom, masalan "Gazlangan ichimliklar (PET)". */
-  @Column({ type: 'jsonb', default: () => "'{\"uz\":\"\",\"kr\":\"\",\"ru\":\"\"}'::jsonb" })
+  @Column({
+    type: 'jsonb',
+    default: () => '\'{"uz":"","kr":"","ru":""}\'::jsonb',
+  })
   title!: LocalizedText;
 
   /** 17 xonali MXIK/IKPU kodi (tasnif.soliq.uz). */

@@ -1,11 +1,23 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { JwtPayload } from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '../auth/role.enum';
-import { AdminListComplaintsQuery, CreateComplaintDto, ResolveComplaintDto } from './dto/complaint.dto';
+import {
+  AdminListComplaintsQuery,
+  CreateComplaintDto,
+  ResolveComplaintDto,
+} from './dto/complaint.dto';
 import { ComplaintsService } from './complaints.service';
 
 /** Customer-facing: file a dispute on a delivered order (SPEC.md §8.5, §21). */

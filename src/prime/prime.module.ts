@@ -8,12 +8,21 @@ import { PushModule } from '../push/push.module';
 import { User } from '../users/entities/user.entity';
 import { PrimePlan } from './entities/prime-plan.entity';
 import { SellerSubscription } from './entities/seller-subscription.entity';
-import { AdminPrimeController, SellerPrimeController } from './prime.controller';
+import {
+  AdminPrimeController,
+  SellerPrimeController,
+} from './prime.controller';
 import { PrimeService } from './prime.service';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([PrimePlan, SellerSubscription, SellerBalance, SellerTransaction, User]),
+    TypeOrmModule.forFeature([
+      PrimePlan,
+      SellerSubscription,
+      SellerBalance,
+      SellerTransaction,
+      User,
+    ]),
     PushModule,
     AuditLogModule,
   ],

@@ -1,4 +1,10 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+  OnModuleInit,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Or, Repository } from 'typeorm';
 
@@ -9,10 +15,10 @@ import { ChatTemplate } from './entities/chat-template.entity';
 import { toLocalizedText } from '../common/types/localized-text.type';
 
 const SYSTEM_TEMPLATES = [
-  "Assalomu alaykum! Buyurtmangiz qabul qilindi, tayyorlayapmiz.",
+  'Assalomu alaykum! Buyurtmangiz qabul qilindi, tayyorlayapmiz.',
   "Kechirasiz, buyurtmangizdagi ayrim mahsulotlar qolmagan. O'rniga boshqasini taklif qilsak bo'ladimi?",
   "Buyurtmangiz yig'ildi va kuryerga topshirildi.",
-  "Rahmat! Xaridingiz uchun minnatdormiz. Yana kutib qolamiz!",
+  'Rahmat! Xaridingiz uchun minnatdormiz. Yana kutib qolamiz!',
 ];
 
 @Injectable()
@@ -29,16 +35,31 @@ export class ChatTemplatesService implements OnModuleInit {
   async onModuleInit() {
     for (let i = 0; i < SYSTEM_TEMPLATES.length; i++) {
       const rawText = SYSTEM_TEMPLATES[i];
-      const exists = await this.repo.findOne({ where: { isSystem: true, sortOrder: i } });
+      const exists = await this.repo.findOne({
+        where: { isSystem: true, sortOrder: i },
+      });
       if (!exists) {
-        await this.repo.save(this.repo.create({ shopId: null, text: toLocalizedText(rawText), isSystem: true, sortOrder: i }));
+        await this.repo.save(
+          this.repo.create({
+            shopId: null,
+            text: toLocalizedText(rawText),
+            isSystem: true,
+            sortOrder: i,
+          }),
+        );
       }
     }
   }
 
   /** Owner always passes; staff need the chat permission (same one that gates order chat). */
   private ensureAccess(userId: string, shopId: string) {
-    return assertShopPermission(this.shops, this.staff, userId, shopId, 'orders.chat');
+    return assertShopPermission(
+      this.shops,
+      this.staff,
+      userId,
+      shopId,
+      'orders.chat',
+    );
   }
 
   /** Seller uchun: tizim shablonlari + do'kon shablonlari birga. */
@@ -53,10 +74,15 @@ export class ChatTemplatesService implements OnModuleInit {
       .getMany();
   }
 
-  async create(userId: string, shopId: string, text: string): Promise<ChatTemplate> {
+  async create(
+    userId: string,
+    shopId: string,
+    text: string,
+  ): Promise<ChatTemplate> {
     await this.ensureAccess(userId, shopId);
     const count = await this.repo.count({ where: { shopId, isSystem: false } });
-    if (count >= 20) throw new BadRequestException('Maksimum 20 ta shaxsiy shablon');
+    if (count >= 20)
+      throw new BadRequestException('Maksimum 20 ta shaxsiy shablon');
     const last = await this.repo.findOne({
       where: { shopId },
       order: { sortOrder: 'DESC' },
@@ -70,7 +96,12 @@ export class ChatTemplatesService implements OnModuleInit {
     return this.repo.save(tmpl);
   }
 
-  async update(userId: string, shopId: string, id: string, text: string): Promise<ChatTemplate> {
+  async update(
+    userId: string,
+    shopId: string,
+    id: string,
+    text: string,
+  ): Promise<ChatTemplate> {
     await this.ensureAccess(userId, shopId);
     const tmpl = await this.findOwn(shopId, id);
     tmpl.text = toLocalizedText(text);
@@ -93,8 +124,9 @@ export class ChatTemplatesService implements OnModuleInit {
   private async findOwn(shopId: string, id: string): Promise<ChatTemplate> {
     const tmpl = await this.repo.findOne({ where: { id } });
     if (!tmpl) throw new NotFoundException('Shablon topilmadi');
-    if (tmpl.isSystem) throw new ForbiddenException('Tizim shablonini o\'zgartirish mumkin emas');
-    if (tmpl.shopId !== shopId) throw new ForbiddenException('Ruxsat yo\'q');
+    if (tmpl.isSystem)
+      throw new ForbiddenException("Tizim shablonini o'zgartirish mumkin emas");
+    if (tmpl.shopId !== shopId) throw new ForbiddenException("Ruxsat yo'q");
     return tmpl;
   }
 }

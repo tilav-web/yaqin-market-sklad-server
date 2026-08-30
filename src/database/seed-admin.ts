@@ -1,6 +1,9 @@
 import * as argon2 from 'argon2';
 import { AppDataSource } from './data-source';
-import { AdminRole, AdminUser } from '../admin-users/entities/admin-user.entity';
+import {
+  AdminRole,
+  AdminUser,
+} from '../admin-users/entities/admin-user.entity';
 
 async function seedSuperAdmin() {
   console.log('--- Seeding SuperAdmin user ---');
@@ -9,12 +12,15 @@ async function seedSuperAdmin() {
   const repo = AppDataSource.getRepository(AdminUser);
 
   const defaultUsername = process.env.DEFAULT_ADMIN_USERNAME || 'superadmin';
-  const defaultPassword = process.env.DEFAULT_ADMIN_PASSWORD || 'YaqinAdmin2026!';
+  const defaultPassword =
+    process.env.DEFAULT_ADMIN_PASSWORD || 'YaqinAdmin2026!';
   const defaultPhone = process.env.DEFAULT_ADMIN_PHONE || '+998900000000';
 
   const existing = await repo.findOne({ where: { username: defaultUsername } });
   if (existing) {
-    console.log(`SuperAdmin '${defaultUsername}' allaqachon mavjud (id: ${existing.id}).`);
+    console.log(
+      `SuperAdmin '${defaultUsername}' allaqachon mavjud (id: ${existing.id}).`,
+    );
     await AppDataSource.destroy();
     return;
   }

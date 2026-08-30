@@ -28,12 +28,17 @@ export class LowStockAlertService {
     private readonly settings: SettingsService,
   ) {}
 
-  private async loadNameMap(rows: ProductVariant[]): Promise<Map<string, string>> {
+  private async loadNameMap(
+    rows: ProductVariant[],
+  ): Promise<Map<string, string>> {
     if (!rows.length) return new Map();
     const gpIds = [...new Set(rows.map((v) => v.globalProductId))];
     const gps = await this.globalProducts.findBy({ id: In(gpIds) });
     const gpMap = new Map(
-      gps.map((gp) => [gp.id, typeof gp.name === 'object' ? gp.name?.uz || '' : (gp.name ?? '')]),
+      gps.map((gp) => [
+        gp.id,
+        typeof gp.name === 'object' ? gp.name?.uz || '' : (gp.name ?? ''),
+      ]),
     );
     return new Map(rows.map((v) => [v.id, gpMap.get(v.globalProductId) ?? '']));
   }
@@ -41,8 +46,13 @@ export class LowStockAlertService {
   /** Darhol push: stock kritik darajadan past tushganda (har 10 daqiqada tekshiriladi). */
   @Cron(CronExpression.EVERY_10_MINUTES)
   async sendCriticalAlerts(): Promise<void> {
-    const defaultCritical = this.settings.getNumber(SETTING_KEYS.LOW_STOCK_CRITICAL_DEFAULT, 3);
-    const cooldownCutoff = new Date(Date.now() - LowStockAlertService.CRITICAL_ALERT_COOLDOWN_MS);
+    const defaultCritical = this.settings.getNumber(
+      SETTING_KEYS.LOW_STOCK_CRITICAL_DEFAULT,
+      3,
+    );
+    const cooldownCutoff = new Date(
+      Date.now() - LowStockAlertService.CRITICAL_ALERT_COOLDOWN_MS,
+    );
 
     const rows = await this.variants
       .createQueryBuilder('v')
@@ -52,8 +62,17 @@ export class LowStockAlertService {
         { def: defaultCritical },
       )
       .andWhere('v.stock > 0')
-      .andWhere('(v.lastLowStockAlertAt IS NULL OR v.lastLowStockAlertAt <= :cooldownCutoff)', { cooldownCutoff })
-      .select(['v.shopId', 'v.id', 'v.globalProductId', 'v.stock', 'v.criticalThreshold'])
+      .andWhere(
+        '(v.lastLowStockAlertAt IS NULL OR v.lastLowStockAlertAt <= :cooldownCutoff)',
+        { cooldownCutoff },
+      )
+      .select([
+        'v.shopId',
+        'v.id',
+        'v.globalProductId',
+        'v.stock',
+        'v.criticalThreshold',
+      ])
       .getMany();
 
     if (!rows.length) return;
@@ -74,7 +93,10 @@ export class LowStockAlertService {
     for (const [shopId, items] of grouped) {
       const ownerId = ownerMap.get(shopId);
       if (!ownerId) continue;
-      const names = items.slice(0, 3).map((v) => `${nameMap.get(v.id) ?? ''} (${v.stock} ta)`).join(', ');
+      const names = items
+        .slice(0, 3)
+        .map((v) => `${nameMap.get(v.id) ?? ''} (${v.stock} ta)`)
+        .join(', ');
       const more = items.length > 3 ? ` va yana ${items.length - 3} ta` : '';
       await this.push.sendToUser(ownerId, {
         title: '⚠️ Kritik: tovar tugayapti',
@@ -84,23 +106,30 @@ export class LowStockAlertService {
       alertedVariantIds.push(...items.map((v) => v.id));
     }
     if (alertedVariantIds.length > 0) {
-      await this.variants.update({ id: In(alertedVariantIds) }, { lastLowStockAlertAt: new Date() });
+      await this.variants.update(
+        { id: In(alertedVariantIds) },
+        { lastLowStockAlertAt: new Date() },
+      );
     }
-    this.logger.log(`Critical low-stock alerts sent for ${grouped.size} shop(s)`);
+    this.logger.log(
+      `Critical low-stock alerts sent for ${grouped.size} shop(s)`,
+    );
   }
 
   /** Kunlik xulasa: ogohlantirish darajasidagilar (soat 20:00). */
   @Cron('0 20 * * *')
   async sendDailyWarningDigest(): Promise<void> {
-    const defaultWarning = this.settings.getNumber(SETTING_KEYS.LOW_STOCK_WARNING_DEFAULT, 10);
+    const defaultWarning = this.settings.getNumber(
+      SETTING_KEYS.LOW_STOCK_WARNING_DEFAULT,
+      10,
+    );
 
     const rows = await this.variants
       .createQueryBuilder('v')
       .where('v.isActive = true')
-      .andWhere(
-        '(v.stock <= v.lowStockThreshold) OR (v.stock <= :def)',
-        { def: defaultWarning },
-      )
+      .andWhere('(v.stock <= v.lowStockThreshold) OR (v.stock <= :def)', {
+        def: defaultWarning,
+      })
       .andWhere('v.stock > 0')
       .select(['v.shopId', 'v.id', 'v.globalProductId', 'v.stock'])
       .getMany();
@@ -122,7 +151,10 @@ export class LowStockAlertService {
     for (const [shopId, items] of grouped) {
       const ownerId = ownerMap.get(shopId);
       if (!ownerId) continue;
-      const top = items.slice(0, 5).map((v) => `${nameMap.get(v.id) ?? ''}: ${v.stock} ta`).join(', ');
+      const top = items
+        .slice(0, 5)
+        .map((v) => `${nameMap.get(v.id) ?? ''}: ${v.stock} ta`)
+        .join(', ');
       const more = items.length > 5 ? ` va yana ${items.length - 5} ta` : '';
       await this.push.sendToUser(ownerId, {
         title: 'Kam qoldiqlar — kunlik hisobot',

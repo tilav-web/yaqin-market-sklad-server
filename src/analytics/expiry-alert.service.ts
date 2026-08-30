@@ -31,12 +31,17 @@ export class ExpiryAlertService {
     private readonly settings: SettingsService,
   ) {}
 
-  private async loadNameMap(rows: ProductVariant[]): Promise<Map<string, string>> {
+  private async loadNameMap(
+    rows: ProductVariant[],
+  ): Promise<Map<string, string>> {
     if (!rows.length) return new Map();
     const gpIds = [...new Set(rows.map((v) => v.globalProductId))];
     const gps = await this.globalProducts.findBy({ id: In(gpIds) });
     const gpMap = new Map(
-      gps.map((gp) => [gp.id, typeof gp.name === 'object' ? gp.name?.uz || '' : (gp.name ?? '')]),
+      gps.map((gp) => [
+        gp.id,
+        typeof gp.name === 'object' ? gp.name?.uz || '' : (gp.name ?? ''),
+      ]),
     );
     return new Map(rows.map((v) => [v.id, gpMap.get(v.globalProductId) ?? '']));
   }
@@ -44,9 +49,14 @@ export class ExpiryAlertService {
   /** Kritik: muddati 2 kun ichida tugayotgan mahsulotlar — har soatda tekshiriladi. */
   @Cron(CronExpression.EVERY_HOUR)
   async sendCriticalExpiryAlerts(): Promise<void> {
-    const criticalDays = this.settings.getNumber(SETTING_KEYS.EXPIRY_CRITICAL_DAYS, 2);
+    const criticalDays = this.settings.getNumber(
+      SETTING_KEYS.EXPIRY_CRITICAL_DAYS,
+      2,
+    );
     const cutoff = new Date(Date.now() + criticalDays * 24 * 60 * 60 * 1000);
-    const cooldownCutoff = new Date(Date.now() - ExpiryAlertService.CRITICAL_ALERT_COOLDOWN_MS);
+    const cooldownCutoff = new Date(
+      Date.now() - ExpiryAlertService.CRITICAL_ALERT_COOLDOWN_MS,
+    );
 
     const rows = await this.variants
       .createQueryBuilder('v')
@@ -54,8 +64,17 @@ export class ExpiryAlertService {
       .andWhere('v.expiryDate IS NOT NULL')
       .andWhere('v.expiryDate <= :cutoff', { cutoff })
       .andWhere('v.stock > 0')
-      .andWhere('(v.lastExpiryAlertAt IS NULL OR v.lastExpiryAlertAt <= :cooldownCutoff)', { cooldownCutoff })
-      .select(['v.shopId', 'v.id', 'v.globalProductId', 'v.expiryDate', 'v.stock'])
+      .andWhere(
+        '(v.lastExpiryAlertAt IS NULL OR v.lastExpiryAlertAt <= :cooldownCutoff)',
+        { cooldownCutoff },
+      )
+      .select([
+        'v.shopId',
+        'v.id',
+        'v.globalProductId',
+        'v.expiryDate',
+        'v.stock',
+      ])
       .getMany();
 
     if (!rows.length) return;
@@ -76,7 +95,10 @@ export class ExpiryAlertService {
     for (const [shopId, items] of grouped) {
       const ownerId = ownerMap.get(shopId);
       if (!ownerId) continue;
-      const names = items.slice(0, 3).map((v) => nameMap.get(v.id) ?? '').join(', ');
+      const names = items
+        .slice(0, 3)
+        .map((v) => nameMap.get(v.id) ?? '')
+        .join(', ');
       await this.push.sendToUser(ownerId, {
         title: '🔴 Muddati tugayapti (kritik)',
         body: `${items.length} ta mahsulot ${criticalDays} kun ichida yaroqsiz: ${names}`,
@@ -85,7 +107,10 @@ export class ExpiryAlertService {
       alertedVariantIds.push(...items.map((v) => v.id));
     }
     if (alertedVariantIds.length > 0) {
-      await this.variants.update({ id: In(alertedVariantIds) }, { lastExpiryAlertAt: new Date() });
+      await this.variants.update(
+        { id: In(alertedVariantIds) },
+        { lastExpiryAlertAt: new Date() },
+      );
     }
     this.logger.log(`Critical expiry alerts sent for ${grouped.size} shop(s)`);
   }
@@ -93,7 +118,10 @@ export class ExpiryAlertService {
   /** Kunlik xulosa soat 20:00: ogohlantirish darajasidagi muddatlar. */
   @Cron('0 20 * * *')
   async sendDailyExpiryDigest(): Promise<void> {
-    const warningDays = this.settings.getNumber(SETTING_KEYS.EXPIRY_WARNING_DAYS, 7);
+    const warningDays = this.settings.getNumber(
+      SETTING_KEYS.EXPIRY_WARNING_DAYS,
+      7,
+    );
     const cutoff = new Date(Date.now() + warningDays * 24 * 60 * 60 * 1000);
 
     const rows = await this.variants

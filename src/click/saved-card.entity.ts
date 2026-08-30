@@ -54,7 +54,11 @@ export class SavedCard {
   @Column({ type: 'varchar', length: 40, nullable: true })
   label!: string | null;
 
-  @Column({ type: 'enum', enum: SavedCardStatus, default: SavedCardStatus.PendingVerify })
+  @Column({
+    type: 'enum',
+    enum: SavedCardStatus,
+    default: SavedCardStatus.PendingVerify,
+  })
   status!: SavedCardStatus;
 
   @Column({ type: 'boolean', default: false })

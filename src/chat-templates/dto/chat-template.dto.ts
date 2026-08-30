@@ -1,5 +1,12 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { ArrayMaxSize, ArrayMinSize, IsArray, IsString, IsUUID, MaxLength } from 'class-validator';
+import {
+  ArrayMaxSize,
+  ArrayMinSize,
+  IsArray,
+  IsString,
+  IsUUID,
+  MaxLength,
+} from 'class-validator';
 
 export class UpsertChatTemplateDto {
   @ApiProperty()

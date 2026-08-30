@@ -1,4 +1,9 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 
@@ -10,7 +15,10 @@ import { SettingsService } from '../settings/settings.service';
 import { Shop } from '../shops/entities/shop.entity';
 import { ShopStaff } from '../shops/entities/shop-staff.entity';
 import { User } from '../users/entities/user.entity';
-import { ComplaintStatus, OrderComplaint } from './entities/order-complaint.entity';
+import {
+  ComplaintStatus,
+  OrderComplaint,
+} from './entities/order-complaint.entity';
 
 export interface AdminComplaintRow extends OrderComplaint {
   orderNumber: string | null;
@@ -37,22 +45,37 @@ export class ComplaintsService {
   ) {}
 
   /** Batch-joins order/customer/shop names onto raw complaint rows — mirrors AuditLogService.list()'s pattern. */
-  private async withNames(items: OrderComplaint[]): Promise<AdminComplaintRow[]> {
+  private async withNames(
+    items: OrderComplaint[],
+  ): Promise<AdminComplaintRow[]> {
     const orderIds = [...new Set(items.map((c) => c.orderId))];
     const customerIds = [...new Set(items.map((c) => c.customerId))];
     const shopIds = [...new Set(items.map((c) => c.shopId))];
 
     const [orders, customers, shops] = await Promise.all([
       orderIds.length
-        ? this.orders.find({ where: { id: In(orderIds) }, select: { id: true, orderNumber: true } })
+        ? this.orders.find({
+            where: { id: In(orderIds) },
+            select: { id: true, orderNumber: true },
+          })
         : [],
       customerIds.length
-        ? this.users.find({ where: { id: In(customerIds) }, select: { id: true, name: true, phone: true } })
+        ? this.users.find({
+            where: { id: In(customerIds) },
+            select: { id: true, name: true, phone: true },
+          })
         : [],
-      shopIds.length ? this.shops.find({ where: { id: In(shopIds) }, select: { id: true, name: true } }) : [],
+      shopIds.length
+        ? this.shops.find({
+            where: { id: In(shopIds) },
+            select: { id: true, name: true },
+          })
+        : [],
     ]);
     const orderMap = new Map(orders.map((o) => [o.id, o.orderNumber]));
-    const customerMap = new Map(customers.map((u) => [u.id, u.name || u.phone]));
+    const customerMap = new Map(
+      customers.map((u) => [u.id, u.name || u.phone]),
+    );
     const shopMap = new Map(shops.map((s) => [s.id, s.name]));
 
     return items.map((c) => ({
@@ -65,7 +88,9 @@ export class ComplaintsService {
 
   /** The order's `delivered` timeline timestamp, or null if never delivered. */
   private deliveredAt(order: Pick<Order, 'timeline'>): Date | null {
-    const events = order.timeline.filter((e) => e.status === OrderStatus.Delivered);
+    const events = order.timeline.filter(
+      (e) => e.status === OrderStatus.Delivered,
+    );
     if (!events.length) return null;
     return new Date(events[events.length - 1].at);
   }
@@ -82,16 +107,23 @@ export class ComplaintsService {
     orderId: string,
     dto: { reason: string; description?: string },
   ): Promise<OrderComplaint> {
-    const order = await this.orders.findOne({ where: { id: orderId }, relations: { shop: true } });
+    const order = await this.orders.findOne({
+      where: { id: orderId },
+      relations: { shop: true },
+    });
     if (!order) throw new NotFoundException('Buyurtma topilmadi');
     if (order.userId !== customerId) throw new ForbiddenException();
     if (order.status !== OrderStatus.Delivered) {
-      throw new BadRequestException('Faqat yetkazilgan buyurtmaga shikoyat qilish mumkin');
+      throw new BadRequestException(
+        'Faqat yetkazilgan buyurtmaga shikoyat qilish mumkin',
+      );
     }
 
     const deliveredAt = this.deliveredAt(order);
     const hours = this.settings.getNumber(SETTING_KEYS.SETTLEMENT_HOURS, 24);
-    const deadline = deliveredAt ? deliveredAt.getTime() + hours * 60 * 60 * 1000 : 0;
+    const deadline = deliveredAt
+      ? deliveredAt.getTime() + hours * 60 * 60 * 1000
+      : 0;
     if (!deliveredAt || Date.now() > deadline) {
       throw new BadRequestException(
         `Shikoyat faqat yetkazib berilgandan keyingi ${hours} soat ichida qabul qilinadi`,
@@ -99,7 +131,10 @@ export class ComplaintsService {
     }
 
     const existing = await this.complaints.findOne({ where: { orderId } });
-    if (existing) throw new BadRequestException('Bu buyurtma uchun shikoyat allaqachon yuborilgan');
+    if (existing)
+      throw new BadRequestException(
+        'Bu buyurtma uchun shikoyat allaqachon yuborilgan',
+      );
 
     const complaint = await this.complaints.save(
       this.complaints.create({
@@ -114,15 +149,28 @@ export class ComplaintsService {
 
     // Notify the shop side — previously a complaint sat silently until an
     // admin happened to open the queue and poll it.
-    const staff = await this.staff.find({ where: { shopId: order.shopId, isActive: true } });
-    const recipients = [...new Set([order.shop.ownerId, ...staff.map((s) => s.userId)])];
+    const staff = await this.staff.find({
+      where: { shopId: order.shopId, isActive: true },
+    });
+    const recipients = [
+      ...new Set([order.shop.ownerId, ...staff.map((s) => s.userId)]),
+    ];
     void this.push.sendToUsers(recipients, {
       title: 'Yangi shikoyat',
       body: `#${order.orderNumber} — ${dto.reason}`,
-      data: { orderId: order.id, kind: 'complaint:new', shopId: order.shopId, forSeller: true },
+      data: {
+        orderId: order.id,
+        kind: 'complaint:new',
+        shopId: order.shopId,
+        forSeller: true,
+      },
     });
 
-    void this.risk.onComplaintFiled({ orderId: order.id, courierUserId: order.deliveredByUserId, reason: dto.reason });
+    void this.risk.onComplaintFiled({
+      orderId: order.id,
+      courierUserId: order.deliveredByUserId,
+      reason: dto.reason,
+    });
 
     return complaint;
   }
@@ -164,7 +212,10 @@ export class ComplaintsService {
 
   /** Admin: all complaints for one shop (for the admin shop-detail page). */
   async listForShop(shopId: string): Promise<AdminComplaintRow[]> {
-    const items = await this.complaints.find({ where: { shopId }, order: { createdAt: 'DESC' } });
+    const items = await this.complaints.find({
+      where: { shopId },
+      order: { createdAt: 'DESC' },
+    });
     return this.withNames(items);
   }
 
@@ -173,7 +224,11 @@ export class ComplaintsService {
     return this.complaints.count({ where: { status: ComplaintStatus.Open } });
   }
 
-  async adminResolve(id: string, adminId: string, resolution: string): Promise<OrderComplaint> {
+  async adminResolve(
+    id: string,
+    adminId: string,
+    resolution: string,
+  ): Promise<OrderComplaint> {
     const complaint = await this.complaints.findOne({ where: { id } });
     if (!complaint) throw new NotFoundException('Shikoyat topilmadi');
     if (complaint.status === ComplaintStatus.Resolved) {

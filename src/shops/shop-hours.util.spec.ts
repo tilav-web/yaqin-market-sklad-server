@@ -34,7 +34,11 @@ function tashkentDate(d: Date): string {
   return shifted.toISOString().split('T')[0];
 }
 
-function slotAround(dayOfWeek: number, hhmm: string, overrides: Partial<WorkingHourSlot> = {}): WorkingHourSlot {
+function slotAround(
+  dayOfWeek: number,
+  hhmm: string,
+  overrides: Partial<WorkingHourSlot> = {},
+): WorkingHourSlot {
   const [h, m] = hhmm.split(':').map(Number);
   const openMinutes = h * 60 + m - 60;
   const closeMinutes = h * 60 + m + 60;
@@ -49,7 +53,8 @@ function slotAround(dayOfWeek: number, hhmm: string, overrides: Partial<WorkingH
   // slot that belongs to yesterday's dayOfWeek, not today's. Only applies to
   // the auto-computed window though — if the caller overrides openTime, they
   // own the window and this heuristic no longer means anything.
-  const dayOffset = overrides.openTime === undefined ? Math.floor(openMinutes / (24 * 60)) : 0;
+  const dayOffset =
+    overrides.openTime === undefined ? Math.floor(openMinutes / (24 * 60)) : 0;
   const slotDay = (((dayOfWeek + dayOffset) % 7) + 7) % 7;
   return {
     dayOfWeek: slotDay as WorkingHourSlot['dayOfWeek'],
@@ -61,7 +66,7 @@ function slotAround(dayOfWeek: number, hhmm: string, overrides: Partial<WorkingH
 }
 
 describe('isShopOpenNow', () => {
-  it('isOpenManual=false bo\'lsa har doim yopiq (qattiq o\'chirish)', () => {
+  it("isOpenManual=false bo'lsa har doim yopiq (qattiq o'chirish)", () => {
     const now = new Date();
     const dow = tashkentWeekday(now);
     const shop = makeShop({
@@ -71,12 +76,12 @@ describe('isShopOpenNow', () => {
     expect(isShopOpenNow(shop, now)).toBe(false);
   });
 
-  it('workingHours sozlanmagan bo\'lsa yopiq hisoblanadi (default ochiq emas)', () => {
+  it("workingHours sozlanmagan bo'lsa yopiq hisoblanadi (default ochiq emas)", () => {
     const shop = makeShop({ workingHours: [] });
     expect(isShopOpenNow(shop, new Date())).toBe(false);
   });
 
-  it('bugungi kun ta\'til (holiday) bo\'lsa ish vaqti ichida bo\'lsa ham yopiq', () => {
+  it("bugungi kun ta'til (holiday) bo'lsa ish vaqti ichida bo'lsa ham yopiq", () => {
     const now = new Date();
     const dow = tashkentWeekday(now);
     const holiday: Holiday = { date: tashkentDate(now), reason: 'Bayram' };
@@ -87,7 +92,7 @@ describe('isShopOpenNow', () => {
     expect(isShopOpenNow(shop, now)).toBe(false);
   });
 
-  it('shu kun uchun slot.isOpen=false bo\'lsa yopiq', () => {
+  it("shu kun uchun slot.isOpen=false bo'lsa yopiq", () => {
     const now = new Date();
     const dow = tashkentWeekday(now);
     const shop = makeShop({
@@ -96,7 +101,7 @@ describe('isShopOpenNow', () => {
     expect(isShopOpenNow(shop, now)).toBe(false);
   });
 
-  it('ish vaqti ichida bo\'lsa ochiq', () => {
+  it("ish vaqti ichida bo'lsa ochiq", () => {
     const now = new Date();
     const dow = tashkentWeekday(now);
     const shop = makeShop({
@@ -110,7 +115,14 @@ describe('isShopOpenNow', () => {
     const dow = tashkentWeekday(now);
     const currentTime = tashkentTime(now);
     const shop = makeShop({
-      workingHours: [{ dayOfWeek: dow as WorkingHourSlot['dayOfWeek'], openTime: currentTime, closeTime: '23:59', isOpen: true }],
+      workingHours: [
+        {
+          dayOfWeek: dow as WorkingHourSlot['dayOfWeek'],
+          openTime: currentTime,
+          closeTime: '23:59',
+          isOpen: true,
+        },
+      ],
     });
     expect(isShopOpenNow(shop, now)).toBe(true);
   });
@@ -120,7 +132,14 @@ describe('isShopOpenNow', () => {
     const dow = tashkentWeekday(now);
     const currentTime = tashkentTime(now);
     const shop = makeShop({
-      workingHours: [{ dayOfWeek: dow as WorkingHourSlot['dayOfWeek'], openTime: '00:00', closeTime: currentTime, isOpen: true }],
+      workingHours: [
+        {
+          dayOfWeek: dow as WorkingHourSlot['dayOfWeek'],
+          openTime: '00:00',
+          closeTime: currentTime,
+          isOpen: true,
+        },
+      ],
     });
     expect(isShopOpenNow(shop, now)).toBe(true);
   });
@@ -129,7 +148,12 @@ describe('isShopOpenNow', () => {
     const now = new Date();
     const dow = tashkentWeekday(now);
     const shop = makeShop({
-      workingHours: [slotAround(dow, tashkentTime(now), { openTime: '00:00', closeTime: '00:01' })],
+      workingHours: [
+        slotAround(dow, tashkentTime(now), {
+          openTime: '00:00',
+          closeTime: '00:01',
+        }),
+      ],
     });
     // Only matches if "now" happens to be within the first minute after midnight —
     // astronomically unlikely, and even then the test is still correct either way.
@@ -137,8 +161,8 @@ describe('isShopOpenNow', () => {
     expect(isShopOpenNow(shop, now)).toBe(expected);
   });
 
-  describe('timezone to\'g\'riligi (Asia/Tashkent, server TZ dan mustaqil)', () => {
-    it('Tashkentda kun UTC dan oldin boshlansa, to\'g\'ri (Tashkent) haftaning kunidan foydalanadi', () => {
+  describe("timezone to'g'riligi (Asia/Tashkent, server TZ dan mustaqil)", () => {
+    it("Tashkentda kun UTC dan oldin boshlansa, to'g'ri (Tashkent) haftaning kunidan foydalanadi", () => {
       // 20:15 UTC → 01:15 next day in Tashkent (UTC+5) — UTC-day and
       // Tashkent-day are guaranteed to differ (off by exactly one weekday).
       const now = new Date('2026-03-10T20:15:00.000Z');
@@ -150,16 +174,26 @@ describe('isShopOpenNow', () => {
         workingHours: [
           // The UTC weekday's slot is CLOSED — a UTC-based implementation
           // would incorrectly read this one and report closed.
-          { dayOfWeek: utcDow as WorkingHourSlot['dayOfWeek'], openTime: '00:00', closeTime: '23:59', isOpen: false },
+          {
+            dayOfWeek: utcDow as WorkingHourSlot['dayOfWeek'],
+            openTime: '00:00',
+            closeTime: '23:59',
+            isOpen: false,
+          },
           // The real Tashkent weekday's slot is OPEN and covers 01:15.
-          { dayOfWeek: tzDow as WorkingHourSlot['dayOfWeek'], openTime: '00:00', closeTime: '23:59', isOpen: true },
+          {
+            dayOfWeek: tzDow as WorkingHourSlot['dayOfWeek'],
+            openTime: '00:00',
+            closeTime: '23:59',
+            isOpen: true,
+          },
         ],
       });
 
       expect(isShopOpenNow(shop, now)).toBe(true);
     });
 
-    it('aksincha: UTC kuni ochiq bo\'lsa-da, Tashkent kuni yopiq bo\'lsa — yopiq', () => {
+    it("aksincha: UTC kuni ochiq bo'lsa-da, Tashkent kuni yopiq bo'lsa — yopiq", () => {
       const now = new Date('2026-03-10T20:15:00.000Z');
       const utcDow = now.getUTCDay();
       const tzDow = tashkentWeekday(now);
@@ -168,9 +202,19 @@ describe('isShopOpenNow', () => {
         workingHours: [
           // UTC weekday wide-open — a UTC-based implementation would
           // incorrectly report open.
-          { dayOfWeek: utcDow as WorkingHourSlot['dayOfWeek'], openTime: '00:00', closeTime: '23:59', isOpen: true },
+          {
+            dayOfWeek: utcDow as WorkingHourSlot['dayOfWeek'],
+            openTime: '00:00',
+            closeTime: '23:59',
+            isOpen: true,
+          },
           // The real Tashkent weekday is explicitly closed.
-          { dayOfWeek: tzDow as WorkingHourSlot['dayOfWeek'], openTime: '00:00', closeTime: '23:59', isOpen: false },
+          {
+            dayOfWeek: tzDow as WorkingHourSlot['dayOfWeek'],
+            openTime: '00:00',
+            closeTime: '23:59',
+            isOpen: false,
+          },
         ],
       });
 
@@ -184,7 +228,14 @@ describe('isShopOpenNow', () => {
       expect(tashkentTime(now)).toBe('00:00');
 
       const shop = makeShop({
-        workingHours: [{ dayOfWeek: tzDow as WorkingHourSlot['dayOfWeek'], openTime: '00:00', closeTime: '23:59', isOpen: true }],
+        workingHours: [
+          {
+            dayOfWeek: tzDow as WorkingHourSlot['dayOfWeek'],
+            openTime: '00:00',
+            closeTime: '23:59',
+            isOpen: true,
+          },
+        ],
       });
 
       expect(isShopOpenNow(shop, now)).toBe(true);
@@ -196,7 +247,14 @@ describe('isShopOpenNow', () => {
       const utcDateStr = now.toISOString().split('T')[0]; // '2026-03-10'
 
       const shop = makeShop({
-        workingHours: [{ dayOfWeek: tzDow as WorkingHourSlot['dayOfWeek'], openTime: '00:00', closeTime: '23:59', isOpen: true }],
+        workingHours: [
+          {
+            dayOfWeek: tzDow as WorkingHourSlot['dayOfWeek'],
+            openTime: '00:00',
+            closeTime: '23:59',
+            isOpen: true,
+          },
+        ],
         // Marks the UTC date (not the real Tashkent date) as a holiday — must NOT apply.
         holidays: [{ date: utcDateStr }],
       });

@@ -57,7 +57,10 @@ export class UsersController {
   }
 
   @Patch()
-  async updateMe(@CurrentUser() user: JwtPayload, @Body() dto: UpdateProfileDto) {
+  async updateMe(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: UpdateProfileDto,
+  ) {
     return this.users.updateProfile(user.sub, dto);
   }
 
@@ -87,7 +90,10 @@ export class UsersController {
 
   @Delete('addresses/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  deleteAddress(@CurrentUser() user: JwtPayload, @Param('id', ParseUUIDPipe) id: string) {
+  deleteAddress(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
     return this.users.deleteAddress(user.sub, id);
   }
 
@@ -99,24 +105,36 @@ export class UsersController {
   }
 
   @Post('favorites/shops/:shopId')
-  addFavoriteShop(@CurrentUser() user: JwtPayload, @Param('shopId', ParseUUIDPipe) shopId: string) {
+  addFavoriteShop(
+    @CurrentUser() user: JwtPayload,
+    @Param('shopId', ParseUUIDPipe) shopId: string,
+  ) {
     return this.users.toggleFavoriteShop(user.sub, shopId, true);
   }
 
   @Delete('favorites/shops/:shopId')
   @HttpCode(HttpStatus.NO_CONTENT)
-  removeFavoriteShop(@CurrentUser() user: JwtPayload, @Param('shopId', ParseUUIDPipe) shopId: string) {
+  removeFavoriteShop(
+    @CurrentUser() user: JwtPayload,
+    @Param('shopId', ParseUUIDPipe) shopId: string,
+  ) {
     return this.users.toggleFavoriteShop(user.sub, shopId, false);
   }
 
   @Post('favorites/products/:productId')
-  addFavoriteProduct(@CurrentUser() user: JwtPayload, @Param('productId', ParseUUIDPipe) productId: string) {
+  addFavoriteProduct(
+    @CurrentUser() user: JwtPayload,
+    @Param('productId', ParseUUIDPipe) productId: string,
+  ) {
     return this.users.toggleFavoriteProduct(user.sub, productId, true);
   }
 
   @Delete('favorites/products/:productId')
   @HttpCode(HttpStatus.NO_CONTENT)
-  removeFavoriteProduct(@CurrentUser() user: JwtPayload, @Param('productId', ParseUUIDPipe) productId: string) {
+  removeFavoriteProduct(
+    @CurrentUser() user: JwtPayload,
+    @Param('productId', ParseUUIDPipe) productId: string,
+  ) {
     return this.users.toggleFavoriteProduct(user.sub, productId, false);
   }
 }

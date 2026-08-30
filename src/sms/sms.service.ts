@@ -21,7 +21,9 @@ export class SmsService {
   private token: string | null = null;
   private tokenExpiresAt = 0;
 
-  constructor(private readonly config: ConfigService<EnvironmentVariables, true>) {}
+  constructor(
+    private readonly config: ConfigService<EnvironmentVariables, true>,
+  ) {}
 
   async sendOtp(phone: string, code: string): Promise<void> {
     const text = `Yaqin Market: tasdiq kodi ${code}. Hech kimga aytmang.`;

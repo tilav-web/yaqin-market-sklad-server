@@ -82,7 +82,11 @@ export class SellerShopsController {
 
   // Any authenticated user can open a shop and instantly become a seller.
   @Post()
-  create(@CurrentUser() user: JwtPayload, @Body() dto: CreateShopDto, @DeviceId() deviceId: string | null) {
+  create(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: CreateShopDto,
+    @DeviceId() deviceId: string | null,
+  ) {
     return this.shops.createShop(user.sub, dto, deviceId);
   }
 
@@ -92,7 +96,10 @@ export class SellerShopsController {
   }
 
   @Get(':id')
-  getOne(@CurrentUser() user: JwtPayload, @Param('id', ParseUUIDPipe) id: string) {
+  getOne(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
     return this.shops.getOwned(user.sub, id);
   }
 
@@ -118,7 +125,10 @@ export class SellerShopsController {
   // Owner opened this shop's orders → clear the profile "new orders" badge.
   @Post(':id/orders/seen')
   @HttpCode(HttpStatus.NO_CONTENT)
-  markOrdersSeen(@CurrentUser() user: JwtPayload, @Param('id', ParseUUIDPipe) id: string) {
+  markOrdersSeen(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
     return this.shops.markOrdersSeen(user.sub, id);
   }
 
@@ -141,12 +151,18 @@ export class SellerShopsController {
   }
 
   @Get(':id/blocked-users')
-  listBlocked(@CurrentUser() user: JwtPayload, @Param('id', ParseUUIDPipe) id: string) {
+  listBlocked(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
     return this.shops.listBlockedUsers(user.sub, id);
   }
 
   @Get(':id/completeness')
-  completeness(@CurrentUser() user: JwtPayload, @Param('id', ParseUUIDPipe) id: string) {
+  completeness(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
     return this.shops.getCompleteness(user.sub, id);
   }
 
@@ -170,13 +186,19 @@ export class SellerShopsController {
   }
 
   @Get(':id/staff')
-  listStaff(@CurrentUser() user: JwtPayload, @Param('id', ParseUUIDPipe) id: string) {
+  listStaff(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
     return this.shops.listStaff(user.sub, id);
   }
 
   // ---- Staff presets (owner's own saved, reusable permission bundles) ----
   @Get(':id/staff-presets')
-  listStaffPresets(@CurrentUser() user: JwtPayload, @Param('id', ParseUUIDPipe) id: string) {
+  listStaffPresets(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
     return this.shops.listStaffPresets(user.sub, id);
   }
 

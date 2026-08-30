@@ -70,7 +70,7 @@ export class User {
    * (always `customer`, plus `seller`/`admin` when applicable) and from
    * `shop_staff` membership. Refreshed at login and on role-changing events.
    */
-  @Column({ type: 'jsonb', default: () => "'[\"customer\"]'::jsonb" })
+  @Column({ type: 'jsonb', default: () => '\'["customer"]\'::jsonb' })
   roles!: string[];
 
   @Column({ type: 'jsonb', default: () => "'[]'::jsonb" })

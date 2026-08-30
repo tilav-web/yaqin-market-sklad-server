@@ -14,7 +14,7 @@ export class CreateContactDto {
   @MaxLength(32)
   phone!: string;
 
-  @ApiProperty({ example: 'Do\'kon ochmoqchiman, qanday qilsam bo\'ladi?' })
+  @ApiProperty({ example: "Do'kon ochmoqchiman, qanday qilsam bo'ladi?" })
   @IsString()
   @MinLength(1)
   @MaxLength(2000)

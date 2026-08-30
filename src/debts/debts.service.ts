@@ -1,4 +1,9 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
 
@@ -42,15 +47,21 @@ export class DebtsService {
   /** Owner, or active staff with the `debt.manage` permission. */
   private async assertCanManage(userId: string, shopId: string): Promise<void> {
     const shop = await this.shops.findOne({ where: { id: shopId } });
-    if (!shop) throw new NotFoundException('Do\'kon topilmadi');
+    if (!shop) throw new NotFoundException("Do'kon topilmadi");
     if (shop.ownerId === userId) return;
-    const staff = await this.staff.findOne({ where: { shopId, userId, isActive: true } });
+    const staff = await this.staff.findOne({
+      where: { shopId, userId, isActive: true },
+    });
     if (!staff || !staff.permissions?.includes('debt.manage')) {
-      throw new ForbiddenException('Qarz daftariga ruxsatingiz yo\'q');
+      throw new ForbiddenException("Qarz daftariga ruxsatingiz yo'q");
     }
   }
 
-  async createDebt(userId: string, shopId: string, dto: CreateDebtDto): Promise<Debt> {
+  async createDebt(
+    userId: string,
+    shopId: string,
+    dto: CreateDebtDto,
+  ): Promise<Debt> {
     await this.assertCanManage(userId, shopId);
 
     const inputs = dto.lines ?? [];
@@ -60,30 +71,46 @@ export class DebtsService {
     let variantMap = new Map<string, ProductVariant>();
     if (inputs.length > 0) {
       const ids = inputs.map((l) => l.variantId);
-      const found = await this.variants.find({ where: { id: In(ids), shopId } });
+      const found = await this.variants.find({
+        where: { id: In(ids), shopId },
+      });
       variantMap = new Map(found.map((v) => [v.id, v]));
       const gpIds = [...new Set(found.map((v) => v.globalProductId))];
       const gps = await this.globalProducts.findBy({ id: In(gpIds) });
       const gpNameMap = new Map(
-        gps.map((gp) => [gp.id, typeof gp.name === 'object' ? gp.name?.uz || '' : (gp.name ?? '')]),
+        gps.map((gp) => [
+          gp.id,
+          typeof gp.name === 'object' ? gp.name?.uz || '' : (gp.name ?? ''),
+        ]),
       );
-      const nameMap = new Map(found.map((v) => [v.id, gpNameMap.get(v.globalProductId) ?? '']));
+      const nameMap = new Map(
+        found.map((v) => [v.id, gpNameMap.get(v.globalProductId) ?? '']),
+      );
       for (const input of inputs) {
         const v = variantMap.get(input.variantId);
         if (!v) throw new NotFoundException('Mahsulot topilmadi');
         if (dto.decrementStock && v.stock < input.quantity) {
-          throw new BadRequestException(`"${nameMap.get(v.id) ?? ''}" qoldig'i yetarli emas (${v.stock} ta)`);
+          throw new BadRequestException(
+            `"${nameMap.get(v.id) ?? ''}" qoldig'i yetarli emas (${v.stock} ta)`,
+          );
         }
         const unitPrice = v.discountPrice ?? v.price;
         const lineTotal = unitPrice * input.quantity;
         itemsTotal += lineTotal;
-        lines.push({ variantId: v.id, name: nameMap.get(v.id) ?? '', quantity: input.quantity, unitPrice, lineTotal });
+        lines.push({
+          variantId: v.id,
+          name: nameMap.get(v.id) ?? '',
+          quantity: input.quantity,
+          unitPrice,
+          lineTotal,
+        });
       }
     }
 
     const extraCharge = dto.extraCharge ?? 0;
     const total = itemsTotal + extraCharge;
-    if (total <= 0) throw new BadRequestException('Qarz summasi 0 dan katta bo\'lishi kerak');
+    if (total <= 0)
+      throw new BadRequestException("Qarz summasi 0 dan katta bo'lishi kerak");
 
     return this.dataSource.transaction(async (manager) => {
       if (dto.decrementStock && lines.length > 0) {
@@ -95,7 +122,9 @@ export class DebtsService {
             lock: { mode: 'pessimistic_write' },
           });
           if (!locked || locked.stock < line.quantity) {
-            throw new BadRequestException(`"${line.name}" qoldig'i yetarli emas`);
+            throw new BadRequestException(
+              `"${line.name}" qoldig'i yetarli emas`,
+            );
           }
           await consumeFifo(manager, {
             variant: locked,
@@ -123,23 +152,38 @@ export class DebtsService {
     });
   }
 
-  async addPayment(userId: string, shopId: string, dto: AddPaymentDto): Promise<DebtPayment> {
+  async addPayment(
+    userId: string,
+    shopId: string,
+    dto: AddPaymentDto,
+  ): Promise<DebtPayment> {
     await this.assertCanManage(userId, shopId);
     const phone = dto.customerPhone.trim();
     // Serialize concurrent payments for the same customer with a transaction
     // advisory lock, then check the balance and insert atomically — so two
     // simultaneous payments can't both slip past the overpay guard.
     return this.dataSource.transaction(async (manager) => {
-      await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`debt:${shopId}:${phone}`]);
+      await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
+        `debt:${shopId}:${phone}`,
+      ]);
       const [debts, payments] = await Promise.all([
-        manager.find(Debt, { where: { shopId, customerPhone: phone }, select: { total: true } }),
-        manager.find(DebtPayment, { where: { shopId, customerPhone: phone }, select: { amount: true } }),
+        manager.find(Debt, {
+          where: { shopId, customerPhone: phone },
+          select: { total: true },
+        }),
+        manager.find(DebtPayment, {
+          where: { shopId, customerPhone: phone },
+          select: { amount: true },
+        }),
       ]);
       const balance =
-        debts.reduce((s, d) => s + d.total, 0) - payments.reduce((s, p) => s + p.amount, 0);
-      if (balance <= 0) throw new BadRequestException('Bu mijozda qarz yo\'q');
+        debts.reduce((s, d) => s + d.total, 0) -
+        payments.reduce((s, p) => s + p.amount, 0);
+      if (balance <= 0) throw new BadRequestException("Bu mijozda qarz yo'q");
       if (dto.amount > balance) {
-        throw new BadRequestException(`To'lov qarzdan oshib ketdi (qolgan: ${balance} so'm)`);
+        throw new BadRequestException(
+          `To'lov qarzdan oshib ketdi (qolgan: ${balance} so'm)`,
+        );
       }
       return manager.save(
         manager.create(DebtPayment, {
@@ -184,7 +228,9 @@ export class DebtsService {
       order: { createdAt: 'DESC' },
     });
     const nameMap = new Map<string, string>();
-    for (const r of nameRows) if (!nameMap.has(r.customerPhone)) nameMap.set(r.customerPhone, r.customerName);
+    for (const r of nameRows)
+      if (!nameMap.has(r.customerPhone))
+        nameMap.set(r.customerPhone, r.customerName);
 
     const accounts: DebtAccount[] = debtRows.map((d) => {
       const pay = paidMap.get(d.phone);
@@ -215,8 +261,14 @@ export class DebtsService {
   async getAccount(userId: string, shopId: string, phone: string) {
     await this.assertCanManage(userId, shopId);
     const [debts, payments] = await Promise.all([
-      this.debts.find({ where: { shopId, customerPhone: phone }, order: { createdAt: 'DESC' } }),
-      this.payments.find({ where: { shopId, customerPhone: phone }, order: { createdAt: 'DESC' } }),
+      this.debts.find({
+        where: { shopId, customerPhone: phone },
+        order: { createdAt: 'DESC' },
+      }),
+      this.payments.find({
+        where: { shopId, customerPhone: phone },
+        order: { createdAt: 'DESC' },
+      }),
     ]);
     const totalDebt = debts.reduce((s, d) => s + d.total, 0);
     const totalPaid = payments.reduce((s, p) => s + p.amount, 0);
@@ -233,9 +285,15 @@ export class DebtsService {
   }
 
   /** Shop-wide outstanding total — shown on the ledger header. */
-  async summary(userId: string, shopId: string): Promise<{ outstanding: number; customers: number }> {
+  async summary(
+    userId: string,
+    shopId: string,
+  ): Promise<{ outstanding: number; customers: number }> {
     const accounts = await this.listAccounts(userId, shopId);
-    const outstanding = accounts.reduce((s, a) => s + Math.max(0, a.balance), 0);
+    const outstanding = accounts.reduce(
+      (s, a) => s + Math.max(0, a.balance),
+      0,
+    );
     const customers = accounts.filter((a) => a.balance > 0).length;
     return { outstanding, customers };
   }

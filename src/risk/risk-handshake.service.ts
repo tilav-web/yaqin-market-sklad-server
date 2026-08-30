@@ -7,7 +7,11 @@ import { Repository } from 'typeorm';
 import { RedisService } from '../redis/redis.service';
 import { SETTING_KEYS } from '../settings/entities/global-setting.entity';
 import { SettingsService } from '../settings/settings.service';
-import { RiskFlag, RiskFlagStatus, RiskSubjectType } from './entities/risk-flag.entity';
+import {
+  RiskFlag,
+  RiskFlagStatus,
+  RiskSubjectType,
+} from './entities/risk-flag.entity';
 
 const TOKEN_TTL_SEC = 3 * 60 * 60; // an order rarely stays "delivering" longer than this
 
@@ -29,9 +33,16 @@ export class RiskHandshakeService {
 
   async requiresHandshake(courierUserId: string | null): Promise<boolean> {
     if (!courierUserId) return false;
-    if (this.settings.getNumber(SETTING_KEYS.RISK_QR_HANDSHAKE_ENABLED, 1) === 0) return false;
+    if (
+      this.settings.getNumber(SETTING_KEYS.RISK_QR_HANDSHAKE_ENABLED, 1) === 0
+    )
+      return false;
     const count = await this.flags.count({
-      where: { subjectType: RiskSubjectType.User, subjectId: courierUserId, status: RiskFlagStatus.Confirmed },
+      where: {
+        subjectType: RiskSubjectType.User,
+        subjectId: courierUserId,
+        status: RiskFlagStatus.Confirmed,
+      },
     });
     return count > 0;
   }
@@ -52,7 +63,12 @@ export class RiskHandshakeService {
     const stored = await this.redis.client.get(key);
     if (!stored || stored !== token) return false;
     await this.redis.client.del(key);
-    await this.redis.client.set(`handshake:verified:${orderId}`, '1', 'EX', TOKEN_TTL_SEC);
+    await this.redis.client.set(
+      `handshake:verified:${orderId}`,
+      '1',
+      'EX',
+      TOKEN_TTL_SEC,
+    );
     return true;
   }
 

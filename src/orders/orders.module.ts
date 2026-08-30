@@ -25,7 +25,12 @@ import { ChatMessage } from './entities/chat-message.entity';
 import { OrderItem } from './entities/order-item.entity';
 import { Order } from './entities/order.entity';
 import { Review } from './entities/review.entity';
-import { AdminOrdersController, AdminReviewsController, OrdersController, SellerOrdersController } from './orders.controller';
+import {
+  AdminOrdersController,
+  AdminReviewsController,
+  OrdersController,
+  SellerOrdersController,
+} from './orders.controller';
 import { OrdersService } from './orders.service';
 
 @Module({
@@ -57,7 +62,12 @@ import { OrdersService } from './orders.service';
     FiscalModule,
     RiskModule,
   ],
-  controllers: [OrdersController, SellerOrdersController, AdminOrdersController, AdminReviewsController],
+  controllers: [
+    OrdersController,
+    SellerOrdersController,
+    AdminOrdersController,
+    AdminReviewsController,
+  ],
   providers: [OrdersService],
   exports: [OrdersService],
 })
