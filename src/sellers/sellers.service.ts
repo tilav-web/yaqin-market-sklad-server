@@ -35,7 +35,7 @@ export class SellersService {
       where: { userId, status: SellerApplicationStatus.Pending },
     });
     if (existingPending) {
-      throw new BadRequestException('Sizning oldingi arizangiz hali ko\'rib chiqilmagan');
+      throw new BadRequestException('Sizning do\'kon ochish bo\'yicha arizangiz hali ko\'rib chiqilmagan');
     }
     const app = this.apps.create({
       userId,
