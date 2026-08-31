@@ -2661,4 +2661,3 @@ export class OrdersService {
     return this.fiscal.getReceiptForOrder(orderId, userId, userRoles);
   }
 }
-

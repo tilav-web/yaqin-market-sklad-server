@@ -165,7 +165,9 @@ export class Shop {
     { nullable: true, onDelete: 'SET NULL' },
   )
   @JoinColumn({ name: 'bankAccountId' })
-  bankAccount!: import('../../sellers/entities/seller-bank-account.entity').SellerBankAccount | null;
+  bankAccount!:
+    | import('../../sellers/entities/seller-bank-account.entity').SellerBankAccount
+    | null;
 
   @Column({ type: 'varchar', length: 32, nullable: true })
   bankAccountNumber!: string | null;

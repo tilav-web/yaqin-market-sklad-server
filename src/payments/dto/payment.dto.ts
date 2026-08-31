@@ -26,7 +26,9 @@ export class RequestWithdrawalDto {
   @IsPositive()
   amount!: number;
 
-  @ApiPropertyOptional({ description: 'Shop ID if withdrawing for a specific shop' })
+  @ApiPropertyOptional({
+    description: 'Shop ID if withdrawing for a specific shop',
+  })
   @IsOptional()
   @IsUUID()
   shopId?: string;

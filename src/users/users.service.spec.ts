@@ -62,21 +62,34 @@ describe('UsersService - deleteAccount', () => {
       count: jest.fn().mockResolvedValue(0),
       find: jest.fn().mockResolvedValue([]),
       findOne: jest.fn().mockResolvedValue(null),
-      save: jest.fn().mockImplementation((entityClass, data) => Promise.resolve(data)),
+      save: jest
+        .fn()
+        .mockImplementation((entityClass, data) => Promise.resolve(data)),
       delete: jest.fn().mockResolvedValue({ affected: 1 }),
     };
 
     mockDataSource = {
-      transaction: jest.fn().mockImplementation(async (cb) => cb(mockEntityManager)),
+      transaction: jest
+        .fn()
+        .mockImplementation(async (cb) => cb(mockEntityManager)),
     };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         UsersService,
         { provide: getRepositoryToken(User), useValue: mockUsersRepo },
-        { provide: getRepositoryToken(UserAddress), useValue: mockAddressesRepo },
-        { provide: getRepositoryToken(UserFavoriteShop), useValue: mockFavShopsRepo },
-        { provide: getRepositoryToken(UserFavoriteProduct), useValue: mockFavProductsRepo },
+        {
+          provide: getRepositoryToken(UserAddress),
+          useValue: mockAddressesRepo,
+        },
+        {
+          provide: getRepositoryToken(UserFavoriteShop),
+          useValue: mockFavShopsRepo,
+        },
+        {
+          provide: getRepositoryToken(UserFavoriteProduct),
+          useValue: mockFavProductsRepo,
+        },
         { provide: getRepositoryToken(ShopStaff), useValue: mockShopStaffRepo },
         { provide: getRepositoryToken(Order), useValue: mockOrdersRepo },
         { provide: DataSource, useValue: mockDataSource },
@@ -139,9 +152,7 @@ describe('UsersService - deleteAccount', () => {
       debtBalance: '50000',
     });
 
-    await expect(service.deleteAccount('u1')).rejects.toThrow(
-      /qarz mavjud/i,
-    );
+    await expect(service.deleteAccount('u1')).rejects.toThrow(/qarz mavjud/i);
   });
 
   it('successfully anonymizes and deletes user when all checks pass', async () => {
@@ -169,7 +180,9 @@ describe('UsersService - deleteAccount', () => {
     expect(res.success).toBe(true);
     expect(user.status).toBe(UserStatus.Deleted);
     expect(user.name).toBe("O'chirilgan foydalanuvchi");
-    expect(user.deletionReason).toBe('[bad_experience] Yetkazib berish juda sekin');
+    expect(user.deletionReason).toBe(
+      '[bad_experience] Yetkazib berish juda sekin',
+    );
     expect(user.email).toBeNull();
     expect(user.avatarUrl).toBeNull();
     expect(user.phone).toContain('+998000000000_del_');

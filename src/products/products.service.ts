@@ -21,7 +21,10 @@ import {
 import { Review } from '../orders/entities/review.entity';
 import { PushService } from '../push/push.service';
 import { Shop } from '../shops/entities/shop.entity';
-import { ShopStaff, StaffPermission } from '../shops/entities/shop-staff.entity';
+import {
+  ShopStaff,
+  StaffPermission,
+} from '../shops/entities/shop-staff.entity';
 import { assertShopPermission } from '../shops/shop-access.util';
 import { isDeliveryOpenNow, isShopOpenNow } from '../shops/shop-hours.util';
 import { UserFavoriteShop } from '../users/entities/user-favorite-shop.entity';

@@ -272,7 +272,9 @@ export class UsersService {
     if (s) qb.where('(u.phone ILIKE :q OR u.name ILIKE :q)', { q: `%${s}%` });
     if (opts.sellerOnly) qb.andWhere("u.roles ::text ILIKE '%seller%'");
     if (opts.customerOnly)
-      qb.andWhere("NOT (u.roles ::text ILIKE '%seller%' OR u.roles ::text ILIKE '%admin%')");
+      qb.andWhere(
+        "NOT (u.roles ::text ILIKE '%seller%' OR u.roles ::text ILIKE '%admin%')",
+      );
     if (opts.adminOnly) qb.andWhere("u.roles ::text ILIKE '%admin%'");
     return qb;
   }
@@ -494,7 +496,9 @@ export class UsersService {
       }
 
       // 2. Staff/Courier active deliveries check
-      const userStaffMemberships = await em.find(ShopStaff, { where: { userId } });
+      const userStaffMemberships = await em.find(ShopStaff, {
+        where: { userId },
+      });
       if (userStaffMemberships.length > 0) {
         const staffIds = userStaffMemberships.map((s) => s.id);
         const activeDeliveries = await em.count(Order, {
@@ -509,7 +513,7 @@ export class UsersService {
         });
         if (activeDeliveries > 0) {
           throw new BadRequestException(
-            "Siz hozirda xodim/kuryer sifatida biriktirilgan faol buyurtmalaringiz mavjud. Avval buyurtmalarni topshiring.",
+            'Siz hozirda xodim/kuryer sifatida biriktirilgan faol buyurtmalaringiz mavjud. Avval buyurtmalarni topshiring.',
           );
         }
       }
@@ -587,7 +591,8 @@ export class UsersService {
       user.phone = anonymizedPhone;
       user.status = UserStatus.Deleted;
       user.deletedAt = new Date();
-      user.deletionReason = reasonParts.length > 0 ? reasonParts.join(' ').trim() : null;
+      user.deletionReason =
+        reasonParts.length > 0 ? reasonParts.join(' ').trim() : null;
       user.roles = [Role.Customer];
 
       await em.save(User, user);

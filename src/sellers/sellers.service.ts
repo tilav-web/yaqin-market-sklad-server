@@ -509,9 +509,13 @@ export class SellersService {
       locked.status = SellerApplicationStatus.Approved;
       locked.reviewedByUserId = adminUserId;
       locked.reviewedAt = new Date();
-      const targetUser = await manager.findOne(User, { where: { id: locked.userId } });
+      const targetUser = await manager.findOne(User, {
+        where: { id: locked.userId },
+      });
       if (targetUser) {
-        const roles = Array.from(new Set([...(targetUser.roles ?? [Role.Customer]), Role.Seller]));
+        const roles = Array.from(
+          new Set([...(targetUser.roles ?? [Role.Customer]), Role.Seller]),
+        );
         targetUser.roles = roles;
         await manager.save(User, targetUser);
       }

@@ -59,16 +59,24 @@ export class SimulationFiscalProvider implements FiscalProvider {
   private readonly logger = new Logger(SimulationFiscalProvider.name);
 
   async dispatch(receipt: FiscalReceipt): Promise<FiscalDispatchResult> {
-    const timestamp = (receipt.createdAt ? new Date(receipt.createdAt) : new Date())
+    const timestamp = (
+      receipt.createdAt ? new Date(receipt.createdAt) : new Date()
+    )
       .toISOString()
       .replace(/[-:T]/g, '')
       .slice(0, 14);
     const terminalId = `YM${receipt.orderId.replace(/-/g, '').slice(0, 10).toUpperCase()}`;
-    const fiscalReceiptNumber = String(Math.floor(100000 + Math.random() * 900000));
-    const fiscalSign = String(Math.floor(100000000000 + Math.random() * 900000000000));
+    const fiscalReceiptNumber = String(
+      Math.floor(100000 + Math.random() * 900000),
+    );
+    const fiscalSign = String(
+      Math.floor(100000000000 + Math.random() * 900000000000),
+    );
     const qrUrl = `https://ofd.soliq.uz/check?t=${terminalId}&r=${fiscalReceiptNumber}&c=${timestamp}&s=${fiscalSign}`;
 
-    this.logger.log(`Simulation OFD: dispatched receipt ${receipt.id} -> ${qrUrl}`);
+    this.logger.log(
+      `Simulation OFD: dispatched receipt ${receipt.id} -> ${qrUrl}`,
+    );
     return {
       terminalId,
       fiscalReceiptNumber,
@@ -77,4 +85,3 @@ export class SimulationFiscalProvider implements FiscalProvider {
     };
   }
 }
-

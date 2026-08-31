@@ -107,7 +107,9 @@ export class NotificationsService {
     } else if (input.audience === 'customers') {
       const customers = await this.users
         .createQueryBuilder('u')
-        .where("NOT (u.roles ::text ILIKE '%seller%' OR u.roles ::text ILIKE '%admin%')")
+        .where(
+          "NOT (u.roles ::text ILIKE '%seller%' OR u.roles ::text ILIKE '%admin%')",
+        )
         .select(['u.id'])
         .getMany();
       userIds = customers.map((u) => u.id);

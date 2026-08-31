@@ -436,7 +436,9 @@ export class FiscalService {
       : userRoles === Role.Admin || userRoles === 'admin';
 
     if (!isCustomer && !isShopOwner && !isAdmin) {
-      throw new ForbiddenException("Ushbu buyurtma chekini ko'rish huquqiga ega emassiz");
+      throw new ForbiddenException(
+        "Ushbu buyurtma chekini ko'rish huquqiga ega emassiz",
+      );
     }
 
     let receipt = await this.receipts.findOne({
@@ -455,12 +457,19 @@ export class FiscalService {
 
     // OFD rasmiy formatidagi QR-kod va rekvizitlarni kafolatlash
     if (!receipt.qrUrl) {
-      const timestamp = (receipt.createdAt ? new Date(receipt.createdAt) : new Date())
+      const timestamp = (
+        receipt.createdAt ? new Date(receipt.createdAt) : new Date()
+      )
         .toISOString()
         .replace(/[-:T]/g, '')
         .slice(0, 14);
-      const t = receipt.terminalId || `YM${order.shopId.replace(/-/g, '').slice(0, 10).toUpperCase()}`;
-      const r = receipt.fiscalReceiptNumber || order.orderNumber.replace(/\D/g, '') || '1001';
+      const t =
+        receipt.terminalId ||
+        `YM${order.shopId.replace(/-/g, '').slice(0, 10).toUpperCase()}`;
+      const r =
+        receipt.fiscalReceiptNumber ||
+        order.orderNumber.replace(/\D/g, '') ||
+        '1001';
       const s = receipt.fiscalSign || receipt.id.replace(/-/g, '').slice(0, 12);
       receipt.terminalId = t;
       receipt.fiscalReceiptNumber = r;

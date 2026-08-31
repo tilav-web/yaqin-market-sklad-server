@@ -22,7 +22,11 @@ export class AddUserDeletedStatusAndDeletedAt1788300000000 implements MigrationI
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`ALTER TABLE "users" DROP COLUMN IF EXISTS "deletedAt";`);
-    await queryRunner.query(`ALTER TABLE "users" DROP COLUMN IF EXISTS "deletionReason";`);
+    await queryRunner.query(
+      `ALTER TABLE "users" DROP COLUMN IF EXISTS "deletedAt";`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "users" DROP COLUMN IF EXISTS "deletionReason";`,
+    );
   }
 }

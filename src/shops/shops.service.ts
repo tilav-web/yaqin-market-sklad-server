@@ -85,8 +85,13 @@ export class ShopsService {
     private readonly variants: Repository<ProductVariant>,
     @InjectRepository(GlobalProduct)
     private readonly globalProducts: Repository<GlobalProduct>,
-    @InjectRepository(require('../sellers/entities/seller-bank-account.entity').SellerBankAccount)
-    private readonly bankAccounts: Repository<import('../sellers/entities/seller-bank-account.entity').SellerBankAccount>,
+    @InjectRepository(
+      require('../sellers/entities/seller-bank-account.entity')
+        .SellerBankAccount,
+    )
+    private readonly bankAccounts: Repository<
+      import('../sellers/entities/seller-bank-account.entity').SellerBankAccount
+    >,
     private readonly dataSource: DataSource,
     private readonly auditLog: AuditLogService,
     private readonly settings: SettingsService,
@@ -291,7 +296,10 @@ export class ShopsService {
         shop.bankName = acc.bankName;
         shop.bankAccountHolderName = acc.accountHolderName;
       }
-    } else if (dto.bankAccountNumber && dto.bankAccountNumber.trim().length === 20) {
+    } else if (
+      dto.bankAccountNumber &&
+      dto.bankAccountNumber.trim().length === 20
+    ) {
       const cleanAcc = dto.bankAccountNumber.trim();
       const cleanMfo = (dto.bankMfo || '').trim();
       let acc = await this.bankAccounts.findOne({
@@ -304,10 +312,7 @@ export class ShopsService {
             accountNumber: cleanAcc,
             mfo: cleanMfo,
             bankName: (dto.bankName || '').trim(),
-            accountHolderName: (
-              dto.bankAccountHolderName ||
-              shop.name
-            ).trim(),
+            accountHolderName: (dto.bankAccountHolderName || shop.name).trim(),
             isDefault: false,
           }),
         );
