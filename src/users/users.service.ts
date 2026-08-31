@@ -289,7 +289,17 @@ export class UsersService {
       .take(Math.min(opts.limit ?? 50, 100))
       .skip(Math.max(opts.offset ?? 0, 0));
     const [items, total] = await qb.getManyAndCount();
-    return { items, total };
+    return {
+      items: items.map((u) => {
+        const roles = u.roles ?? [];
+        return {
+          ...u,
+          isSellerApproved: roles.includes(Role.Seller),
+          isAdmin: roles.includes(Role.Admin),
+        };
+      }),
+      total,
+    };
   }
 
   private static readonly EXPORT_ROW_CAP = 5000;
