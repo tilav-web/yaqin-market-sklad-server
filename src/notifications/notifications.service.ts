@@ -6,6 +6,7 @@ import { PushService } from '../push/push.service';
 import { User } from '../users/entities/user.entity';
 import { Notification } from './entities/notification.entity';
 import { NotificationTemplate } from './entities/notification-template.entity';
+import { TemplateDto, UpdateTemplateDto } from './dto/notification.dto';
 import { toLocalizedText } from '../common/types/localized-text.type';
 
 export type Audience = 'all' | 'sellers' | 'customers' | 'specific';
@@ -142,7 +143,7 @@ export class NotificationsService {
     return this.templates.find({ order: { createdAt: 'DESC' } });
   }
 
-  createTemplate(dto: any): Promise<NotificationTemplate> {
+  createTemplate(dto: TemplateDto): Promise<NotificationTemplate> {
     const title = toLocalizedText(
       dto.titleI18n || {
           uz: dto.titleUzLatn,
@@ -169,7 +170,10 @@ export class NotificationsService {
     return this.templates.save(t);
   }
 
-  async updateTemplate(id: string, dto: any): Promise<NotificationTemplate> {
+  async updateTemplate(
+    id: string,
+    dto: UpdateTemplateDto,
+  ): Promise<NotificationTemplate> {
     const t = await this.templates.findOne({ where: { id } });
     if (!t) throw new NotFoundException('Shablon topilmadi');
     if (dto.name !== undefined) t.name = dto.name;

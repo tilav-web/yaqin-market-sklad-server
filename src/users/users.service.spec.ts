@@ -4,11 +4,8 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 
 import { AuditLogService } from '../audit-log/audit-log.service';
-import { Order, OrderStatus } from '../orders/entities/order.entity';
+import { Order } from '../orders/entities/order.entity';
 import { DeviceToken } from '../push/entities/device-token.entity';
-import { SellerBalance } from '../payments/entities/seller-balance.entity';
-import { SellerBankAccount } from '../sellers/entities/seller-bank-account.entity';
-import { Shop } from '../shops/entities/shop.entity';
 import { ShopStaff } from '../shops/entities/shop-staff.entity';
 import { RiskService } from '../risk/risk.service';
 import { UserAddress } from './entities/user-address.entity';

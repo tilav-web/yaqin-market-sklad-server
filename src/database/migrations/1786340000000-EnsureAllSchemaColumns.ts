@@ -50,7 +50,7 @@ export class EnsureAllSchemaColumns1786340000000 implements MigrationInterface {
     `);
   }
 
-  public async down(queryRunner: QueryRunner): Promise<void> {
+  public async down(_queryRunner: QueryRunner): Promise<void> {
     // No-op for safety
   }
 }

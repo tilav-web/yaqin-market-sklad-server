@@ -1011,7 +1011,6 @@ async function seed() {
   const variantNameMap = new Map<string, string>();
   let variantCount = 0;
 
-  const catalogEntries = [...globalProductMap.entries()];
   for (let si = 0; si < shops.length; si++) {
     const shop = shops[si];
     const def = SHOPS[si];
@@ -1245,9 +1244,7 @@ async function seed() {
   OWNERS.forEach((o, i) =>
     console.log(`   Owner ${i + 1}:  ${o.phone}  (${o.name})`),
   );
-  CUSTOMERS.forEach((c, i) =>
-    console.log(`   Customer: ${c.phone}  (${c.name})`),
-  );
+  CUSTOMERS.forEach((c) => console.log(`   Customer: ${c.phone}  (${c.name})`));
   console.log(
     `\n   Shops are within ~2km of ${CENTER.lat}, ${CENTER.lng} (Qarshi).`,
   );

@@ -17,6 +17,7 @@ import {
 import { PushService } from '../push/push.service';
 import { User } from '../users/entities/user.entity';
 import { toLocalizedText } from '../common/types/localized-text.type';
+import { CreatePrimePlanDto, UpdatePrimePlanDto } from './dto/prime-plan.dto';
 import { PrimePlan } from './entities/prime-plan.entity';
 import { SellerSubscription } from './entities/seller-subscription.entity';
 
@@ -50,7 +51,7 @@ export class PrimeService {
     return this.plans.findOne({ where: { id } });
   }
 
-  createPlan(dto: any): Promise<PrimePlan> {
+  createPlan(dto: CreatePrimePlanDto): Promise<PrimePlan> {
     const name = toLocalizedText(
       dto.nameI18n || {
           uz: dto.nameUzLatn,
@@ -87,7 +88,7 @@ export class PrimeService {
     return this.plans.save(plan);
   }
 
-  async updatePlan(id: string, dto: any): Promise<PrimePlan> {
+  async updatePlan(id: string, dto: UpdatePrimePlanDto): Promise<PrimePlan> {
     const plan = await this.plans.findOne({ where: { id } });
     if (!plan) throw new NotFoundException();
 

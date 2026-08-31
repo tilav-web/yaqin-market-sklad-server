@@ -23,6 +23,7 @@ import {
   FiscalReceiptType,
 } from './entities/fiscal-receipt.entity';
 import { TaxCategory } from './entities/tax-category.entity';
+import { CreateTaxCategoryDto, UpdateTaxCategoryDto } from './dto/fiscal.dto';
 import { FISCAL_PROVIDER } from './fiscal-provider.interface';
 import type { FiscalProvider } from './fiscal-provider.interface';
 import { toLocalizedText } from '../common/types/localized-text.type';
@@ -588,7 +589,7 @@ export class FiscalService {
     return this.taxCategories.find();
   }
 
-  async createTaxCategory(dto: any): Promise<TaxCategory> {
+  async createTaxCategory(dto: CreateTaxCategoryDto): Promise<TaxCategory> {
     const title = toLocalizedText(
       dto.titleI18n || {
           uz: dto.titleUzLatn,
@@ -607,7 +608,10 @@ export class FiscalService {
     return this.taxCategories.save(cat);
   }
 
-  async updateTaxCategory(id: string, dto: any): Promise<TaxCategory> {
+  async updateTaxCategory(
+    id: string,
+    dto: UpdateTaxCategoryDto,
+  ): Promise<TaxCategory> {
     const tax = await this.taxCategories.findOne({ where: { id } });
     if (!tax) throw new NotFoundException('Soliq toifasi topilmadi');
     if (

@@ -17,6 +17,7 @@ import {
   ValidateIf,
 } from 'class-validator';
 
+import type { LocalizedInput } from '../../common/types/localized-text.type';
 import { BrakReasonCode } from '../entities/inventory-movement.entity';
 import type { UnitType } from '../entities/global-product.entity';
 
@@ -318,11 +319,11 @@ export class AdminCreateGlobalProductDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  nameI18n?: any;
+  nameI18n?: LocalizedInput;
 
   @ApiPropertyOptional()
   @IsOptional()
-  descriptionI18n?: any;
+  descriptionI18n?: LocalizedInput;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -424,11 +425,11 @@ export class AdminUpdateGlobalProductDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  nameI18n?: any;
+  nameI18n?: LocalizedInput;
 
   @ApiPropertyOptional()
   @IsOptional()
-  descriptionI18n?: any;
+  descriptionI18n?: LocalizedInput;
 
   @ApiPropertyOptional()
   @IsOptional()

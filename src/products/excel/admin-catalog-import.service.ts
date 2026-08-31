@@ -239,8 +239,8 @@ export class AdminCatalogImportService {
           }),
         );
         created++;
-      } catch (e: any) {
-        if (e?.code === '23505') {
+      } catch (e) {
+        if ((e as { code?: string })?.code === '23505') {
           skipped++;
           continue;
         }

@@ -70,21 +70,63 @@ export class BroadcastDto {
   richBody?: string;
 }
 
+import type { LocalizedInput } from '../../common/types/localized-text.type';
+
 export class TemplateDto {
   @ApiProperty()
   @IsString()
   @MaxLength(128)
   name!: string;
 
-  @ApiProperty()
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsString()
   @MaxLength(128)
-  title!: string;
+  title?: string;
 
-  @ApiProperty()
+  @ApiPropertyOptional()
+  @IsOptional()
+  titleI18n?: LocalizedInput;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  titleUzLatn?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  titleUzCyrl?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  titleRu?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsString()
   @MaxLength(512)
-  body!: string;
+  body?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  bodyI18n?: LocalizedInput;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  bodyUzLatn?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  bodyUzCyrl?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  bodyRu?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -113,9 +155,47 @@ export class UpdateTemplateDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  titleI18n?: LocalizedInput;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  titleUzLatn?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  titleUzCyrl?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  titleRu?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsString()
   @MaxLength(512)
   body?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  bodyI18n?: LocalizedInput;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  bodyUzLatn?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  bodyUzCyrl?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  bodyRu?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

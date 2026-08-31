@@ -10,11 +10,33 @@ import {
   MaxLength,
 } from 'class-validator';
 
+import type { LocalizedInput } from '../../common/types/localized-text.type';
+
 export class CreatePrimePlanDto {
-  @ApiProperty()
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsString()
   @MaxLength(64)
-  name!: string;
+  name?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  nameI18n?: LocalizedInput;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  nameUzLatn?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  nameUzCyrl?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  nameRu?: string;
 
   @ApiProperty({ example: '99000' })
   @IsNumberString()
@@ -33,6 +55,25 @@ export class CreatePrimePlanDto {
   @IsOptional()
   @IsString()
   description?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  descriptionI18n?: LocalizedInput;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  descriptionUzLatn?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  descriptionUzCyrl?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  descriptionRu?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -63,6 +104,25 @@ export class UpdatePrimePlanDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  nameI18n?: LocalizedInput;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  nameUzLatn?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  nameUzCyrl?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  nameRu?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsNumberString()
   monthlyPrice?: string;
 
@@ -80,6 +140,25 @@ export class UpdatePrimePlanDto {
   @IsOptional()
   @IsString()
   description?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  descriptionI18n?: LocalizedInput;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  descriptionUzLatn?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  descriptionUzCyrl?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  descriptionRu?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

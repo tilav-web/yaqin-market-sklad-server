@@ -9,6 +9,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 
+import { SellerBankAccount } from '../../sellers/entities/seller-bank-account.entity';
 import { User } from '../../users/entities/user.entity';
 
 export interface WorkingHourSlot {
@@ -158,16 +159,12 @@ export class Shop {
   @Column({ type: 'uuid', nullable: true })
   bankAccountId!: string | null;
 
-  @ManyToOne(
-    () =>
-      require('../../sellers/entities/seller-bank-account.entity')
-        .SellerBankAccount,
-    { nullable: true, onDelete: 'SET NULL' },
-  )
+  @ManyToOne(() => SellerBankAccount, {
+    nullable: true,
+    onDelete: 'SET NULL',
+  })
   @JoinColumn({ name: 'bankAccountId' })
-  bankAccount!:
-    | import('../../sellers/entities/seller-bank-account.entity').SellerBankAccount
-    | null;
+  bankAccount!: SellerBankAccount | null;
 
   @Column({ type: 'varchar', length: 32, nullable: true })
   bankAccountNumber!: string | null;

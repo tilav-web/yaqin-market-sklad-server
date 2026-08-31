@@ -8,11 +8,33 @@ import {
   MaxLength,
 } from 'class-validator';
 
+import type { LocalizedInput } from '../../common/types/localized-text.type';
+
 export class CreateTaxCategoryDto {
-  @ApiProperty({ example: 'Gazlangan ichimliklar (PET)' })
+  @ApiPropertyOptional({ example: 'Gazlangan ichimliklar (PET)' })
+  @IsOptional()
   @IsString()
   @MaxLength(256)
-  title!: string;
+  title?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  titleI18n?: LocalizedInput;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  titleUzLatn?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  titleUzCyrl?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  titleRu?: string;
 
   @ApiProperty({
     example: '02202001001000000',
@@ -48,6 +70,25 @@ export class UpdateTaxCategoryDto {
   @IsString()
   @MaxLength(256)
   title?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  titleI18n?: LocalizedInput;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  titleUzLatn?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  titleUzCyrl?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  titleRu?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

@@ -8,7 +8,6 @@ import {
   Logger,
   Param,
   Post,
-  Request,
 } from '@nestjs/common';
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -30,8 +29,8 @@ export class ClickController {
 
   /** Customer: get Click payment URL for their order. */
   @Get('orders/:id/url')
-  getPaymentUrl(@Param('id') id: string, @Request() req: any) {
-    return this.clickService.getPaymentUrl(id, req.user.sub);
+  getPaymentUrl(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
+    return this.clickService.getPaymentUrl(id, user.sub);
   }
 
   /** Customer: pay for an order with a previously saved card — no redirect. */

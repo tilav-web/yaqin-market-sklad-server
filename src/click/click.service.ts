@@ -239,10 +239,10 @@ export class ClickService {
       let saved: ClickPaymentTransaction;
       try {
         saved = await em.save(ClickPaymentTransaction, tx);
-      } catch (e: any) {
+      } catch (e) {
         // Unique orderId race: a concurrent prepare() call inserted first —
         // fall back to locking and updating the row that won the race.
-        if (e?.code === '23505') {
+        if ((e as { code?: string })?.code === '23505') {
           const winner = await em.findOne(ClickPaymentTransaction, {
             where: { orderId: order.id },
             lock: { mode: 'pessimistic_write' },

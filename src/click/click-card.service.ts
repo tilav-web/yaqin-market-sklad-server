@@ -210,8 +210,8 @@ export class ClickCardService {
       }
       try {
         return await em.save(ClickPaymentTransaction, tx);
-      } catch (e: any) {
-        if (e?.code === '23505') {
+      } catch (e) {
+        if ((e as { code?: string })?.code === '23505') {
           const winner = await em.findOne(ClickPaymentTransaction, {
             where: { orderId: order.id },
             lock: { mode: 'pessimistic_write' },

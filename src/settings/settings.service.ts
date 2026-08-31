@@ -333,7 +333,7 @@ export class SettingsService implements OnModuleInit {
   ): Promise<{
     success: boolean;
     status: number;
-    data?: any;
+    data?: unknown;
     error?: string;
     message: string;
   }> {

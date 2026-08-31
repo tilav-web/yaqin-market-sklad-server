@@ -7,9 +7,10 @@ import {
   Post,
   Put,
   Query,
-  Request,
 } from '@nestjs/common';
 
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import type { JwtPayload } from '../auth/decorators/current-user.decorator';
 import { Role } from '../auth/role.enum';
 import { Roles } from '../auth/decorators/roles.decorator';
 import {
@@ -33,18 +34,18 @@ export class SellerPrimeController {
   }
 
   @Get('subscription')
-  activeSub(@Request() req: any) {
-    return this.svc.getActiveSub(req.user.sub);
+  activeSub(@CurrentUser() user: JwtPayload) {
+    return this.svc.getActiveSub(user.sub);
   }
 
   @Get('subscriptions')
-  history(@Request() req: any) {
-    return this.svc.listMySubscriptions(req.user.sub);
+  history(@CurrentUser() user: JwtPayload) {
+    return this.svc.listMySubscriptions(user.sub);
   }
 
   @Post('subscribe')
-  subscribe(@Request() req: any, @Body() body: SubscribeDto) {
-    return this.svc.subscribe(req.user.sub, body.planId, body.yearly ?? false);
+  subscribe(@CurrentUser() user: JwtPayload, @Body() body: SubscribeDto) {
+    return this.svc.subscribe(user.sub, body.planId, body.yearly ?? false);
   }
 }
 
@@ -88,9 +89,9 @@ export class AdminPrimeController {
   @Put('subscriptions/:id/extend')
   extend(
     @Param('id') id: string,
-    @Request() req: any,
+    @CurrentUser() user: JwtPayload,
     @Body() dto: ExtendPrimeSubDto,
   ) {
-    return this.svc.adminExtend(id, dto.days, req.user.sub);
+    return this.svc.adminExtend(id, dto.days, user.sub);
   }
 }

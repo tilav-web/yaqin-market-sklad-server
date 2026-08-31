@@ -17,6 +17,7 @@ import { Order, OrderStatus } from '../orders/entities/order.entity';
 import { GlobalProduct } from '../products/entities/global-product.entity';
 import { ProductVariant } from '../products/entities/product-variant.entity';
 import { Role } from '../auth/role.enum';
+import { SellerBankAccount } from '../sellers/entities/seller-bank-account.entity';
 import { User } from '../users/entities/user.entity';
 import {
   boundingBox,
@@ -85,13 +86,8 @@ export class ShopsService {
     private readonly variants: Repository<ProductVariant>,
     @InjectRepository(GlobalProduct)
     private readonly globalProducts: Repository<GlobalProduct>,
-    @InjectRepository(
-      require('../sellers/entities/seller-bank-account.entity')
-        .SellerBankAccount,
-    )
-    private readonly bankAccounts: Repository<
-      import('../sellers/entities/seller-bank-account.entity').SellerBankAccount
-    >,
+    @InjectRepository(SellerBankAccount)
+    private readonly bankAccounts: Repository<SellerBankAccount>,
     private readonly dataSource: DataSource,
     private readonly auditLog: AuditLogService,
     private readonly settings: SettingsService,

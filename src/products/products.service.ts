@@ -32,6 +32,7 @@ import { User } from '../users/entities/user.entity';
 import { Category } from '../categories/entities/category.entity';
 import { slugify } from '../common/utils/slug.util';
 import {
+  LocalizedInput,
   LocalizedText,
   toLocalizedText,
 } from '../common/types/localized-text.type';
@@ -238,9 +239,9 @@ export class ProductsService {
           expiryDate: dto.expiryDate ? new Date(dto.expiryDate) : null,
         });
         saved = await manager.save(variant);
-      } catch (e: any) {
+      } catch (e) {
         // PostgreSQL unique violation: (shopId, globalProductId)
-        if (e?.code === '23505') {
+        if ((e as { code?: string })?.code === '23505') {
           throw new ConflictException(
             "Bu mahsulot do'koningizda allaqachon mavjud",
           );
@@ -349,8 +350,8 @@ export class ProductsService {
           expiryDate: dto.expiryDate ? new Date(dto.expiryDate) : null,
         });
         saved = await manager.save(variant);
-      } catch (e: any) {
-        if (e?.code === '23505') {
+      } catch (e) {
+        if ((e as { code?: string })?.code === '23505') {
           throw new ConflictException(
             "Bu mahsulot do'koningizda allaqachon mavjud",
           );
@@ -956,7 +957,7 @@ export class ProductsService {
       ).map((v) => [v.id, v.globalProduct]),
     );
     const costs = await this.costSummaries(variants.map((v) => v.id));
-    return (variants as unknown as VariantWithGlobal[]).map((v: any) => ({
+    return (variants as unknown as VariantWithGlobal[]).map((v) => ({
       ...v,
       name: globalMap.get(v.id)?.name ?? '',
       brand: globalMap.get(v.id)?.brand ?? null,
@@ -1071,8 +1072,8 @@ export class ProductsService {
   private buildVariantWithGlobal(
     variants: (ProductVariant & { globalProduct?: GlobalProduct })[],
   ): VariantWithGlobal[] {
-    return variants.map((v: any) => {
-      const gp = v.globalProduct ?? {};
+    return variants.map((v) => {
+      const gp = v.globalProduct ?? ({} as Partial<GlobalProduct>);
       const nameStr =
         (typeof gp.name === 'object'
           ? gp.name?.uz || gp.name?.ru || gp.name?.kr
@@ -1104,7 +1105,7 @@ export class ProductsService {
       relations: { globalProduct: true },
     });
     if (!variant) throw new NotFoundException('Mahsulot topilmadi');
-    const gp = (variant as any).globalProduct as GlobalProduct;
+    const gp = variant.globalProduct as GlobalProduct | undefined;
 
     // Siblings: other variants in this shop within the same size group
     let siblings: VariantWithGlobal[] = [];
@@ -1201,8 +1202,8 @@ export class ProductsService {
       .take(50)
       .getMany();
 
-    return variants.map((v: any) => {
-      const s = v.shop as Shop;
+    return variants.map((v) => {
+      const s = v.shop as Shop | undefined;
       const distanceKm =
         userLat && userLng && s?.latitude && s?.longitude
           ? haversineKm(userLat, userLng, s.latitude, s.longitude)
@@ -1247,8 +1248,8 @@ export class ProductsService {
       .take(50)
       .getMany();
 
-    return variants.map((v: any) => {
-      const s = v.shop as Shop;
+    return variants.map((v) => {
+      const s = v.shop as Shop | undefined;
       const distanceKm =
         userLat && userLng && s?.latitude && s?.longitude
           ? haversineKm(userLat, userLng, s.latitude, s.longitude)
@@ -1278,10 +1279,7 @@ export class ProductsService {
       .getMany();
     if (variants.length === 0) return [];
     const nameMap = new Map(
-      variants.map((v: any) => [
-        v.id,
-        (v.globalProduct as GlobalProduct)?.name ?? '',
-      ]),
+      variants.map((v) => [v.id, v.globalProduct?.name ?? '']),
     );
     const reviews = await this.reviews.find({
       where: { productVariantId: In([...nameMap.keys()]) },
@@ -1295,7 +1293,7 @@ export class ProductsService {
       text: r.text,
       createdAt: r.createdAt,
       userName: r.user?.name ?? 'Foydalanuvchi',
-      productName: nameMap.get(r.productVariantId) ?? '',
+      productName: nameMap.get(r.productVariantId ?? '') ?? '',
     }));
   }
 
@@ -1778,8 +1776,8 @@ export class ProductsService {
 
   async adminCreateGlobalProduct(dto: {
     slug?: string;
-    nameI18n?: any;
-    descriptionI18n?: any;
+    nameI18n?: LocalizedInput;
+    descriptionI18n?: LocalizedInput;
     name?: string;
     nameUzLatn?: string;
     nameUzCyrl?: string;
@@ -1860,8 +1858,8 @@ export class ProductsService {
     id: string,
     dto: Partial<{
       slug: string;
-      nameI18n: any;
-      descriptionI18n: any;
+      nameI18n: LocalizedInput;
+      descriptionI18n: LocalizedInput;
       name: string;
       nameUzLatn: string;
       nameUzCyrl: string;
@@ -2070,10 +2068,10 @@ export class ProductsService {
       .orderBy('v.price', 'ASC')
       .getMany();
 
-    return rows.map((v: any) => ({
+    return rows.map((v) => ({
       variantId: v.id,
-      shopId: (v.shop as Shop)?.id ?? v.shopId,
-      shopName: (v.shop as Shop)?.name ?? '',
+      shopId: (v.shop as Shop | undefined)?.id ?? v.shopId,
+      shopName: (v.shop as Shop | undefined)?.name ?? '',
       price: v.price,
       discountPrice: v.discountPrice,
       stock: v.stock,
