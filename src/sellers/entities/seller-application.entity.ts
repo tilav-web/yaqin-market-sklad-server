@@ -56,13 +56,29 @@ export class SellerApplication {
   @Column({ type: 'varchar', length: 512, nullable: true })
   legalAddress!: string | null;
 
-  /** 16 xonali Uzcard / Humo karta raqami */
+  /** 16 xonali Uzcard / Humo karta raqami (legacy) */
   @Column({ type: 'varchar', length: 32, nullable: true })
   bankCardNumber!: string | null;
 
   /** Karta egasining to'liq F.I.SH. */
   @Column({ type: 'varchar', length: 128, nullable: true })
   bankCardHolderName!: string | null;
+
+  /** 20 xonali bank hisob raqami */
+  @Column({ type: 'varchar', length: 32, nullable: true })
+  bankAccountNumber!: string | null;
+
+  /** 5 xonali bank MFO kodi */
+  @Column({ type: 'varchar', length: 16, nullable: true })
+  bankMfo!: string | null;
+
+  /** Bank nomi */
+  @Column({ type: 'varchar', length: 128, nullable: true })
+  bankName!: string | null;
+
+  /** Hisob egasi / Korxona nomi */
+  @Column({ type: 'varchar', length: 128, nullable: true })
+  bankAccountHolderName!: string | null;
 
   /** my.soliq.uz da TILAV MChJ ni komissioner qilib qo'shganini tasdiqlagan */
   @Column({ type: 'boolean', default: false })

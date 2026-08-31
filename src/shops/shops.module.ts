@@ -21,6 +21,8 @@ import { ShopStaff } from './entities/shop-staff.entity';
 import { ShopStaffPreset } from './entities/shop-staff-preset.entity';
 import { StaffInvitation } from './entities/staff-invitation.entity';
 
+import { SellerBankAccount } from '../sellers/entities/seller-bank-account.entity';
+
 @Module({
   imports: [
     TypeOrmModule.forFeature([
@@ -32,6 +34,7 @@ import { StaffInvitation } from './entities/staff-invitation.entity';
       Order,
       ProductVariant,
       GlobalProduct,
+      SellerBankAccount,
     ]),
     ComplaintsModule,
     AuditLogModule,

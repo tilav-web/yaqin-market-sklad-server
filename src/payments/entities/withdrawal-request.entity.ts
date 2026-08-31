@@ -25,12 +25,31 @@ export class WithdrawalRequest {
   @Column({ type: 'decimal', precision: 15, scale: 2 })
   amount!: string;
 
-  /** Snapshot at request time */
-  @Column({ type: 'varchar', length: 16 })
-  bankCardNumber!: string;
+  @Column({ type: 'uuid', nullable: true })
+  shopId!: string | null;
 
-  @Column({ type: 'varchar', length: 128 })
-  bankCardHolderName!: string;
+  /** Legacy card number or optional fallback */
+  @Column({ type: 'varchar', length: 32, nullable: true })
+  bankCardNumber!: string | null;
+
+  @Column({ type: 'varchar', length: 128, nullable: true })
+  bankCardHolderName!: string | null;
+
+  /** 20-digit bank account number for B2B payment order */
+  @Column({ type: 'varchar', length: 32, nullable: true })
+  bankAccountNumber!: string | null;
+
+  /** 5-digit bank MFO code */
+  @Column({ type: 'varchar', length: 16, nullable: true })
+  bankMfo!: string | null;
+
+  /** Bank name */
+  @Column({ type: 'varchar', length: 128, nullable: true })
+  bankName!: string | null;
+
+  /** Recipient / Account holder name */
+  @Column({ type: 'varchar', length: 128, nullable: true })
+  recipientName!: string | null;
 
   @Column({
     type: 'enum',

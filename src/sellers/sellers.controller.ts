@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseUUIDPipe,
@@ -19,6 +20,7 @@ import { SellerApplicationStatus } from './entities/seller-application.entity';
 import {
   ApproveApplicationDto,
   CreateSellerApplicationDto,
+  CreateSellerBankAccountDto,
   RejectApplicationDto,
   SetKomissionerStatusDto,
   UpsertSellerProfileDto,
@@ -62,6 +64,27 @@ export class SellersController {
     @Body() dto: CreateSellerApplicationDto,
   ) {
     return this.sellers.submitApplication(user.sub, dto);
+  }
+
+  @Get('bank-accounts')
+  listBankAccounts(@CurrentUser() user: JwtPayload) {
+    return this.sellers.listBankAccounts(user.sub);
+  }
+
+  @Post('bank-accounts')
+  createBankAccount(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: CreateSellerBankAccountDto,
+  ) {
+    return this.sellers.createBankAccount(user.sub, dto);
+  }
+
+  @Delete('bank-accounts/:id')
+  deleteBankAccount(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.sellers.deleteBankAccount(user.sub, id);
   }
 
   @Get('my-applications')

@@ -149,13 +149,35 @@ export class Shop {
   @Column({ type: 'boolean', default: false })
   deactivatedByDebt!: boolean;
 
-  /**
-   * When the owner last opened this shop's orders. New orders created after
-   * this moment are "unseen" and drive the profile notification badge; opening
-   * the orders tab refreshes it so the badge clears.
-   */
   @Column({ type: 'timestamptz', nullable: true })
   ownerOrdersSeenAt!: Date | null;
+
+  /**
+   * Linked bank account (from SellerBankAccount) or snapshot fields for payouts.
+   */
+  @Column({ type: 'uuid', nullable: true })
+  bankAccountId!: string | null;
+
+  @ManyToOne(
+    () =>
+      require('../../sellers/entities/seller-bank-account.entity')
+        .SellerBankAccount,
+    { nullable: true, onDelete: 'SET NULL' },
+  )
+  @JoinColumn({ name: 'bankAccountId' })
+  bankAccount!: import('../../sellers/entities/seller-bank-account.entity').SellerBankAccount | null;
+
+  @Column({ type: 'varchar', length: 32, nullable: true })
+  bankAccountNumber!: string | null;
+
+  @Column({ type: 'varchar', length: 16, nullable: true })
+  bankMfo!: string | null;
+
+  @Column({ type: 'varchar', length: 128, nullable: true })
+  bankName!: string | null;
+
+  @Column({ type: 'varchar', length: 128, nullable: true })
+  bankAccountHolderName!: string | null;
 
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt!: Date;

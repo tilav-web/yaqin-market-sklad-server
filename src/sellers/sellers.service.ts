@@ -14,7 +14,9 @@ import {
   SellerApplication,
   SellerApplicationStatus,
 } from './entities/seller-application.entity';
+import { SellerBankAccount } from './entities/seller-bank-account.entity';
 import { SellerProfile } from './entities/seller-profile.entity';
+import { CreateSellerBankAccountDto } from './dto/seller-application.dto';
 
 @Injectable()
 export class SellersService {
@@ -25,6 +27,8 @@ export class SellersService {
     private readonly users: Repository<User>,
     @InjectRepository(SellerProfile)
     private readonly profiles: Repository<SellerProfile>,
+    @InjectRepository(SellerBankAccount)
+    private readonly bankAccounts: Repository<SellerBankAccount>,
     private readonly payments: PaymentsService,
     private readonly settingsService: SettingsService,
     private readonly dataSource: DataSource,
@@ -282,6 +286,10 @@ export class SellersService {
       legalAddress?: string;
       bankCardNumber?: string;
       bankCardHolderName?: string;
+      bankAccountNumber?: string;
+      bankMfo?: string;
+      bankName?: string;
+      bankAccountHolderName?: string;
       soliqConfirmed?: boolean;
       ofertaAccepted?: boolean;
       note?: string;
@@ -306,12 +314,104 @@ export class SellersService {
       legalAddress: dto.legalAddress ?? null,
       bankCardNumber: dto.bankCardNumber ?? null,
       bankCardHolderName: dto.bankCardHolderName ?? null,
+      bankAccountNumber: dto.bankAccountNumber ?? null,
+      bankMfo: dto.bankMfo ?? null,
+      bankName: dto.bankName ?? null,
+      bankAccountHolderName: dto.bankAccountHolderName ?? null,
       soliqConfirmed: dto.soliqConfirmed ?? false,
       ofertaAccepted: dto.ofertaAccepted ?? false,
       note: dto.note ?? null,
       status: SellerApplicationStatus.Pending,
     });
-    return this.apps.save(app);
+
+    const savedApp = await this.apps.save(app);
+
+    // Save to SellerBankAccount as well if 20-digit bank account is provided
+    if (dto.bankAccountNumber && dto.bankAccountNumber.trim().length >= 10) {
+      const acc = dto.bankAccountNumber.trim();
+      const existing = await this.bankAccounts.findOne({
+        where: { userId, accountNumber: acc },
+      });
+      if (!existing) {
+        await this.bankAccounts.save(
+          this.bankAccounts.create({
+            userId,
+            accountNumber: acc,
+            mfo: (dto.bankMfo || '').trim(),
+            bankName: (dto.bankName || '').trim(),
+            accountHolderName: (
+              dto.bankAccountHolderName ||
+              dto.companyName ||
+              `${dto.firstName} ${dto.lastName}`
+            ).trim(),
+            isDefault: true,
+          }),
+        );
+      }
+    }
+
+    return savedApp;
+  }
+
+  // --- Bank Account Management ---
+  async listBankAccounts(userId: string): Promise<SellerBankAccount[]> {
+    return this.bankAccounts.find({
+      where: { userId },
+      order: { isDefault: 'DESC', createdAt: 'DESC' },
+    });
+  }
+
+  async createBankAccount(
+    userId: string,
+    dto: CreateSellerBankAccountDto,
+  ): Promise<SellerBankAccount> {
+    const cleanAcc = (dto.accountNumber || '').replace(/\D/g, '');
+    if (cleanAcc.length !== 20) {
+      throw new BadRequestException(
+        "Bank hisob raqami 20 ta raqamdan iborat bo'lishi kerak (masalan: 20208...)",
+      );
+    }
+    const cleanMfo = (dto.mfo || '').replace(/\D/g, '');
+    if (cleanMfo.length !== 5) {
+      throw new BadRequestException(
+        "Bank MFO kodi 5 ta raqamdan iborat bo'lishi kerak (masalan: 00444)",
+      );
+    }
+
+    const existing = await this.bankAccounts.findOne({
+      where: { userId, accountNumber: cleanAcc },
+    });
+    if (existing) {
+      existing.mfo = cleanMfo;
+      existing.bankName = dto.bankName.trim();
+      existing.accountHolderName = dto.accountHolderName.trim();
+      if (dto.isDefault) {
+        await this.bankAccounts.update({ userId }, { isDefault: false });
+        existing.isDefault = true;
+      }
+      return this.bankAccounts.save(existing);
+    }
+
+    const count = await this.bankAccounts.count({ where: { userId } });
+    if (dto.isDefault || count === 0) {
+      await this.bankAccounts.update({ userId }, { isDefault: false });
+    }
+
+    const newAcc = this.bankAccounts.create({
+      userId,
+      accountNumber: cleanAcc,
+      mfo: cleanMfo,
+      bankName: dto.bankName.trim(),
+      accountHolderName: dto.accountHolderName.trim(),
+      isDefault: dto.isDefault || count === 0,
+    });
+    return this.bankAccounts.save(newAcc);
+  }
+
+  async deleteBankAccount(userId: string, id: string): Promise<void> {
+    const acc = await this.bankAccounts.findOne({ where: { id, userId } });
+    if (!acc) throw new NotFoundException('Hisob raqam topilmadi');
+    await this.bankAccounts.remove(acc);
   }
 
   listMyApplications(userId: string): Promise<SellerApplication[]> {
@@ -385,6 +485,12 @@ export class SellersService {
         profile.bankCardNumber = locked.bankCardNumber;
       if (locked.bankCardHolderName && !profileDto.bankCardHolderName)
         profile.bankCardHolderName = locked.bankCardHolderName;
+      if (locked.bankAccountNumber)
+        profile.bankAccountNumber = locked.bankAccountNumber;
+      if (locked.bankMfo) profile.bankMfo = locked.bankMfo;
+      if (locked.bankName) profile.bankName = locked.bankName;
+      if (locked.bankAccountHolderName)
+        profile.bankAccountHolderName = locked.bankAccountHolderName;
       if (!profileDto.fullName)
         profile.fullName = `${locked.firstName} ${locked.lastName}`.trim();
 

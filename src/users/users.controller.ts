@@ -64,6 +64,11 @@ export class UsersController {
     return this.users.updateProfile(user.sub, dto);
   }
 
+  @Delete()
+  async deleteMe(@CurrentUser() user: JwtPayload) {
+    return this.users.deleteAccount(user.sub);
+  }
+
   @Get('addresses')
   listAddresses(@CurrentUser() user: JwtPayload) {
     return this.users.listAddresses(user.sub);

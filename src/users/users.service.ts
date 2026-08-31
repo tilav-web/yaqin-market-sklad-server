@@ -1,15 +1,24 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, In, Repository } from 'typeorm';
 
 import { Role } from '../auth/role.enum';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { AuditAction } from '../audit-log/entities/admin-audit-log.entity';
 import { buildXlsxBuffer } from '../common/xlsx.util';
 import { LocationEvidenceDto, buildEvidence } from '../geo/location-evidence';
-import { Order } from '../orders/entities/order.entity';
-import { RiskService } from '../risk/risk.service';
+import { Order, OrderStatus } from '../orders/entities/order.entity';
+import { DeviceToken } from '../push/entities/device-token.entity';
+import { SellerBalance } from '../payments/entities/seller-balance.entity';
+import { SellerBankAccount } from '../sellers/entities/seller-bank-account.entity';
+import { Shop } from '../shops/entities/shop.entity';
 import { ShopStaff } from '../shops/entities/shop-staff.entity';
+import { RiskService } from '../risk/risk.service';
 import { UserAddress } from './entities/user-address.entity';
 import { User, UserGender, UserStatus } from './entities/user.entity';
 
@@ -24,6 +33,7 @@ export class UsersService {
     private readonly shopStaff: Repository<ShopStaff>,
     @InjectRepository(Order)
     private readonly orders: Repository<Order>,
+    private readonly dataSource: DataSource,
     private readonly auditLog: AuditLogService,
     private readonly risk: RiskService,
   ) {}
@@ -63,10 +73,19 @@ export class UsersService {
   async upsertByPhone(phone: string): Promise<User> {
     let user = await this.findByPhone(phone);
     if (user) {
+      if (user.status === UserStatus.Blocked) {
+        throw new ForbiddenException(
+          "Sizning hisobingiz bloklangan. Qo'llab-quvvatlash xizmatiga murojaat qiling.",
+        );
+      }
       user.lastLoginAt = new Date();
       return this.users.save(user);
     }
-    user = this.users.create({ phone, lastLoginAt: new Date() });
+    user = this.users.create({
+      phone,
+      lastLoginAt: new Date(),
+      status: UserStatus.Active,
+    });
     return this.users.save(user);
   }
 
@@ -401,5 +420,141 @@ export class UsersService {
     user.favoriteProductIds = [...ids];
     await this.users.save(user);
     return { productIds: user.favoriteProductIds };
+  }
+
+  /**
+   * GDPR / O'RQ-547 compliant Account Deletion & Data Anonymization.
+   * Checks for active customer orders, active courier deliveries, and shop owner balances before proceeding.
+   */
+  async deleteAccount(
+    userId: string,
+  ): Promise<{ success: boolean; message: string }> {
+    const user = await this.users.findOne({ where: { id: userId } });
+    if (!user) throw new NotFoundException('Foydalanuvchi topilmadi');
+    if (user.status === UserStatus.Deleted) {
+      throw new BadRequestException("Ushbu hisob allaqachon o'chirilgan");
+    }
+
+    await this.dataSource.transaction(async (em) => {
+      // 1. Customer active orders check
+      const activeCustomerOrders = await em.count(Order, {
+        where: {
+          userId,
+          status: In([
+            OrderStatus.New,
+            OrderStatus.Accepted,
+            OrderStatus.Preparing,
+            OrderStatus.Delivering,
+          ]),
+        },
+      });
+      if (activeCustomerOrders > 0) {
+        throw new BadRequestException(
+          "Sizda yetkazilayotgan yoki tayyorlanayotgan faol buyurtmalar mavjud. Hisobni o'chirish uchun avval buyurtma yetkazilishini kuting yoki uni bekor qiling.",
+        );
+      }
+
+      // 2. Staff/Courier active deliveries check
+      const userStaffMemberships = await em.find(ShopStaff, { where: { userId } });
+      if (userStaffMemberships.length > 0) {
+        const staffIds = userStaffMemberships.map((s) => s.id);
+        const activeDeliveries = await em.count(Order, {
+          where: {
+            assignedStaffId: In(staffIds),
+            status: In([
+              OrderStatus.Accepted,
+              OrderStatus.Preparing,
+              OrderStatus.Delivering,
+            ]),
+          },
+        });
+        if (activeDeliveries > 0) {
+          throw new BadRequestException(
+            "Siz hozirda xodim/kuryer sifatida biriktirilgan faol buyurtmalaringiz mavjud. Avval buyurtmalarni topshiring.",
+          );
+        }
+      }
+
+      // 3. Seller active orders & balance checks
+      const ownedShops = await em.find(Shop, { where: { ownerId: userId } });
+      if (ownedShops.length > 0) {
+        const shopIds = ownedShops.map((s) => s.id);
+        const activeShopOrders = await em.count(Order, {
+          where: {
+            shopId: In(shopIds),
+            status: In([
+              OrderStatus.New,
+              OrderStatus.Accepted,
+              OrderStatus.Preparing,
+              OrderStatus.Delivering,
+            ]),
+          },
+        });
+        if (activeShopOrders > 0) {
+          throw new BadRequestException(
+            "Do'koningizda xaridorlar kutayotgan faol buyurtmalar mavjud. Hisobni o'chirishdan oldin ushbu buyurtmalarni yakunlang.",
+          );
+        }
+
+        const balance = await em.findOne(SellerBalance, {
+          where: { sellerId: userId },
+        });
+        if (balance) {
+          const avail = parseFloat(balance.availableBalance || '0');
+          const debt = parseFloat(balance.debtBalance || '0');
+          if (avail > 1000) {
+            throw new BadRequestException(
+              `Hisobingizda ${avail.toLocaleString()} so'm yechib olinmagan mablag' mavjud. Hisobni o'chirishdan oldin mablag'ni bank hisob raqamingizga yechib oling.`,
+            );
+          }
+          if (debt > 0) {
+            throw new BadRequestException(
+              `Hisobingizda ${debt.toLocaleString()} so'm to'lanmagan qarz mavjud. Hisobni o'chirishdan oldin qarzni so'ndiring.`,
+            );
+          }
+        }
+
+        // Deactivate all owned shops so customers can no longer order from them
+        for (const shop of ownedShops) {
+          shop.isActive = false;
+          await em.save(Shop, shop);
+        }
+      }
+
+      // 4. Remove sensitive child records that have no accounting retention requirements
+      await em.delete(UserAddress, { userId });
+      await em.delete(ShopStaff, { userId });
+      await em.delete(DeviceToken, { userId });
+      await em.delete(SellerBankAccount, { userId });
+
+      // 5. GDPR / Soliq compliant Anonymization
+      // Historical orders, review ratings and tax invoices keep foreign key references
+      // but personal identity (PII) is securely stripped.
+      const anonymizedPhone = `+998000000000_del_${user.id.replace(/-/g, '').slice(0, 10)}`;
+
+      user.name = "O'chirilgan foydalanuvchi";
+      user.firstName = null;
+      user.lastName = null;
+      user.email = null;
+      user.avatarUrl = null;
+      user.birthDate = null;
+      user.gender = null;
+      user.phone = anonymizedPhone;
+      user.favoriteShopIds = [];
+      user.favoriteProductIds = [];
+      user.status = UserStatus.Deleted;
+      user.deletedAt = new Date();
+      user.isSellerApproved = false;
+      user.isAdmin = false;
+      user.roles = [Role.Customer];
+
+      await em.save(User, user);
+    });
+
+    return {
+      success: true,
+      message:
+        "Hisobingiz va barcha shaxsiy ma'lumotlaringiz muvaffaqiyatli o'chirildi",
+    };
   }
 }

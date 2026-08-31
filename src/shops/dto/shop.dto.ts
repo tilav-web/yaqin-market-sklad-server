@@ -271,6 +271,35 @@ export class CreateShopDto {
   @ValidateNested()
   @Type(() => LocationEvidenceDto)
   evidence?: LocationEvidenceDto;
+
+  @ApiPropertyOptional({ description: 'ID of an existing SellerBankAccount' })
+  @IsOptional()
+  @IsUUID()
+  bankAccountId?: string;
+
+  @ApiPropertyOptional({ description: '20-digit bank account number' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(32)
+  bankAccountNumber?: string;
+
+  @ApiPropertyOptional({ description: '5-digit bank MFO code' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(16)
+  bankMfo?: string;
+
+  @ApiPropertyOptional({ description: 'Bank branch name' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(128)
+  bankName?: string;
+
+  @ApiPropertyOptional({ description: 'Account holder / company name' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(128)
+  bankAccountHolderName?: string;
 }
 
 export class UpdateShopDto {
@@ -367,6 +396,35 @@ export class UpdateShopDto {
   @ValidateNested()
   @Type(() => DeliveryZoneDto)
   deliveryZone?: DeliveryZoneDto;
+
+  @ApiPropertyOptional({ description: 'ID of an existing SellerBankAccount' })
+  @IsOptional()
+  @IsUUID()
+  bankAccountId?: string;
+
+  @ApiPropertyOptional({ description: '20-digit bank account number' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(32)
+  bankAccountNumber?: string;
+
+  @ApiPropertyOptional({ description: '5-digit bank MFO code' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(16)
+  bankMfo?: string;
+
+  @ApiPropertyOptional({ description: 'Bank branch name' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(128)
+  bankName?: string;
+
+  @ApiPropertyOptional({ description: 'Account holder / company name' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(128)
+  bankAccountHolderName?: string;
 }
 
 export class GeoJsonPolygonDto {

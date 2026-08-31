@@ -56,6 +56,30 @@ export class CreateSellerApplicationDto {
   @MaxLength(128)
   bankCardHolderName?: string;
 
+  @ApiPropertyOptional({ description: '20 xonali bank hisob raqami' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(32)
+  bankAccountNumber?: string;
+
+  @ApiPropertyOptional({ description: '5 xonali bank MFO kodi' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(16)
+  bankMfo?: string;
+
+  @ApiPropertyOptional({ description: 'Bank nomi' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(128)
+  bankName?: string;
+
+  @ApiPropertyOptional({ description: 'Hisob egasi yoki tashkilot nomi' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(128)
+  bankAccountHolderName?: string;
+
   @ApiPropertyOptional({ description: 'my.soliq.uz da biriktirilgani' })
   @IsOptional()
   @IsBoolean()
@@ -207,4 +231,31 @@ export class UpsertSellerProfileDto {
   @IsOptional()
   @IsBoolean()
   verify?: boolean;
+}
+
+export class CreateSellerBankAccountDto {
+  @ApiProperty({ description: '20-digit bank account number' })
+  @IsString()
+  @MaxLength(32)
+  accountNumber!: string;
+
+  @ApiProperty({ description: '5-digit bank MFO code' })
+  @IsString()
+  @MaxLength(16)
+  mfo!: string;
+
+  @ApiProperty({ description: 'Bank branch name' })
+  @IsString()
+  @MaxLength(128)
+  bankName!: string;
+
+  @ApiProperty({ description: 'Account holder / company name' })
+  @IsString()
+  @MaxLength(128)
+  accountHolderName!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isDefault?: boolean;
 }

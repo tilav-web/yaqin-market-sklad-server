@@ -10,6 +10,7 @@ import {
 export enum UserStatus {
   Active = 'active',
   Blocked = 'blocked',
+  Deleted = 'deleted',
 }
 
 export enum UserGender {
@@ -81,6 +82,9 @@ export class User {
 
   @Column({ type: 'timestamptz', nullable: true })
   lastLoginAt!: Date | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  deletedAt!: Date | null;
 
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt!: Date;

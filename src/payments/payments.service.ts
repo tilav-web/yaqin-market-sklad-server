@@ -254,8 +254,13 @@ export class PaymentsService {
     sellerId: string,
     dto: {
       amount: number;
-      bankCardNumber: string;
-      bankCardHolderName: string;
+      shopId?: string;
+      bankAccountNumber?: string;
+      bankMfo?: string;
+      bankName?: string;
+      recipientName?: string;
+      bankCardNumber?: string;
+      bankCardHolderName?: string;
     },
   ): Promise<WithdrawalRequest> {
     // Belt-and-suspenders: the DTO already validates this, but never let a
@@ -330,8 +335,13 @@ export class PaymentsService {
       const req = em.create(WithdrawalRequest, {
         sellerId,
         amount: String(payout),
-        bankCardNumber: dto.bankCardNumber,
-        bankCardHolderName: dto.bankCardHolderName,
+        shopId: dto.shopId ?? null,
+        bankAccountNumber: dto.bankAccountNumber ?? null,
+        bankMfo: dto.bankMfo ?? null,
+        bankName: dto.bankName ?? null,
+        recipientName: dto.recipientName ?? null,
+        bankCardNumber: dto.bankCardNumber ?? null,
+        bankCardHolderName: dto.bankCardHolderName ?? null,
         status: WithdrawalStatus.Pending,
       });
       await em.save(WithdrawalRequest, req);

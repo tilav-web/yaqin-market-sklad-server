@@ -33,12 +33,28 @@ export class SellerProfile {
   @Column({ type: 'varchar', length: 16, nullable: true })
   stir!: string | null;
 
-  /** 16-digit Humo/Uzcard number */
+  /** 16-digit Humo/Uzcard number (legacy/optional) */
   @Column({ type: 'varchar', length: 32, nullable: true })
   bankCardNumber!: string | null;
 
   @Column({ type: 'varchar', length: 128, nullable: true })
   bankCardHolderName!: string | null;
+
+  /** 20-digit bank account number */
+  @Column({ type: 'varchar', length: 32, nullable: true })
+  bankAccountNumber!: string | null;
+
+  /** 5-digit bank MFO code */
+  @Column({ type: 'varchar', length: 16, nullable: true })
+  bankMfo!: string | null;
+
+  /** Bank branch name */
+  @Column({ type: 'varchar', length: 128, nullable: true })
+  bankName!: string | null;
+
+  /** Account holder or company name */
+  @Column({ type: 'varchar', length: 128, nullable: true })
+  bankAccountHolderName!: string | null;
 
   /** YaTT, MChJ, AJ, etc. */
   @Column({ type: 'varchar', length: 64, nullable: true })

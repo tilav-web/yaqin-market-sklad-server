@@ -8,6 +8,7 @@ import {
   IsOptional,
   IsPositive,
   IsString,
+  IsUUID,
   Matches,
   Max,
   MaxLength,
@@ -25,17 +26,40 @@ export class RequestWithdrawalDto {
   @IsPositive()
   amount!: number;
 
-  @ApiProperty({ example: '8600123456781234' })
-  @IsString()
-  @Matches(/^\d{12,19}$/, {
-    message: "Karta raqami 12-19 ta raqamdan iborat bo'lishi kerak",
-  })
-  bankCardNumber!: string;
+  @ApiPropertyOptional({ description: 'Shop ID if withdrawing for a specific shop' })
+  @IsOptional()
+  @IsUUID()
+  shopId?: string;
 
-  @ApiProperty({ example: 'MUHAMMAD MUHAMMADOV' })
+  @ApiPropertyOptional({ example: '20208000123456789001' })
+  @IsOptional()
   @IsString()
-  @MaxLength(128)
-  bankCardHolderName!: string;
+  bankAccountNumber?: string;
+
+  @ApiPropertyOptional({ example: '00444' })
+  @IsOptional()
+  @IsString()
+  bankMfo?: string;
+
+  @ApiPropertyOptional({ example: 'AT Xalq Banki' })
+  @IsOptional()
+  @IsString()
+  bankName?: string;
+
+  @ApiPropertyOptional({ example: '"TILAV" MCHJ' })
+  @IsOptional()
+  @IsString()
+  recipientName?: string;
+
+  @ApiPropertyOptional({ example: '8600123456781234' })
+  @IsOptional()
+  @IsString()
+  bankCardNumber?: string;
+
+  @ApiPropertyOptional({ example: 'MUHAMMAD MUHAMMADOV' })
+  @IsOptional()
+  @IsString()
+  bankCardHolderName?: string;
 }
 
 export class ProcessWithdrawalDto {

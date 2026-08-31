@@ -84,6 +84,8 @@ export class ShopsService {
     private readonly variants: Repository<ProductVariant>,
     @InjectRepository(GlobalProduct)
     private readonly globalProducts: Repository<GlobalProduct>,
+    @InjectRepository(require('../sellers/entities/seller-bank-account.entity').SellerBankAccount)
+    private readonly bankAccounts: Repository<import('../sellers/entities/seller-bank-account.entity').SellerBankAccount>,
     private readonly dataSource: DataSource,
     private readonly auditLog: AuditLogService,
     private readonly settings: SettingsService,
@@ -144,6 +146,61 @@ export class ShopsService {
         "Do'kon yaratish uchun avval ariza yuborib, admin tasdiqlashini kuting",
       );
     }
+
+    let bankAccountId = dto.bankAccountId ?? null;
+    let bankAccountNumber = dto.bankAccountNumber ?? null;
+    let bankMfo = dto.bankMfo ?? null;
+    let bankName = dto.bankName ?? null;
+    let bankAccountHolderName = dto.bankAccountHolderName ?? null;
+
+    if (bankAccountId) {
+      const acc = await this.bankAccounts.findOne({
+        where: { id: bankAccountId, userId },
+      });
+      if (acc) {
+        bankAccountNumber = acc.accountNumber;
+        bankMfo = acc.mfo;
+        bankName = acc.bankName;
+        bankAccountHolderName = acc.accountHolderName;
+      }
+    } else if (bankAccountNumber && bankAccountNumber.trim().length === 20) {
+      const cleanAcc = bankAccountNumber.trim();
+      const cleanMfo = (bankMfo || '').trim();
+      let acc = await this.bankAccounts.findOne({
+        where: { userId, accountNumber: cleanAcc },
+      });
+      if (!acc) {
+        acc = await this.bankAccounts.save(
+          this.bankAccounts.create({
+            userId,
+            accountNumber: cleanAcc,
+            mfo: cleanMfo,
+            bankName: (bankName || '').trim(),
+            accountHolderName: (
+              bankAccountHolderName ||
+              dto.name ||
+              user.name ||
+              ''
+            ).trim(),
+            isDefault: false,
+          }),
+        );
+      }
+      bankAccountId = acc.id;
+    } else {
+      // Inherit default bank account if exists
+      const defaultAcc = await this.bankAccounts.findOne({
+        where: { userId, isDefault: true },
+      });
+      if (defaultAcc) {
+        bankAccountId = defaultAcc.id;
+        bankAccountNumber = defaultAcc.accountNumber;
+        bankMfo = defaultAcc.mfo;
+        bankName = defaultAcc.bankName;
+        bankAccountHolderName = defaultAcc.accountHolderName;
+      }
+    }
+
     return this.shops.save(
       this.shops.create({
         ownerId: userId,
@@ -157,6 +214,11 @@ export class ShopsService {
         isDeliveryEnabled: dto.isDeliveryEnabled ?? true,
         isPickupEnabled: dto.isPickupEnabled ?? true,
         deliveryHours: dto.deliveryHours ?? [],
+        bankAccountId,
+        bankAccountNumber,
+        bankMfo,
+        bankName,
+        bankAccountHolderName,
         pinEvidence: buildEvidence(dto.evidence, {
           deviceId: deviceId ?? null,
           actorUserId: userId,
@@ -216,6 +278,46 @@ export class ShopsService {
       : null;
     const { evidence: evidenceDto, ...rest } = dto;
     Object.assign(shop, rest);
+
+    if (dto.bankAccountId) {
+      const acc = await this.bankAccounts.findOne({
+        where: { id: dto.bankAccountId, userId },
+      });
+      if (acc) {
+        shop.bankAccountId = acc.id;
+        shop.bankAccountNumber = acc.accountNumber;
+        shop.bankMfo = acc.mfo;
+        shop.bankName = acc.bankName;
+        shop.bankAccountHolderName = acc.accountHolderName;
+      }
+    } else if (dto.bankAccountNumber && dto.bankAccountNumber.trim().length === 20) {
+      const cleanAcc = dto.bankAccountNumber.trim();
+      const cleanMfo = (dto.bankMfo || '').trim();
+      let acc = await this.bankAccounts.findOne({
+        where: { userId, accountNumber: cleanAcc },
+      });
+      if (!acc) {
+        acc = await this.bankAccounts.save(
+          this.bankAccounts.create({
+            userId,
+            accountNumber: cleanAcc,
+            mfo: cleanMfo,
+            bankName: (dto.bankName || '').trim(),
+            accountHolderName: (
+              dto.bankAccountHolderName ||
+              shop.name
+            ).trim(),
+            isDefault: false,
+          }),
+        );
+      }
+      shop.bankAccountId = acc.id;
+      shop.bankAccountNumber = acc.accountNumber;
+      shop.bankMfo = acc.mfo;
+      shop.bankName = acc.bankName;
+      shop.bankAccountHolderName = acc.accountHolderName;
+    }
+
     if (coordsChanged) {
       shop.pinEvidence = buildEvidence(evidenceDto, {
         deviceId: deviceId ?? null,
