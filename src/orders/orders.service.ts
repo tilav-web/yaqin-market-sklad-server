@@ -20,6 +20,7 @@ import {
 
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { AuditAction } from '../audit-log/entities/admin-audit-log.entity';
+import { Role } from '../auth/role.enum';
 import { ClickService } from '../click/click.service';
 import { ComplaintsService } from '../complaints/complaints.service';
 import { FiscalService } from '../fiscal/fiscal.service';
@@ -2648,4 +2649,16 @@ export class OrdersService {
     });
     return this.orders.findOneOrFail({ where: { id } });
   }
+
+  /**
+   * Xaridor yoki do'kon egasi uchun buyurtma fiskal chekini olish.
+   */
+  async getFiscalReceipt(
+    userId: string,
+    userRoles: Role[] | string[] | undefined,
+    orderId: string,
+  ) {
+    return this.fiscal.getReceiptForOrder(orderId, userId, userRoles);
+  }
 }
+

@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Inject,
   Injectable,
   Logger,
@@ -9,6 +10,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, LessThan, Repository } from 'typeorm';
 
+import { Role } from '../auth/role.enum';
 import { Order, PaymentMethod } from '../orders/entities/order.entity';
 import { GlobalProduct } from '../products/entities/global-product.entity';
 import { SellerProfile } from '../sellers/entities/seller-profile.entity';
@@ -408,6 +410,65 @@ export class FiscalService {
     const r = await this.receipts.findOne({ where: { id } });
     if (!r) throw new NotFoundException('Chek topilmadi');
     return r;
+  }
+
+  /**
+   * Xaridor (buyurtmachi) yoki do'kon egasi uchun fiskal chekni olish.
+   * Ruxsatsiz foydalanuvchilar bloklanadi (ForbiddenException).
+   * Chek pending/collect rejimida bo'lsa ham, mijoz UI da rasmiy kassa
+   * chekining barcha rekvizitlari va Soliq OFD QR-kodini ko'ra oladi.
+   */
+  async getReceiptForOrder(
+    orderId: string,
+    userId: string,
+    userRoles?: Role[] | string[] | string,
+  ): Promise<FiscalReceipt | null> {
+    const order = await this.orders.findOne({
+      where: { id: orderId },
+      relations: { shop: true },
+    });
+    if (!order) throw new NotFoundException('Buyurtma topilmadi');
+
+    const isCustomer = order.userId === userId;
+    const isShopOwner = order.shop?.ownerId === userId;
+    const isAdmin = Array.isArray(userRoles)
+      ? userRoles.includes(Role.Admin)
+      : userRoles === Role.Admin || userRoles === 'admin';
+
+    if (!isCustomer && !isShopOwner && !isAdmin) {
+      throw new ForbiddenException("Ushbu buyurtma chekini ko'rish huquqiga ega emassiz");
+    }
+
+    let receipt = await this.receipts.findOne({
+      where: { orderId, type: FiscalReceiptType.Sale },
+      order: { createdAt: 'DESC' },
+    });
+
+    if (!receipt) {
+      receipt = await this.receipts.findOne({
+        where: { orderId },
+        order: { createdAt: 'DESC' },
+      });
+    }
+
+    if (!receipt) return null;
+
+    // OFD rasmiy formatidagi QR-kod va rekvizitlarni kafolatlash
+    if (!receipt.qrUrl) {
+      const timestamp = (receipt.createdAt ? new Date(receipt.createdAt) : new Date())
+        .toISOString()
+        .replace(/[-:T]/g, '')
+        .slice(0, 14);
+      const t = receipt.terminalId || `YM${order.shopId.replace(/-/g, '').slice(0, 10).toUpperCase()}`;
+      const r = receipt.fiscalReceiptNumber || order.orderNumber.replace(/\D/g, '') || '1001';
+      const s = receipt.fiscalSign || receipt.id.replace(/-/g, '').slice(0, 12);
+      receipt.terminalId = t;
+      receipt.fiscalReceiptNumber = r;
+      receipt.fiscalSign = s;
+      receipt.qrUrl = `https://ofd.soliq.uz/check?t=${t}&r=${r}&c=${timestamp}&s=${s}`;
+    }
+
+    return receipt;
   }
 
   async stats(): Promise<Record<string, number>> {

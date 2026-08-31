@@ -124,6 +124,15 @@ export class OrdersController {
     return this.orders.getOne(user.sub, id);
   }
 
+  /** Customer or shop owner: get official fiscal receipt with OFD QR code and Soliq details. */
+  @Get(':id/fiscal-receipt')
+  getFiscalReceipt(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.orders.getFiscalReceipt(user.sub, user.roles, id);
+  }
+
   @Patch(':id/status')
   updateStatus(
     @CurrentUser() user: JwtPayload,
