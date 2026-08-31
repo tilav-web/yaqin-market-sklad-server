@@ -98,19 +98,19 @@ export class NotificationsService {
       }
       userIds = [...new Set(userIds)];
     } else if (input.audience === 'sellers') {
-      userIds = (
-        await this.users.find({
-          where: { isSellerApproved: true },
-          select: { id: true },
-        })
-      ).map((u) => u.id);
+      const sellers = await this.users
+        .createQueryBuilder('u')
+        .where("u.roles ::text ILIKE '%seller%'")
+        .select(['u.id'])
+        .getMany();
+      userIds = sellers.map((u) => u.id);
     } else if (input.audience === 'customers') {
-      userIds = (
-        await this.users.find({
-          where: { isSellerApproved: false, isAdmin: false },
-          select: { id: true },
-        })
-      ).map((u) => u.id);
+      const customers = await this.users
+        .createQueryBuilder('u')
+        .where("NOT (u.roles ::text ILIKE '%seller%' OR u.roles ::text ILIKE '%admin%')")
+        .select(['u.id'])
+        .getMany();
+      userIds = customers.map((u) => u.id);
     } else {
       userIds = (await this.users.find({ select: { id: true } })).map(
         (u) => u.id,

@@ -6,6 +6,7 @@ import { Repository } from 'typeorm';
 import { PushService } from '../push/push.service';
 import { Shop } from '../shops/entities/shop.entity';
 import { ShopStaff } from '../shops/entities/shop-staff.entity';
+import { UserFavoriteShop } from '../users/entities/user-favorite-shop.entity';
 import { User } from '../users/entities/user.entity';
 import { Promotion } from './entities/promotion.entity';
 import { PromotionsService } from './promotions.service';
@@ -81,6 +82,10 @@ describe('PromotionsService', () => {
               getMany: jest.fn().mockResolvedValue([]),
             })),
           },
+        },
+        {
+          provide: getRepositoryToken(UserFavoriteShop),
+          useValue: { find: jest.fn().mockResolvedValue([]) },
         },
         {
           provide: PushService,

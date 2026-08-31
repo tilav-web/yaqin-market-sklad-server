@@ -16,6 +16,7 @@ import { buildXlsxBuffer } from '../common/xlsx.util';
 import { Order, OrderStatus } from '../orders/entities/order.entity';
 import { GlobalProduct } from '../products/entities/global-product.entity';
 import { ProductVariant } from '../products/entities/product-variant.entity';
+import { Role } from '../auth/role.enum';
 import { User } from '../users/entities/user.entity';
 import {
   boundingBox,
@@ -141,7 +142,7 @@ export class ShopsService {
     deviceId?: string | null,
   ): Promise<Shop> {
     const user = await this.users.findOne({ where: { id: userId } });
-    if (!user?.isSellerApproved) {
+    if (!user?.roles?.includes(Role.Seller)) {
       throw new ForbiddenException(
         "Do'kon yaratish uchun avval ariza yuborib, admin tasdiqlashini kuting",
       );

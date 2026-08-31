@@ -905,7 +905,6 @@ async function seed() {
         userRepo.create({
           phone: `+9989031${String(i).padStart(5, '0')}`,
           name: OWNER_NAMES[i],
-          isSellerApproved: true,
           roles: ['customer', 'seller'],
           status: UserStatus.Active,
         }),

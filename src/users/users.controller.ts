@@ -27,6 +27,7 @@ import {
   AdminSetStatusDto,
 } from './dto/admin-user.dto';
 import { CreateAddressDto, UpdateAddressDto } from './dto/address.dto';
+import { DeleteAccountDto } from './dto/delete-account.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UsersService } from './users.service';
 
@@ -40,6 +41,7 @@ export class UsersController {
   async me(@CurrentUser() user: JwtPayload) {
     const u = await this.users.findById(user.sub);
     if (!u) return null;
+    const roles = u.roles ?? [];
     return {
       id: u.id,
       phone: u.phone,
@@ -50,8 +52,9 @@ export class UsersController {
       gender: u.gender,
       email: u.email,
       avatarUrl: u.avatarUrl,
-      isSellerApproved: u.isSellerApproved,
-      isAdmin: u.isAdmin,
+      isSellerApproved: roles.includes(Role.Seller),
+      isAdmin: roles.includes(Role.Admin),
+      roles: u.roles,
       status: u.status,
     };
   }
@@ -65,8 +68,11 @@ export class UsersController {
   }
 
   @Delete()
-  async deleteMe(@CurrentUser() user: JwtPayload) {
-    return this.users.deleteAccount(user.sub);
+  async deleteMe(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto?: DeleteAccountDto,
+  ) {
+    return this.users.deleteAccount(user.sub, dto);
   }
 
   @Get('addresses')

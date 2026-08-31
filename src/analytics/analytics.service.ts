@@ -411,7 +411,10 @@ export class AnalyticsService {
     const [totalUsers, totalSellers, totalShops, totalOrders] =
       await Promise.all([
         this.users.count(),
-        this.users.count({ where: { isSellerApproved: true } }),
+        this.users
+          .createQueryBuilder('u')
+          .where("u.roles ::text ILIKE '%seller%'")
+          .getCount(),
         this.shops.count(),
         this.orders.count({ where: { status: OrderStatus.Delivered } }),
       ]);

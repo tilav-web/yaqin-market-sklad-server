@@ -10,6 +10,8 @@ import { Shop } from '../shops/entities/shop.entity';
 import { ShopStaff } from '../shops/entities/shop-staff.entity';
 import { RiskModule } from '../risk/risk.module';
 import { UserAddress } from './entities/user-address.entity';
+import { UserFavoriteProduct } from './entities/user-favorite-product.entity';
+import { UserFavoriteShop } from './entities/user-favorite-shop.entity';
 import { User } from './entities/user.entity';
 import { AdminUsersController, UsersController } from './users.controller';
 import { UsersService } from './users.service';
@@ -19,6 +21,8 @@ import { UsersService } from './users.service';
     TypeOrmModule.forFeature([
       User,
       UserAddress,
+      UserFavoriteShop,
+      UserFavoriteProduct,
       ShopStaff,
       Order,
       Shop,

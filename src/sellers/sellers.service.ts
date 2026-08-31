@@ -6,6 +6,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 
+import { Role } from '../auth/role.enum';
 import { PaymentsService } from '../payments/payments.service';
 import { SETTING_KEYS } from '../settings/entities/global-setting.entity';
 import { SettingsService } from '../settings/settings.service';
@@ -508,9 +509,12 @@ export class SellersService {
       locked.status = SellerApplicationStatus.Approved;
       locked.reviewedByUserId = adminUserId;
       locked.reviewedAt = new Date();
-      await manager.save(locked);
-
-      await manager.update(User, locked.userId, { isSellerApproved: true });
+      const targetUser = await manager.findOne(User, { where: { id: locked.userId } });
+      if (targetUser) {
+        const roles = Array.from(new Set([...(targetUser.roles ?? [Role.Customer]), Role.Seller]));
+        targetUser.roles = roles;
+        await manager.save(User, targetUser);
+      }
       return locked;
     });
 

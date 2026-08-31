@@ -27,8 +27,7 @@ export class User {
   @Column({ type: 'varchar', length: 32 })
   phone!: string;
 
-  /** Full display name — kept in sync from firstName+lastName when either is
-   * set, so existing call sites that only ever read `.name` keep working. */
+  /** Full display name — kept in sync from firstName+lastName */
   @Column({ type: 'varchar', length: 128, nullable: true })
   name!: string | null;
 
@@ -53,38 +52,21 @@ export class User {
   @Column({ type: 'enum', enum: UserStatus, default: UserStatus.Active })
   status!: UserStatus;
 
-  /** Rolled up from Review rows with target='courier' where this user is courierUserId. */
-  @Column({ type: 'double precision', nullable: true })
-  courierRatingAverage!: number | null;
-
-  @Column({ type: 'int', default: 0 })
-  courierRatingCount!: number;
-
-  @Column({ type: 'boolean', default: false })
-  isSellerApproved!: boolean;
-
-  @Column({ type: 'boolean', default: false })
-  isAdmin!: boolean;
-
   /**
-   * Cached set of roles for the user. Derived from other columns
-   * (always `customer`, plus `seller`/`admin` when applicable) and from
-   * `shop_staff` membership. Refreshed at login and on role-changing events.
+   * Effective role list for the user (customer, seller, staff, admin).
+   * Derived from permissions, SellerProfile and ShopStaff memberships.
    */
   @Column({ type: 'jsonb', default: () => '\'["customer"]\'::jsonb' })
   roles!: string[];
-
-  @Column({ type: 'jsonb', default: () => "'[]'::jsonb" })
-  favoriteShopIds!: string[];
-
-  @Column({ type: 'jsonb', default: () => "'[]'::jsonb" })
-  favoriteProductIds!: string[];
 
   @Column({ type: 'timestamptz', nullable: true })
   lastLoginAt!: Date | null;
 
   @Column({ type: 'timestamptz', nullable: true })
   deletedAt!: Date | null;
+
+  @Column({ type: 'text', nullable: true })
+  deletionReason!: string | null;
 
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt!: Date;

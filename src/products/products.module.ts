@@ -8,6 +8,7 @@ import { PushModule } from '../push/push.module';
 import { SettingsModule } from '../settings/settings.module';
 import { Shop } from '../shops/entities/shop.entity';
 import { ShopStaff } from '../shops/entities/shop-staff.entity';
+import { UserFavoriteShop } from '../users/entities/user-favorite-shop.entity';
 import { User } from '../users/entities/user.entity';
 import { AdminCatalogImportService } from './excel/admin-catalog-import.service';
 import { ExcelController } from './excel/excel.controller';
@@ -37,6 +38,7 @@ import { ProductsService } from './products.service';
       ShopStaff,
       Review,
       User,
+      UserFavoriteShop,
       Order,
       Category,
     ]),

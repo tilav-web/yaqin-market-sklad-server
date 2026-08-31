@@ -857,8 +857,6 @@ async function seed() {
     userRepo.create({
       phone: ADMIN.phone,
       name: ADMIN.name,
-      isAdmin: true,
-      isSellerApproved: false,
       roles: ['customer', 'admin'],
       status: UserStatus.Active,
       avatarUrl: img('A', '111111'),
@@ -872,7 +870,6 @@ async function seed() {
         userRepo.create({
           phone: o.phone,
           name: o.name,
-          isSellerApproved: true,
           roles: ['customer', 'seller'],
           status: UserStatus.Active,
         }),

@@ -19,7 +19,10 @@ import { SellerBankAccount } from '../sellers/entities/seller-bank-account.entit
 import { Shop } from '../shops/entities/shop.entity';
 import { ShopStaff } from '../shops/entities/shop-staff.entity';
 import { RiskService } from '../risk/risk.service';
+import { DeleteAccountDto } from './dto/delete-account.dto';
 import { UserAddress } from './entities/user-address.entity';
+import { UserFavoriteProduct } from './entities/user-favorite-product.entity';
+import { UserFavoriteShop } from './entities/user-favorite-shop.entity';
 import { User, UserGender, UserStatus } from './entities/user.entity';
 
 @Injectable()
@@ -29,6 +32,10 @@ export class UsersService {
     private readonly users: Repository<User>,
     @InjectRepository(UserAddress)
     private readonly addresses: Repository<UserAddress>,
+    @InjectRepository(UserFavoriteShop)
+    private readonly favShops: Repository<UserFavoriteShop>,
+    @InjectRepository(UserFavoriteProduct)
+    private readonly favProducts: Repository<UserFavoriteProduct>,
     @InjectRepository(ShopStaff)
     private readonly shopStaff: Repository<ShopStaff>,
     @InjectRepository(Order)
@@ -45,21 +52,22 @@ export class UsersService {
    */
   async computeRoles(user: User): Promise<Role[]> {
     const roles: Role[] = [Role.Customer];
-    if (user.isSellerApproved) roles.push(Role.Seller);
-    if (user.isAdmin) roles.push(Role.Admin);
     const staffCount = await this.shopStaff.count({
       where: { userId: user.id, isActive: true },
     });
     if (staffCount > 0) roles.push(Role.Staff);
+    if (user.roles?.includes(Role.Seller)) roles.push(Role.Seller);
+    if (user.roles?.includes(Role.Admin)) roles.push(Role.Admin);
 
+    const distinctRoles = Array.from(new Set(roles));
     if (
-      user.roles.length !== roles.length ||
-      roles.some((r) => !user.roles.includes(r))
+      user.roles.length !== distinctRoles.length ||
+      distinctRoles.some((r) => !user.roles.includes(r))
     ) {
-      user.roles = roles;
+      user.roles = distinctRoles;
       await this.users.save(user);
     }
-    return roles;
+    return distinctRoles;
   }
 
   findById(id: string): Promise<User | null> {
@@ -256,18 +264,16 @@ export class UsersService {
         'u.phone',
         'u.name',
         'u.status',
-        'u.isSellerApproved',
-        'u.isAdmin',
         'u.roles',
         'u.createdAt',
       ])
       .orderBy('u.createdAt', 'DESC');
     const s = opts.search?.trim();
     if (s) qb.where('(u.phone ILIKE :q OR u.name ILIKE :q)', { q: `%${s}%` });
-    if (opts.sellerOnly) qb.andWhere('u.isSellerApproved = true');
+    if (opts.sellerOnly) qb.andWhere("u.roles ::text ILIKE '%seller%'");
     if (opts.customerOnly)
-      qb.andWhere('u.isSellerApproved = false AND u.isAdmin = false');
-    if (opts.adminOnly) qb.andWhere('u.isAdmin = true');
+      qb.andWhere("NOT (u.roles ::text ILIKE '%seller%' OR u.roles ::text ILIKE '%admin%')");
+    if (opts.adminOnly) qb.andWhere("u.roles ::text ILIKE '%admin%'");
     return qb;
   }
 
@@ -303,16 +309,14 @@ export class UsersService {
         { header: 'Telefon', key: 'phone', width: 16 },
         { header: 'Ismi', key: 'name', width: 22 },
         { header: 'Holat', key: 'status', width: 14 },
-        { header: 'Sotuvchi', key: 'isSellerApproved', width: 12 },
-        { header: 'Admin', key: 'isAdmin', width: 10 },
+        { header: 'Rollar', key: 'roles', width: 16 },
         { header: "Ro'yxatdan o'tgan", key: 'createdAt', width: 20 },
       ],
       rows.map((u) => ({
         phone: u.phone,
         name: u.name ?? '',
         status: u.status,
-        isSellerApproved: u.isSellerApproved ? 'ha' : "yo'q",
-        isAdmin: u.isAdmin ? 'ha' : "yo'q",
+        roles: (u.roles ?? []).join(', '),
         createdAt: u.createdAt.toISOString(),
       })),
     );
@@ -346,8 +350,13 @@ export class UsersService {
   ): Promise<User> {
     const user = await this.users.findOne({ where: { id: userId } });
     if (!user) throw new NotFoundException('Foydalanuvchi topilmadi');
-    user.isAdmin = isAdmin;
-    await this.computeRoles(user); // re-derive + persist roles
+    const rolesSet = new Set(user.roles ?? [Role.Customer]);
+    if (isAdmin) {
+      rolesSet.add(Role.Admin);
+    } else {
+      rolesSet.delete(Role.Admin);
+    }
+    user.roles = Array.from(rolesSet);
     const saved = await this.users.save(user);
     void this.auditLog.record({
       adminUserId,
@@ -379,10 +388,19 @@ export class UsersService {
   async getFavorites(
     userId: string,
   ): Promise<{ shopIds: string[]; productIds: string[] }> {
-    const user = await this.users.findOne({ where: { id: userId } });
+    const [shops, products] = await Promise.all([
+      this.favShops.find({
+        where: { userId },
+        select: { shopId: true },
+      }),
+      this.favProducts.find({
+        where: { userId },
+        select: { productId: true },
+      }),
+    ]);
     return {
-      shopIds: user?.favoriteShopIds ?? [],
-      productIds: user?.favoriteProductIds ?? [],
+      shopIds: shops.map((s) => s.shopId),
+      productIds: products.map((p) => p.productId),
     };
   }
 
@@ -391,17 +409,22 @@ export class UsersService {
     shopId: string,
     add: boolean,
   ): Promise<{ shopIds: string[] }> {
-    const user = await this.users.findOne({ where: { id: userId } });
-    if (!user) throw new NotFoundException();
-    const ids = new Set(user.favoriteShopIds ?? []);
     if (add) {
-      ids.add(shopId);
+      await this.favShops
+        .createQueryBuilder()
+        .insert()
+        .into(UserFavoriteShop)
+        .values({ userId, shopId })
+        .orIgnore()
+        .execute();
     } else {
-      ids.delete(shopId);
+      await this.favShops.delete({ userId, shopId });
     }
-    user.favoriteShopIds = [...ids];
-    await this.users.save(user);
-    return { shopIds: user.favoriteShopIds };
+    const current = await this.favShops.find({
+      where: { userId },
+      select: { shopId: true },
+    });
+    return { shopIds: current.map((s) => s.shopId) };
   }
 
   async toggleFavoriteProduct(
@@ -409,17 +432,22 @@ export class UsersService {
     productId: string,
     add: boolean,
   ): Promise<{ productIds: string[] }> {
-    const user = await this.users.findOne({ where: { id: userId } });
-    if (!user) throw new NotFoundException();
-    const ids = new Set(user.favoriteProductIds ?? []);
     if (add) {
-      ids.add(productId);
+      await this.favProducts
+        .createQueryBuilder()
+        .insert()
+        .into(UserFavoriteProduct)
+        .values({ userId, productId })
+        .orIgnore()
+        .execute();
     } else {
-      ids.delete(productId);
+      await this.favProducts.delete({ userId, productId });
     }
-    user.favoriteProductIds = [...ids];
-    await this.users.save(user);
-    return { productIds: user.favoriteProductIds };
+    const current = await this.favProducts.find({
+      where: { userId },
+      select: { productId: true },
+    });
+    return { productIds: current.map((p) => p.productId) };
   }
 
   /**
@@ -428,6 +456,7 @@ export class UsersService {
    */
   async deleteAccount(
     userId: string,
+    dto?: DeleteAccountDto,
   ): Promise<{ success: boolean; message: string }> {
     const user = await this.users.findOne({ where: { id: userId } });
     if (!user) throw new NotFoundException('Foydalanuvchi topilmadi');
@@ -523,6 +552,8 @@ export class UsersService {
 
       // 4. Remove sensitive child records that have no accounting retention requirements
       await em.delete(UserAddress, { userId });
+      await em.delete(UserFavoriteShop, { userId });
+      await em.delete(UserFavoriteProduct, { userId });
       await em.delete(ShopStaff, { userId });
       await em.delete(DeviceToken, { userId });
       await em.delete(SellerBankAccount, { userId });
@@ -532,6 +563,10 @@ export class UsersService {
       // but personal identity (PII) is securely stripped.
       const anonymizedPhone = `+998000000000_del_${user.id.replace(/-/g, '').slice(0, 10)}`;
 
+      const reasonParts: string[] = [];
+      if (dto?.reasonKey) reasonParts.push(`[${dto.reasonKey}]`);
+      if (dto?.reasonDetails) reasonParts.push(dto.reasonDetails);
+
       user.name = "O'chirilgan foydalanuvchi";
       user.firstName = null;
       user.lastName = null;
@@ -540,12 +575,9 @@ export class UsersService {
       user.birthDate = null;
       user.gender = null;
       user.phone = anonymizedPhone;
-      user.favoriteShopIds = [];
-      user.favoriteProductIds = [];
       user.status = UserStatus.Deleted;
       user.deletedAt = new Date();
-      user.isSellerApproved = false;
-      user.isAdmin = false;
+      user.deletionReason = reasonParts.length > 0 ? reasonParts.join(' ').trim() : null;
       user.roles = [Role.Customer];
 
       await em.save(User, user);

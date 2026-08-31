@@ -21,12 +21,10 @@ import {
 import { Review } from '../orders/entities/review.entity';
 import { PushService } from '../push/push.service';
 import { Shop } from '../shops/entities/shop.entity';
-import {
-  ShopStaff,
-  StaffPermission,
-} from '../shops/entities/shop-staff.entity';
+import { ShopStaff, StaffPermission } from '../shops/entities/shop-staff.entity';
 import { assertShopPermission } from '../shops/shop-access.util';
 import { isDeliveryOpenNow, isShopOpenNow } from '../shops/shop-hours.util';
+import { UserFavoriteShop } from '../users/entities/user-favorite-shop.entity';
 import { User } from '../users/entities/user.entity';
 import { Category } from '../categories/entities/category.entity';
 import { slugify } from '../common/utils/slug.util';
@@ -101,6 +99,8 @@ export class ProductsService {
     private readonly reviews: Repository<Review>,
     @InjectRepository(User)
     private readonly users: Repository<User>,
+    @InjectRepository(UserFavoriteShop)
+    private readonly favShops: Repository<UserFavoriteShop>,
     private readonly dataSource: DataSource,
     private readonly push: PushService,
     private readonly settings: SettingsService,
@@ -600,15 +600,14 @@ export class ProductsService {
       where: { id: shopId },
       select: { name: true },
     });
-    const favUsers = await this.users
-      .createQueryBuilder('u')
-      .where(':shopId = ANY(u.favoriteShopIds)', { shopId })
-      .select(['u.id'])
-      .getMany();
+    const favUsers = await this.favShops.find({
+      where: { shopId },
+      select: { userId: true },
+    });
     if (favUsers.length === 0) return;
     const pct = Math.round(((price - discountPrice) / price) * 100);
     void this.push.sendToUsers(
-      favUsers.map((u) => u.id),
+      favUsers.map((u) => u.userId),
       {
         title: `${shop?.name ?? "Do'koningiz"} — yangi aksiya!`,
         body: `${productName}: ${discountPrice.toLocaleString('ru')} so'm (${pct}% chegirma)`,

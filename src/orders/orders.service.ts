@@ -2113,19 +2113,9 @@ export class OrdersService {
     }
   }
 
-  /** Recompute a courier's cached rating from Review rows with target='courier'. */
-  private async recomputeCourierRating(courierUserId: string): Promise<void> {
-    const agg = await this.reviews
-      .createQueryBuilder('r')
-      .select('COALESCE(AVG(r.stars), 0)', 'avg')
-      .addSelect('COUNT(*)', 'cnt')
-      .where('r.target = :target', { target: ReviewTarget.Courier })
-      .andWhere('r.courierUserId = :courierUserId', { courierUserId })
-      .getRawOne<{ avg: string; cnt: string }>();
-    await this.users.update(courierUserId, {
-      courierRatingAverage: Math.round(Number(agg?.avg ?? 0) * 100) / 100,
-      courierRatingCount: Number(agg?.cnt ?? 0),
-    });
+  /** Courier rating is computed dynamically from Review rows with target='courier'. */
+  private async recomputeCourierRating(_courierUserId: string): Promise<void> {
+    // Dynamic review queries calculate this on demand without mutating User table
   }
 
   /** Recompute a shop's service/delivery rating from Review rows with target='shop' — distinct from product-based ratingAverage. */

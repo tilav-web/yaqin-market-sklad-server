@@ -11,6 +11,7 @@ import { PushService } from '../push/push.service';
 import { Shop } from '../shops/entities/shop.entity';
 import { ShopStaff } from '../shops/entities/shop-staff.entity';
 import { assertShopPermission } from '../shops/shop-access.util';
+import { UserFavoriteShop } from '../users/entities/user-favorite-shop.entity';
 import { User } from '../users/entities/user.entity';
 import { Promotion } from './entities/promotion.entity';
 import { toLocalizedText } from '../common/types/localized-text.type';
@@ -26,6 +27,8 @@ export class PromotionsService {
     private readonly staff: Repository<ShopStaff>,
     @InjectRepository(User)
     private readonly users: Repository<User>,
+    @InjectRepository(UserFavoriteShop)
+    private readonly favShops: Repository<UserFavoriteShop>,
     private readonly push: PushService,
   ) {}
 
@@ -259,14 +262,13 @@ export class PromotionsService {
       where: { id: shopId },
       select: { name: true },
     });
-    const favUsers = await this.users
-      .createQueryBuilder('u')
-      .where(':shopId = ANY(u.favoriteShopIds)', { shopId })
-      .select(['u.id'])
-      .getMany();
+    const favUsers = await this.favShops.find({
+      where: { shopId },
+      select: { userId: true },
+    });
     if (!favUsers.length) return;
     void this.push.sendToUsers(
-      favUsers.map((u) => u.id),
+      favUsers.map((u) => u.userId),
       {
         title: `${shop?.name ?? "Do'koningiz"} — yangi aksiya!`,
         body: promoName,

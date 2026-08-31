@@ -12,6 +12,8 @@ import { Shop } from '../shops/entities/shop.entity';
 import { ShopStaff } from '../shops/entities/shop-staff.entity';
 import { RiskService } from '../risk/risk.service';
 import { UserAddress } from './entities/user-address.entity';
+import { UserFavoriteProduct } from './entities/user-favorite-product.entity';
+import { UserFavoriteShop } from './entities/user-favorite-shop.entity';
 import { User, UserStatus } from './entities/user.entity';
 import { UsersService } from './users.service';
 
@@ -24,6 +26,14 @@ describe('UsersService - deleteAccount', () => {
     create: jest.fn(),
   };
   const mockAddressesRepo = {};
+  const mockFavShopsRepo = {
+    find: jest.fn().mockResolvedValue([]),
+    delete: jest.fn().mockResolvedValue({ affected: 1 }),
+  };
+  const mockFavProductsRepo = {
+    find: jest.fn().mockResolvedValue([]),
+    delete: jest.fn().mockResolvedValue({ affected: 1 }),
+  };
   const mockShopStaffRepo = {
     count: jest.fn(),
   };
@@ -65,6 +75,8 @@ describe('UsersService - deleteAccount', () => {
         UsersService,
         { provide: getRepositoryToken(User), useValue: mockUsersRepo },
         { provide: getRepositoryToken(UserAddress), useValue: mockAddressesRepo },
+        { provide: getRepositoryToken(UserFavoriteShop), useValue: mockFavShopsRepo },
+        { provide: getRepositoryToken(UserFavoriteProduct), useValue: mockFavProductsRepo },
         { provide: getRepositoryToken(ShopStaff), useValue: mockShopStaffRepo },
         { provide: getRepositoryToken(Order), useValue: mockOrdersRepo },
         { provide: DataSource, useValue: mockDataSource },
@@ -149,11 +161,15 @@ describe('UsersService - deleteAccount', () => {
     mockEntityManager.count.mockResolvedValue(0);
     mockEntityManager.find.mockResolvedValue([]);
 
-    const res = await service.deleteAccount(user.id!);
+    const res = await service.deleteAccount(user.id!, {
+      reasonKey: 'bad_experience',
+      reasonDetails: 'Yetkazib berish juda sekin',
+    });
 
     expect(res.success).toBe(true);
     expect(user.status).toBe(UserStatus.Deleted);
     expect(user.name).toBe("O'chirilgan foydalanuvchi");
+    expect(user.deletionReason).toBe('[bad_experience] Yetkazib berish juda sekin');
     expect(user.email).toBeNull();
     expect(user.avatarUrl).toBeNull();
     expect(user.phone).toContain('+998000000000_del_');
