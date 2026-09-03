@@ -12,6 +12,32 @@ import {
   STRING_SETTING_KEYS,
 } from './entities/global-setting.entity';
 
+export interface EimzoCertificateInfo {
+  companyName: string;
+  directorName: string;
+  tin: string;
+  pinfl: string;
+  region: string;
+  validFrom: string;
+  validTo: string;
+  issuer: string;
+  verified: boolean;
+}
+
+export interface SoliqStatusInfo {
+  hasKey: boolean;
+  keyPath: string;
+  keyFileName: string;
+  keyFileSize: number;
+  hasPassword: boolean;
+  hasToken: boolean;
+  isTokenExpired: boolean;
+  tokenExpiresAt: string;
+  operatorTin: string;
+  tokenPreview: string;
+  certificate?: EimzoCertificateInfo;
+}
+
 const DEFAULTS: Record<string, { value: string; description: string }> = {
   [SETTING_KEYS.COMMISSION_RATE_DEFAULT]: {
     value: '12.00',
@@ -463,26 +489,20 @@ export class SettingsService implements OnModuleInit {
   /**
    * E-IMZO .pfx kalitidan Davlat Soliq Sertifikati ma'lumotlarini o'qish
    */
-  private parseEimzoCertificate(keyPath: string, passwordEnc?: string): {
-    companyName: string;
-    directorName: string;
-    tin: string;
-    pinfl: string;
-    region: string;
-    validFrom: string;
-    validTo: string;
-    issuer: string;
-    verified: boolean;
-  } {
-    const defaultData = {
+  private parseEimzoCertificate(
+    keyPath: string,
+    passwordEnc?: string,
+  ): EimzoCertificateInfo {
+    const defaultData: EimzoCertificateInfo = {
       companyName: '"TILAV" MCHJ',
-      directorName: 'TILOVOV SHAVQIDDIN SAYFIDDIN O\'G\'LI',
+      directorName: "TILOVOV SHAVQIDDIN SAYFIDDIN O'G'LI",
       tin: '313296455',
       pinfl: '52302035660028',
       region: 'Qashqadaryo viloyati, Muborak tumani',
       validFrom: '2026-08-31',
       validTo: '2028-08-31',
-      issuer: 'Yangi Texnologiyalar Ilmiy-Axborot Markazi AJ (Davlat Soliq Qo\'mitasi)',
+      issuer:
+        "Yangi Texnologiyalar Ilmiy-Axborot Markazi AJ (Davlat Soliq Qo'mitasi)",
       verified: true,
     };
 
@@ -509,9 +529,12 @@ export class SettingsService implements OnModuleInit {
       const company = extract(/O\s*=\s*([^,\n]+)/, 'TILAV MCHJ');
       const director = extract(
         /CN\s*=\s*([^,\n]+)/,
-        'TILOVOV SHAVQIDDIN SAYFIDDIN O\'G\'LI',
+        "TILOVOV SHAVQIDDIN SAYFIDDIN O'G'LI",
       );
-      const tin = extract(/1\.2\.860\.3\.16\.1\.1\s*=\s*([^,\n]+)/, '313296455');
+      const tin = extract(
+        /1\.2\.860\.3\.16\.1\.1\s*=\s*([^,\n]+)/,
+        '313296455',
+      );
       const pinfl = extract(
         /1\.2\.860\.3\.16\.1\.2\s*=\s*([^,\n]+)/,
         '52302035660028',
@@ -526,11 +549,12 @@ export class SettingsService implements OnModuleInit {
         directorName: director,
         tin,
         pinfl,
-        region: loc && st ? `${st}, ${loc}` : st || loc || 'Qashqadaryo viloyati',
+        region:
+          loc && st ? `${st}, ${loc}` : st || loc || 'Qashqadaryo viloyati',
         validFrom: notBefore,
         validTo: notAfter,
         issuer:
-          'Yangi Texnologiyalar Ilmiy-Axborot Markazi AJ (Davlat Soliq Qo\'mitasi)',
+          "Yangi Texnologiyalar Ilmiy-Axborot Markazi AJ (Davlat Soliq Qo'mitasi)",
         verified: true,
       };
     } catch {
@@ -541,19 +565,7 @@ export class SettingsService implements OnModuleInit {
   /**
    * Soliq va E-IMZO integratsiyasi holatini tekshirish
    */
-  getSoliqStatus(): {
-    hasKey: boolean;
-    keyPath: string;
-    keyFileName: string;
-    keyFileSize: number;
-    hasPassword: boolean;
-    hasToken: boolean;
-    isTokenExpired: boolean;
-    tokenExpiresAt: string;
-    operatorTin: string;
-    tokenPreview: string;
-    certificate?: ReturnType<typeof this.parseEimzoCertificate>;
-  } {
+  getSoliqStatus(): SoliqStatusInfo {
     const keyPath = this.get(SETTING_KEYS.SOLIQ_KEY_PATH);
     let hasKey = false;
     let keyFileSize = 0;
@@ -585,7 +597,7 @@ export class SettingsService implements OnModuleInit {
       ? `${token.slice(0, 8)}...${token.slice(-6)}`
       : '';
 
-    let certificate: ReturnType<typeof this.parseEimzoCertificate> | undefined;
+    let certificate: EimzoCertificateInfo | undefined;
     if (hasKey && hasPassword) {
       certificate = this.parseEimzoCertificate(keyPath, passwordEnc);
     }
@@ -665,7 +677,7 @@ export class SettingsService implements OnModuleInit {
             ? cert?.companyName || '"TILAV" MCHJ'
             : `Tadbirkorlik subyekti (${cleanTin})`,
           directorName: isOperator
-            ? cert?.directorName || 'TILOVOV SHAVQIDDIN SAYFIDDIN O\'G\'LI'
+            ? cert?.directorName || "TILOVOV SHAVQIDDIN SAYFIDDIN O'G'LI"
             : '',
           stir: cleanTin,
           pinfl: isOperator ? cert?.pinfl || '52302035660028' : '',
@@ -677,7 +689,7 @@ export class SettingsService implements OnModuleInit {
           validTo: isOperator ? cert?.validTo || '2028-yilgacha' : '',
           issuer:
             cert?.issuer ||
-            'Yangi Texnologiyalar Ilmiy-Axborot Markazi AJ (Davlat Soliq Qo\'mitasi)',
+            "Yangi Texnologiyalar Ilmiy-Axborot Markazi AJ (Davlat Soliq Qo'mitasi)",
           entityType:
             cleanTin.startsWith('1') ||
             cleanTin.startsWith('2') ||
@@ -691,7 +703,7 @@ export class SettingsService implements OnModuleInit {
           systemStatus: 'Faol va tekshirishga tayyor',
         },
         message: isOperator
-          ? 'E-IMZO davlat sertifikati tasdiqlandi. "TILAV" MCHJ (313296455) operatori ma\'lumotlari Soliq bazasidan muvaffaqiyatli o\'qildi!'
+          ? `E-IMZO davlat sertifikati tasdiqlandi. "TILAV" MCHJ (313296455) operatori ma'lumotlari Soliq bazasidan muvaffaqiyatli o'qildi!`
           : `E-IMZO orqali STIR ${cleanTin} bo'yicha so'rov muvaffaqiyatli amalga oshirildi!`,
       };
     }
@@ -702,12 +714,5 @@ export class SettingsService implements OnModuleInit {
       message:
         'E-IMZO (.pfx) kaliti yuklanmagan. Iltimos, admin panel orqali MChJ kalit faylini va parolini kiriting.',
     };
-  }
-
-  /**
-   * Eskirgan Didox testi uchun moslashtiruvchi alias
-   */
-  async testDidox(userKey?: string, tin = '313296455') {
-    return this.testSoliqConnection(tin, userKey);
   }
 }

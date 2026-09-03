@@ -88,11 +88,6 @@ export class SettingsController {
     return this.svc.testSoliqConnection(tin, token);
   }
 
-  @Get('test-didox')
-  testDidox(@Query('key') key?: string, @Query('tin') tin?: string) {
-    return this.svc.testDidox(key, tin);
-  }
-
   @Put(':key')
   set(@Param('key') key: string, @Body() body: SetSettingValueDto) {
     return this.svc.set(key, body.value, body.force ?? false);
