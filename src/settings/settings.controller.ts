@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -86,6 +87,16 @@ export class SettingsController {
     @Query('token') token?: string,
   ) {
     return this.svc.testSoliqConnection(tin, token);
+  }
+
+  /**
+   * Sotuvchilar uchun ommaviy oferta PDF shartnomasini yuklash
+   */
+  @Post('upload-oferta-pdf')
+  @UseInterceptors(FileInterceptor('file'))
+  uploadOfertaPdf(@UploadedFile() file: Express.Multer.File) {
+    if (!file) throw new BadRequestException('PDF fayl tanlanmadi');
+    return this.svc.uploadOfertaPdf(file.buffer, file.originalname);
   }
 
   @Put(':key')

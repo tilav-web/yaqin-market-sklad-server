@@ -259,6 +259,7 @@ export class SellersService {
     commissionRate: number;
     ofertaTitle: string;
     ofertaUrl: string;
+    ofertaPdfUrl?: string;
     supportPhone: string;
   } {
     const stir = this.settingsService.get(SETTING_KEYS.PLATFORM_STIR);
@@ -270,12 +271,15 @@ export class SellersService {
       name || process.env.PLATFORM_LEGAL_NAME || '"TILAV" MCHJ (Yaqin Market)';
     const commissionRate = parseFloat(comm) || 12;
 
+    const pdfUrl = this.settingsService.get(SETTING_KEYS.OFERTA_PDF_URL);
+
     return {
       platformStir,
       platformName,
       commissionRate,
       ofertaTitle: `${platformName} Elektron Tijorat Ommaviy Ofertasi`,
       ofertaUrl: 'https://yaqin-market.uz/oferta',
+      ofertaPdfUrl: pdfUrl || undefined,
       supportPhone: '+998993256685',
     };
   }

@@ -11,6 +11,7 @@ import {
   SETTING_KEYS,
   STRING_SETTING_KEYS,
 } from './entities/global-setting.entity';
+import { UploadsService } from '../uploads/uploads.service';
 
 export interface EimzoCertificateInfo {
   companyName: string;
@@ -206,6 +207,7 @@ export class SettingsService implements OnModuleInit {
   constructor(
     @InjectRepository(GlobalSetting)
     private readonly repo: Repository<GlobalSetting>,
+    private readonly uploads: UploadsService,
   ) {}
 
   async onModuleInit() {
@@ -714,5 +716,22 @@ export class SettingsService implements OnModuleInit {
       message:
         'E-IMZO (.pfx) kaliti yuklanmagan. Iltimos, admin panel orqali MChJ kalit faylini va parolini kiriting.',
     };
+  }
+
+  async uploadOfertaPdf(
+    fileBuffer: Buffer,
+    originalName: string,
+  ): Promise<{ url: string }> {
+    const ext = path.extname(originalName).toLowerCase() || '.pdf';
+    if (ext !== '.pdf') {
+      throw new BadRequestException(
+        'Faqat PDF formatdagi rasmiy shartnoma qabul qilinadi (.pdf)',
+      );
+    }
+    const key = `legal/oferta_${Date.now()}${ext}`;
+    await this.uploads.uploadBuffer(fileBuffer, key, 'application/pdf');
+    const url = `/api/uploads/${key}`;
+    await this.set(SETTING_KEYS.OFERTA_PDF_URL, url);
+    return { url };
   }
 }
