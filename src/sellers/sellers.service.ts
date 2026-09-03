@@ -280,7 +280,7 @@ export class SellersService {
       ofertaTitle: `${platformName} Elektron Tijorat Ommaviy Ofertasi`,
       ofertaUrl: 'https://yaqin-market.uz/oferta',
       ofertaPdfUrl: pdfUrl || undefined,
-      supportPhone: '+998993256685',
+      supportPhone: '+998777422302',
     };
   }
 
