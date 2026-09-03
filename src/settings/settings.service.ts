@@ -89,12 +89,20 @@ const DEFAULTS: Record<string, { value: string; description: string }> = {
     description: 'Fiskal rejim: off | collect | live',
   },
   [SETTING_KEYS.PLATFORM_LEGAL_NAME]: {
-    value: '',
-    description: 'Operator (MChJ) rasmiy nomi — fiskal cheklar uchun',
+    value: '"TILAV" MCHJ',
+    description: 'Operator (MChJ) rasmiy nomi — fiskal cheklar va ofertalar uchun',
   },
   [SETTING_KEYS.PLATFORM_STIR]: {
-    value: '',
-    description: 'Operator (MChJ) STIRi — fiskal cheklar uchun',
+    value: '313296455',
+    description: 'Operator (MChJ) STIRi — fiskal cheklar va ofertalar uchun',
+  },
+  [SETTING_KEYS.SUPPORT_PHONE]: {
+    value: '+998777422302',
+    description: "Operator qo'llab-quvvatlash xizmati rasmiy telefon raqami",
+  },
+  [SETTING_KEYS.SITE_URL]: {
+    value: 'https://yaqin-market.uz',
+    description: 'Asosiy veb-sayt domeni',
   },
   [SETTING_KEYS.DELIVERY_MXIK_CODE]: {
     value: '10105001002000000',
@@ -668,7 +676,13 @@ export class SettingsService implements OnModuleInit {
 
     // Diagnostik status hisoboti
     if (status.hasKey) {
-      const isOperator = cleanTin === '313296455';
+      const configuredOperatorTin =
+        this.get(SETTING_KEYS.PLATFORM_STIR) ||
+        this.get(SETTING_KEYS.SOLIQ_OPERATOR_TIN) ||
+        '313296455';
+      const configuredOperatorName =
+        this.get(SETTING_KEYS.PLATFORM_LEGAL_NAME) || '"TILAV" MCHJ';
+      const isOperator = cleanTin === configuredOperatorTin;
       const cert = status.certificate;
       return {
         success: true,
@@ -676,7 +690,7 @@ export class SettingsService implements OnModuleInit {
         data: {
           status: 'KEY_CONFIGURED',
           companyName: isOperator
-            ? cert?.companyName || '"TILAV" MCHJ'
+            ? cert?.companyName || configuredOperatorName
             : `Tadbirkorlik subyekti (${cleanTin})`,
           directorName: isOperator
             ? cert?.directorName || "TILOVOV SHAVQIDDIN SAYFIDDIN O'G'LI"
@@ -705,7 +719,7 @@ export class SettingsService implements OnModuleInit {
           systemStatus: 'Faol va tekshirishga tayyor',
         },
         message: isOperator
-          ? `E-IMZO davlat sertifikati tasdiqlandi. "TILAV" MCHJ (313296455) operatori ma'lumotlari Soliq bazasidan muvaffaqiyatli o'qildi!`
+          ? `E-IMZO davlat sertifikati tasdiqlandi. ${cert?.companyName || configuredOperatorName} (${configuredOperatorTin}) operatori ma'lumotlari Soliq bazasidan muvaffaqiyatli o'qildi!`
           : `E-IMZO orqali STIR ${cleanTin} bo'yicha so'rov muvaffaqiyatli amalga oshirildi!`,
       };
     }

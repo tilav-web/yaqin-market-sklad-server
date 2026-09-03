@@ -52,6 +52,8 @@ export const SETTING_KEYS = {
   RISK_PING_MIN_INTERVAL_SEC: 'risk_ping_min_interval_sec', // Bir buyurtma uchun ping oralig'i (soniya)
   RISK_QR_HANDSHAKE_ENABLED: 'risk_qr_handshake_enabled', // Bayroqli kuryerga QR talab qilinsinmi (1/0)
   OFERTA_PDF_URL: 'oferta_pdf_url', // Sotuvchilar uchun ommaviy oferta PDF fayli manzili
+  SUPPORT_PHONE: 'support_phone', // Operator qo'llab-quvvatlash xizmati telefon raqami
+  SITE_URL: 'site_url', // Asosiy veb-sayt manzili (https://yaqin-market.uz)
 } as const;
 
 /**
@@ -64,6 +66,8 @@ export const STRING_SETTING_KEYS: Record<
   { allowedValues?: string[]; pattern?: RegExp; patternHint?: string }
 > = {
   [SETTING_KEYS.OFERTA_PDF_URL]: {},
+  [SETTING_KEYS.SUPPORT_PHONE]: {},
+  [SETTING_KEYS.SITE_URL]: {},
   [SETTING_KEYS.FISCAL_MODE]: { allowedValues: ['off', 'collect', 'live'] },
   [SETTING_KEYS.PLATFORM_LEGAL_NAME]: {},
   // Yuridik shaxs STIRi (INN) — O'zbekistonda 9 xonali raqam.

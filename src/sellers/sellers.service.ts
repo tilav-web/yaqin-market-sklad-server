@@ -130,6 +130,16 @@ export class SellersService {
       return result;
     };
 
+    const configuredOperatorStir =
+      this.settingsService.get(SETTING_KEYS.PLATFORM_STIR) ||
+      this.settingsService.get(SETTING_KEYS.SOLIQ_OPERATOR_TIN) ||
+      process.env.PLATFORM_STIR ||
+      '313296455';
+    const configuredOperatorName =
+      this.settingsService.get(SETTING_KEYS.PLATFORM_LEGAL_NAME) ||
+      process.env.PLATFORM_LEGAL_NAME ||
+      '"TILAV" MCHJ';
+
     // 1. Live Davlat Soliq API integratsiyasi (agar token sozlangan bo'lsa)
     const soliqToken = (
       this.settingsService.get(SETTING_KEYS.SOLIQ_AUTH_TOKEN) ||
@@ -174,7 +184,7 @@ export class SellersService {
               str(data.name) ||
               str(data.short_name) ||
               str(data.legal_name) ||
-              (cleanStir === '313296455' ? '"TILAV" MCHJ' : '');
+              (cleanStir === configuredOperatorStir ? configuredOperatorName : '');
             const legalName =
               str(data.director) ||
               str(data.director_name) ||
@@ -221,10 +231,10 @@ export class SellersService {
     }
 
     // 2. Specific registered official records
-    if (cleanStir === '313296455') {
+    if (cleanStir === configuredOperatorStir) {
       return saveAndReturn({
-        stir: '313296455',
-        companyName: '"TILAV" MCHJ',
+        stir: configuredOperatorStir,
+        companyName: configuredOperatorName,
         legalName: '',
         entityType: 'MChJ',
         legalAddress: 'Qashqadaryo viloyati, Muborak tumani',
@@ -262,14 +272,22 @@ export class SellersService {
     ofertaPdfUrl?: string;
     supportPhone: string;
   } {
-    const stir = this.settingsService.get(SETTING_KEYS.PLATFORM_STIR);
+    const stir =
+      this.settingsService.get(SETTING_KEYS.PLATFORM_STIR) ||
+      this.settingsService.get(SETTING_KEYS.SOLIQ_OPERATOR_TIN);
     const name = this.settingsService.get(SETTING_KEYS.PLATFORM_LEGAL_NAME);
     const comm = this.settingsService.get(SETTING_KEYS.COMMISSION_RATE_DEFAULT);
+    const phone = this.settingsService.get(SETTING_KEYS.SUPPORT_PHONE);
+    const siteUrl =
+      this.settingsService.get(SETTING_KEYS.SITE_URL) ||
+      process.env.SITE_URL ||
+      'https://yaqin-market.uz';
 
     const platformStir = stir || process.env.PLATFORM_STIR || '313296455';
     const platformName =
       name || process.env.PLATFORM_LEGAL_NAME || '"TILAV" MCHJ (Yaqin Market)';
     const commissionRate = parseFloat(comm) || 12;
+    const supportPhone = phone || process.env.SUPPORT_PHONE || '+998777422302';
 
     const pdfUrl = this.settingsService.get(SETTING_KEYS.OFERTA_PDF_URL);
 
@@ -278,9 +296,9 @@ export class SellersService {
       platformName,
       commissionRate,
       ofertaTitle: `${platformName} Elektron Tijorat Ommaviy Ofertasi`,
-      ofertaUrl: 'https://yaqin-market.uz/oferta',
+      ofertaUrl: `${siteUrl.replace(/\/$/, '')}/oferta`,
       ofertaPdfUrl: pdfUrl || undefined,
-      supportPhone: '+998777422302',
+      supportPhone,
     };
   }
 
