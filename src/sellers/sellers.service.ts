@@ -319,14 +319,52 @@ export class SellersService {
     }
 
     // Special test unattached STIR
-    if (cleanStir === '305999999' || cleanStir === '400000000') {
+    if (cleanStir === '305999999' || cleanStir === '400000000' || cleanStir === '000000000') {
       return {
         isAttached: false,
         stir: cleanStir,
         platformStir: config.platformStir,
         platformName: config.platformName,
-        message: `my3.soliq.uz kabinetida '${config.platformStir}' (${config.platformName}) komissioner sifatida topilmadi. Iltimos, soliq kabinetingizda saqlang.`,
+        message: `my3.soliq.uz tizimida platforma (${config.platformStir}) komissioner sifatida topilmadi. Iltimos, Soliq kabinetingizga kirib komissioner qo'shing va qayta bosing.`,
       };
+    }
+
+    // Live Soliq API tekshiruvi (agar token faol bo'lsa)
+    const soliqToken = (
+      this.settingsService.get(SETTING_KEYS.SOLIQ_AUTH_TOKEN) ||
+      process.env.SOLIQ_AUTH_TOKEN ||
+      ''
+    ).trim();
+
+    if (soliqToken) {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 5000);
+        const res = await fetch(
+          `https://my.soliq.uz/tin-service/info?tin=${cleanStir}`,
+          {
+            signal: controller.signal,
+            headers: {
+              Authorization: `Bearer ${soliqToken}`,
+              Accept: 'application/json',
+              'User-Agent': 'YaqinMarket/1.0',
+            },
+          },
+        );
+        clearTimeout(timeout);
+
+        if (res.status === 404) {
+          return {
+            isAttached: false,
+            stir: cleanStir,
+            platformStir: config.platformStir,
+            platformName: config.platformName,
+            message: `STIR (${cleanStir}) Davlat Soliq Qo'mitasi bazasida topilmadi.`,
+          };
+        }
+      } catch {
+        // Soliq API tarmoq xatoligi bo'lsa, xavfsiz davom etadi
+      }
     }
 
     // Verified attachment
