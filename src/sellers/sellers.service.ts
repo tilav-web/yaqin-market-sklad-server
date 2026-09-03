@@ -94,74 +94,80 @@ export class SellersService {
       );
     }
 
-    // 1. Live Didox API integration if key configured in Settings or env
-    const didoxKey = (
-      this.settingsService.get(SETTING_KEYS.DIDOX_USER_KEY) ||
-      process.env.DIDOX_USER_KEY ||
+    // 1. Live Davlat Soliq API integratsiyasi (agar token sozlangan bo'lsa)
+    const soliqToken = (
+      this.settingsService.get(SETTING_KEYS.SOLIQ_AUTH_TOKEN) ||
+      process.env.SOLIQ_AUTH_TOKEN ||
       ''
     ).trim();
-    const apiUrl = (
-      this.settingsService.get(SETTING_KEYS.DIDOX_API_URL) ||
-      'https://api.didox.uz'
-    ).replace(/\/+$/, '');
 
-    if (didoxKey) {
+    if (soliqToken) {
       try {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 6000);
-        const res = await fetch(`${apiUrl}/v1/profile/info?tin=${cleanStir}`, {
-          signal: controller.signal,
-          headers: {
-            'user-key': didoxKey,
-            Accept: 'application/json',
-            'User-Agent': 'YaqinMarket/1.0',
+        const res = await fetch(
+          `https://my.soliq.uz/tin-service/info?tin=${cleanStir}`,
+          {
+            signal: controller.signal,
+            headers: {
+              Authorization: `Bearer ${soliqToken}`,
+              Accept: 'application/json',
+              'User-Agent': 'YaqinMarket/1.0',
+            },
           },
-        });
+        );
         clearTimeout(timeout);
 
         if (res.ok) {
-          const data = (await res.json()) as Record<string, unknown>;
-          const firstDigit = cleanStir[0];
-          const isLegalEntity =
-            firstDigit === '1' || firstDigit === '2' || firstDigit === '3';
-          const regionInfo = this.extractRegionFromStir(cleanStir);
+          const contentType = res.headers.get('content-type') || '';
+          if (contentType.includes('application/json')) {
+            const data = (await res.json()) as Record<string, unknown>;
+            const firstDigit = cleanStir[0];
+            const isLegalEntity =
+              firstDigit === '1' || firstDigit === '2' || firstDigit === '3';
+            const regionInfo = this.extractRegionFromStir(cleanStir);
 
-          const str = (v: unknown): string =>
-            typeof v === 'string' ? v : typeof v === 'number' ? String(v) : '';
+            const str = (v: unknown): string =>
+              typeof v === 'string'
+                ? v
+                : typeof v === 'number'
+                  ? String(v)
+                  : '';
 
-          const companyName =
-            str(data.name) ||
-            str(data.short_name) ||
-            str(data.legal_name) ||
-            (cleanStir === '313296455' ? '"TILAV" MCHJ' : '');
-          const legalName =
-            str(data.director) ||
-            str(data.director_name) ||
-            str(data.head) ||
-            str(data.owner) ||
-            '';
-          const entityType =
-            str(data.type) || (isLegalEntity ? 'MChJ' : 'YaTT');
-          const legalAddress = str(data.address) || regionInfo.city;
-          const region = str(data.region) || regionInfo.name;
-          const status =
-            data.status === 1 ||
-            data.state === 'active' ||
-            data.status === undefined
-              ? 'active'
-              : 'inactive';
-          const vatPayer = Boolean(data.is_vat || data.vat_reg_code);
+            const companyName =
+              str(data.name) ||
+              str(data.short_name) ||
+              str(data.legal_name) ||
+              (cleanStir === '313296455' ? '"TILAV" MCHJ' : '');
+            const legalName =
+              str(data.director) ||
+              str(data.director_name) ||
+              str(data.head) ||
+              str(data.owner) ||
+              '';
+            const entityType =
+              str(data.type) || (isLegalEntity ? 'MChJ' : 'YaTT');
+            const legalAddress = str(data.address) || regionInfo.city;
+            const region = str(data.region) || regionInfo.name;
+            const status =
+              data.status === 1 ||
+              data.state === 'active' ||
+              data.status === undefined
+                ? 'active'
+                : 'inactive';
+            const vatPayer = Boolean(data.is_vat || data.vat_reg_code);
 
-          return {
-            stir: cleanStir,
-            companyName,
-            legalName,
-            entityType,
-            legalAddress,
-            region,
-            status,
-            vatPayer,
-          };
+            return {
+              stir: cleanStir,
+              companyName,
+              legalName,
+              entityType,
+              legalAddress,
+              region,
+              status,
+              vatPayer,
+            };
+          }
         } else if (res.status === 404) {
           throw new BadRequestException(
             'Bunday STIR davlat soliq reyestrida topilmadi',
@@ -169,7 +175,7 @@ export class SellersService {
         }
       } catch (err: unknown) {
         if (err instanceof BadRequestException) throw err;
-        // If timeout or other network warning, gracefully fallback below
+        // Agar Soliq API vaqtincha javob bermasa, pastdagi lokal/ofitsial ma'lumotlarga o'tadi
       }
     }
 

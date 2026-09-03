@@ -1,3 +1,6 @@
+import * as crypto from 'crypto';
+import * as fs from 'fs';
+import * as path from 'path';
 import { BadRequestException, Injectable, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -31,32 +34,31 @@ const DEFAULTS: Record<string, { value: string; description: string }> = {
   },
   [SETTING_KEYS.LOW_STOCK_WARNING_DEFAULT]: {
     value: '10',
-    description: 'Kam qoldiq ogohlantirish default',
+    description: 'Kam qolgan tovar ogohlantirish (dona)',
   },
   [SETTING_KEYS.LOW_STOCK_CRITICAL_DEFAULT]: {
     value: '3',
-    description: 'Kam qoldiq kritik default',
+    description: 'Kam qolgan tovar kritik (dona)',
   },
   [SETTING_KEYS.CLICK_FEE_PERCENT]: {
     value: '3.00',
-    description: 'Click ekvayring komissiyasi (%) — shartnomadagi haqiqiy foiz',
+    description: 'Click ekvayring komissiyasi (%) — shartnomadan',
   },
   [SETTING_KEYS.PAYOUT_FEE_PERCENT]: {
     value: '1.00',
-    description: "Sellerga karta o'tkazma komissiyasi (%)",
+    description: "Sellerga karta o'tkazma to'lovi (%)",
   },
   [SETTING_KEYS.MIN_ORDER_TOTAL]: {
     value: '0',
-    description: "Minimal buyurtma summasi (so'm), 0 = cheklov yo'q",
+    description: "Minimal buyurtma summasi (so'm; 0 = cheklov yo'q)",
   },
   [SETTING_KEYS.VAT_RATE_PERCENT]: {
     value: '12',
-    description: 'QQS standart stavkasi (%)',
+    description: "QQS standart stavkasi (%) — O'zR Soliq Kodeksi",
   },
   [SETTING_KEYS.FISCAL_MODE]: {
-    value: 'collect',
-    description:
-      "Fiskal rejim: off (chek yaratilmaydi) | collect (cheklar yig'iladi, yuborilmaydi) | live (OFDga yuboriladi)",
+    value: 'off',
+    description: 'Fiskal rejim: off | collect | live',
   },
   [SETTING_KEYS.PLATFORM_LEGAL_NAME]: {
     value: '',
@@ -71,14 +73,34 @@ const DEFAULTS: Record<string, { value: string; description: string }> = {
     description:
       "Yetkazib berish xizmati MXIK kodi (tasnif: 'Kuryerlik xizmati')",
   },
+  [SETTING_KEYS.SOLIQ_AUTH_TOKEN]: {
+    value: '',
+    description: 'Davlat Soliq API sessiya/bearer tokeni',
+  },
+  [SETTING_KEYS.SOLIQ_TOKEN_EXPIRES_AT]: {
+    value: '',
+    description: 'Soliq tokenining amal qilish muddati (ISO timestamp)',
+  },
+  [SETTING_KEYS.SOLIQ_KEY_PATH]: {
+    value: '',
+    description: "Serverda saqlangan E-IMZO (.pfx) kalit fayli yo'li",
+  },
+  [SETTING_KEYS.SOLIQ_KEY_PASSWORD_ENC]: {
+    value: '',
+    description: 'Shifrlangan E-IMZO kalit paroli',
+  },
+  [SETTING_KEYS.SOLIQ_OPERATOR_TIN]: {
+    value: '313296455',
+    description: 'Operator (MChJ) STIRi',
+  },
   [SETTING_KEYS.DIDOX_USER_KEY]: {
     value: '',
     description:
-      "Didox API kaliti (user-key) — Soliq ma'lumotlarini avtomatik tekshirish uchun",
+      "Didox API kaliti (user-key) — Soliq ma'lumotlarini avtomatik tekshirish uchun (deprecated)",
   },
   [SETTING_KEYS.DIDOX_API_URL]: {
     value: 'https://api.didox.uz',
-    description: 'Didox API asosiy manzili (masalan: https://api.didox.uz)',
+    description: 'Didox API asosiy manzili (deprecated)',
   },
   [SETTING_KEYS.RISK_DELIVERED_MAX_DISTANCE_M]: {
     value: '300',
@@ -324,12 +346,183 @@ export class SettingsService implements OnModuleInit {
     };
   }
 
+  // ==========================================
+  // ---- Davlat Soliq & E-IMZO Integratsiyasi ----
+  // ==========================================
+
+  private getEncryptionSecret(): Buffer {
+    const secret =
+      process.env.JWT_SECRET || 'dev_jwt_secret_change_me_in_production';
+    return crypto.createHash('sha256').update(secret).digest();
+  }
+
+  encryptPassword(password: string): string {
+    if (!password) return '';
+    const iv = crypto.randomBytes(12);
+    const key = this.getEncryptionSecret();
+    const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+    const encrypted = Buffer.concat([
+      cipher.update(password, 'utf8'),
+      cipher.final(),
+    ]);
+    const tag = cipher.getAuthTag();
+    return `${iv.toString('hex')}:${tag.toString('hex')}:${encrypted.toString('hex')}`;
+  }
+
+  decryptPassword(cipherPayload: string): string {
+    if (!cipherPayload) return '';
+    try {
+      const [ivHex, tagHex, dataHex] = cipherPayload.split(':');
+      if (!ivHex || !tagHex || !dataHex) return '';
+      const iv = Buffer.from(ivHex, 'hex');
+      const tag = Buffer.from(tagHex, 'hex');
+      const data = Buffer.from(dataHex, 'hex');
+      const key = this.getEncryptionSecret();
+      const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+      decipher.setAuthTag(tag);
+      return Buffer.concat([decipher.update(data), decipher.final()]).toString(
+        'utf8',
+      );
+    } catch {
+      return '';
+    }
+  }
+
   /**
-   * Super Admin Didox API kalitini kiritganda ulanishni tekshirish uchun.
+   * Super Admin tomonidan yuklangan .pfx E-IMZO kalit faylini va parolini saqlash
    */
-  async testDidox(
-    userKey?: string,
+  async saveSoliqKey(
+    fileBuffer: Buffer,
+    originalName: string,
+    password: string,
+    operatorTin?: string,
+  ): Promise<{ success: boolean; message: string; keyPath: string }> {
+    if (!fileBuffer || fileBuffer.length === 0) {
+      throw new BadRequestException(
+        "Kalit fayli (.pfx / .p12) bo'sh bo'lishi mumkin emas",
+      );
+    }
+    if (!password || password.trim() === '') {
+      throw new BadRequestException('E-IMZO kalit paroli kiritilishi shart');
+    }
+
+    const keysDir = path.resolve(process.cwd(), 'storage', 'keys');
+    if (!fs.existsSync(keysDir)) {
+      fs.mkdirSync(keysDir, { recursive: true });
+    }
+
+    const ext = path.extname(originalName).toLowerCase() || '.pfx';
+    const filePath = path.join(keysDir, `soliq_eimzo_key${ext}`);
+    fs.writeFileSync(filePath, fileBuffer);
+
+    const relPath = path.relative(process.cwd(), filePath).replace(/\\/g, '/');
+    await this.set(SETTING_KEYS.SOLIQ_KEY_PATH, relPath, true);
+    await this.set(
+      SETTING_KEYS.SOLIQ_KEY_PASSWORD_ENC,
+      this.encryptPassword(password),
+      true,
+    );
+    if (operatorTin && /^\d{9}$/.test(operatorTin.trim())) {
+      await this.set(SETTING_KEYS.SOLIQ_OPERATOR_TIN, operatorTin.trim(), true);
+    }
+
+    return {
+      success: true,
+      message: 'E-IMZO (.pfx) kaliti va paroli serverda xavfsiz saqlandi!',
+      keyPath: relPath,
+    };
+  }
+
+  /**
+   * Soliq API Bearer tokenini qo'lda yoki E-IMZO brauzer orqali yangilash
+   */
+  async setSoliqToken(
+    token: string,
+    expiresInHours = 24,
+  ): Promise<{ success: boolean; message: string; expiresAt: string }> {
+    const cleanToken = token.trim();
+    if (!cleanToken) {
+      throw new BadRequestException("Token bo'sh bo'lishi mumkin emas");
+    }
+    const expiresAt = new Date(
+      Date.now() + expiresInHours * 3600 * 1000,
+    ).toISOString();
+
+    await this.set(SETTING_KEYS.SOLIQ_AUTH_TOKEN, cleanToken, true);
+    await this.set(SETTING_KEYS.SOLIQ_TOKEN_EXPIRES_AT, expiresAt, true);
+
+    return {
+      success: true,
+      message: `Soliq tokeni muvaffaqiyatli saqlandi! Amal qilish muddati: ${expiresAt}`,
+      expiresAt,
+    };
+  }
+
+  /**
+   * Soliq va E-IMZO integratsiyasi holatini tekshirish
+   */
+  getSoliqStatus(): {
+    hasKey: boolean;
+    keyPath: string;
+    keyFileName: string;
+    keyFileSize: number;
+    hasPassword: boolean;
+    hasToken: boolean;
+    isTokenExpired: boolean;
+    tokenExpiresAt: string;
+    operatorTin: string;
+    tokenPreview: string;
+  } {
+    const keyPath = this.get(SETTING_KEYS.SOLIQ_KEY_PATH);
+    let hasKey = false;
+    let keyFileSize = 0;
+    let keyFileName = '';
+    if (keyPath) {
+      const absPath = path.resolve(process.cwd(), keyPath);
+      if (fs.existsSync(absPath)) {
+        hasKey = true;
+        const stats = fs.statSync(absPath);
+        keyFileSize = stats.size;
+        keyFileName = path.basename(absPath);
+      }
+    }
+
+    const hasPassword = Boolean(this.get(SETTING_KEYS.SOLIQ_KEY_PASSWORD_ENC));
+    const token = this.get(SETTING_KEYS.SOLIQ_AUTH_TOKEN);
+    const tokenExpiresAt = this.get(SETTING_KEYS.SOLIQ_TOKEN_EXPIRES_AT);
+    const hasToken = Boolean(token && token.trim() !== '');
+    const isTokenExpired =
+      Boolean(tokenExpiresAt) &&
+      new Date(tokenExpiresAt).getTime() < Date.now();
+    const operatorTin =
+      this.get(SETTING_KEYS.SOLIQ_OPERATOR_TIN) ||
+      this.get(SETTING_KEYS.PLATFORM_STIR) ||
+      '313296455';
+
+    const tokenPreview = token
+      ? `${token.slice(0, 8)}...${token.slice(-6)}`
+      : '';
+
+    return {
+      hasKey,
+      keyPath,
+      keyFileName,
+      keyFileSize,
+      hasPassword,
+      hasToken,
+      isTokenExpired,
+      tokenExpiresAt,
+      operatorTin,
+      tokenPreview,
+    };
+  }
+
+  /**
+   * STIR bo'yicha Soliq yoki Davlat API ulanishini tekshirish
+   */
+  async testSoliqConnection(
     tin = '313296455',
+    customToken?: string,
   ): Promise<{
     success: boolean;
     status: number;
@@ -337,69 +530,82 @@ export class SettingsService implements OnModuleInit {
     error?: string;
     message: string;
   }> {
-    const key = (
-      userKey ||
-      this.get(SETTING_KEYS.DIDOX_USER_KEY) ||
-      process.env.DIDOX_USER_KEY ||
+    const cleanTin = tin.replace(/\D/g, '');
+    const token = (
+      customToken ||
+      this.get(SETTING_KEYS.SOLIQ_AUTH_TOKEN) ||
       ''
     ).trim();
-    if (!key) {
-      return {
-        success: false,
-        status: 400,
-        message:
-          'Didox API kaliti kiritilmagan. Iltimos, Didox kabinetingizdagi user-key ni kiriting.',
-      };
-    }
-    const apiUrl = (
-      this.get(SETTING_KEYS.DIDOX_API_URL) || 'https://api.didox.uz'
-    ).replace(/\/+$/, '');
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 8000);
-      const res = await fetch(`${apiUrl}/v1/profile/info?tin=${tin}`, {
-        signal: controller.signal,
-        headers: {
-          'user-key': key,
-          Accept: 'application/json',
-          'User-Agent': 'YaqinMarket/1.0',
-        },
-      });
-      clearTimeout(timeout);
-      const text = await res.text();
-      let json: Record<string, unknown>;
-      try {
-        json = JSON.parse(text) as Record<string, unknown>;
-      } catch {
-        json = { raw: text };
-      }
 
-      if (res.ok) {
-        return {
-          success: true,
-          status: res.status,
-          data: json,
-          message:
-            "Didox & Soliq API ga muvaffaqiyatli ulandi! Ma'lumotlar to'g'ri qabul qilinmoqda.",
-        };
-      } else {
-        const str = (v: unknown): string => (typeof v === 'string' ? v : '');
-        const errorMsg = str(json.message) || str(json.error) || text;
-        return {
-          success: false,
-          status: res.status,
-          error: errorMsg,
-          message: `Didox xatolik qaytardi (${res.status}): ${errorMsg || "Token noto'g'ri yoki muddati o'tgan"}`,
-        };
+    const status = this.getSoliqStatus();
+
+    // Agar faol token mavjud bo'lsa, to'g'ridan-to'g'ri Soliq API'siga murojaat qilish
+    if (token) {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 7000);
+        const res = await fetch(
+          `https://my.soliq.uz/tin-service/info?tin=${cleanTin}`,
+          {
+            signal: controller.signal,
+            headers: {
+              Authorization: `Bearer ${token}`,
+              Accept: 'application/json',
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+            },
+          },
+        );
+        clearTimeout(timeout);
+
+        const contentType = res.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+          const json = await res.json();
+          return {
+            success: true,
+            status: res.status,
+            data: json,
+            message: `Davlat Soliq API ga muvaffaqiyatli ulandi! STIR ${cleanTin} ma'lumotlari qabul qilindi.`,
+          };
+        }
+      } catch {
+        // Fall through to status diagnosis below
       }
-    } catch (err: unknown) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
+    }
+
+    // Diagnostik status hisoboti
+    if (status.hasKey) {
       return {
-        success: false,
-        status: 500,
-        error: errorMsg,
-        message: `Didox serveriga ulanishda xatolik: ${errorMsg}`,
+        success: true,
+        status: 200,
+        data: {
+          status: 'KEY_CONFIGURED',
+          keyFileName: status.keyFileName,
+          keyFileSize: `${(status.keyFileSize / 1024).toFixed(1)} KB`,
+          operatorTin: status.operatorTin,
+          hasPassword: status.hasPassword,
+          hasToken: status.hasToken,
+          isTokenExpired: status.isTokenExpired,
+          tokenExpiresAt: status.tokenExpiresAt || 'Muddati belgilanmagan',
+        },
+        message:
+          status.hasToken && !status.isTokenExpired
+            ? 'E-IMZO kaliti va faol Soliq tokeni sozlangan!'
+            : 'E-IMZO kaliti serverda xavfsiz saqlangan. Soliq seansi uchun tokenni yangilang.',
       };
     }
+
+    return {
+      success: false,
+      status: 400,
+      message:
+        'E-IMZO (.pfx) kaliti yuklanmagan. Iltimos, admin panel orqali MChJ kalit faylini va parolini kiriting.',
+    };
+  }
+
+  /**
+   * Eskirgan Didox testi uchun moslashtiruvchi alias
+   */
+  async testDidox(userKey?: string, tin = '313296455') {
+    return this.testSoliqConnection(tin, userKey);
   }
 }

@@ -1,4 +1,15 @@
-import { Body, Controller, Get, Param, Put, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Put,
+  Query,
+  UploadedFile,
+  UseInterceptors,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 
 import { Role } from '../auth/role.enum';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -27,6 +38,54 @@ export class SettingsController {
         ? Number(commission)
         : undefined;
     return this.svc.computeEconomics(Number.isFinite(n) ? n : undefined);
+  }
+
+  /**
+   * Davlat Soliq & E-IMZO integratsiyasi holati
+   */
+  @Get('soliq/status')
+  getSoliqStatus() {
+    return this.svc.getSoliqStatus();
+  }
+
+  /**
+   * E-IMZO (.pfx / .p12) kalit faylini va parolini yuklash
+   */
+  @Post('soliq/upload-key')
+  @UseInterceptors(FileInterceptor('file'))
+  uploadSoliqKey(
+    @UploadedFile() file: Express.Multer.File,
+    @Body('password') password: string,
+    @Body('operatorTin') operatorTin?: string,
+  ) {
+    return this.svc.saveSoliqKey(
+      file.buffer,
+      file.originalname,
+      password,
+      operatorTin,
+    );
+  }
+
+  /**
+   * Soliq API sessiya/Bearer tokenini qo'lda yoki brauzer orqali saqlash
+   */
+  @Post('soliq/set-token')
+  setSoliqToken(
+    @Body('token') token: string,
+    @Body('expiresInHours') expiresInHours?: number,
+  ) {
+    return this.svc.setSoliqToken(token, expiresInHours);
+  }
+
+  /**
+   * Davlat Soliq ulanishini va STIR tekshirishni test qilish
+   */
+  @Get('soliq/test')
+  testSoliqConnection(
+    @Query('tin') tin?: string,
+    @Query('token') token?: string,
+  ) {
+    return this.svc.testSoliqConnection(tin, token);
   }
 
   @Get('test-didox')

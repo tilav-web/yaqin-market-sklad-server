@@ -27,14 +27,20 @@ export const SETTING_KEYS = {
   CLICK_FEE_PERCENT: 'click_fee_percent', // Click ekvayring % (shartnomadan), e.g. "3.00"
   PAYOUT_FEE_PERCENT: 'payout_fee_percent', // sellerga karta o'tkazma % , e.g. "1.00"
   MIN_ORDER_TOTAL: 'min_order_total', // so'm; "0" = cheklov yo'q
-  // ---- Soliq / fiskalizatsiya / Didox ----
+  // ---- Soliq / E-IMZO / fiskalizatsiya ----
   VAT_RATE_PERCENT: 'vat_rate_percent', // QQS standart stavkasi, e.g. "12"
   FISCAL_MODE: 'fiscal_mode', // off | collect | live
   PLATFORM_LEGAL_NAME: 'platform_legal_name', // operator (MChJ) nomi — cheklar uchun
   PLATFORM_STIR: 'platform_stir', // operator STIRi — cheklar uchun
   DELIVERY_MXIK_CODE: 'delivery_mxik_code', // yetkazish xizmati MXIK (tasnif: Kuryerlik xizmati)
-  DIDOX_USER_KEY: 'didox_user_key', // Didox API user-key (token)
-  DIDOX_API_URL: 'didox_api_url', // e.g. "https://api.didox.uz"
+  SOLIQ_AUTH_TOKEN: 'soliq_auth_token', // Soliq API sessiya/bearer tokeni
+  SOLIQ_TOKEN_EXPIRES_AT: 'soliq_token_expires_at', // Token muddati tugash vaqti (ISO timestamp)
+  SOLIQ_KEY_PATH: 'soliq_key_path', // Serverda saqlangan .pfx E-IMZO kalit yo'li
+  SOLIQ_KEY_PASSWORD_ENC: 'soliq_key_password_enc', // AES-256 bilan shifrlangan kalit paroli
+  SOLIQ_OPERATOR_TIN: 'soliq_operator_tin', // Operator MChJ STIRi (313296455)
+  // Eski Didox kalitlari (eskirgan / deprecated)
+  DIDOX_USER_KEY: 'didox_user_key',
+  DIDOX_API_URL: 'didox_api_url',
   // ---- Anti-fraud / lokatsiya risk qoidalari ----
   RISK_DELIVERED_MAX_DISTANCE_M: 'risk_delivered_max_distance_m', // "Yetkazildi" bosilgan joy manzildan uzoqligi (metr)
   RISK_EVIDENCE_MAX_ACCURACY_M: 'risk_evidence_max_accuracy_m', // GPS aniqligi bundan yomon bo'lsa masofa qoidasi ishlamaydi (metr)
@@ -67,6 +73,14 @@ export const STRING_SETTING_KEYS: Record<
     patternHint: '9 xonali raqam',
   },
   [SETTING_KEYS.DELIVERY_MXIK_CODE]: {},
+  [SETTING_KEYS.SOLIQ_AUTH_TOKEN]: {},
+  [SETTING_KEYS.SOLIQ_TOKEN_EXPIRES_AT]: {},
+  [SETTING_KEYS.SOLIQ_KEY_PATH]: {},
+  [SETTING_KEYS.SOLIQ_KEY_PASSWORD_ENC]: {},
+  [SETTING_KEYS.SOLIQ_OPERATOR_TIN]: {
+    pattern: /^\d{9}$/,
+    patternHint: '9 xonali raqam',
+  },
   [SETTING_KEYS.DIDOX_USER_KEY]: {},
   [SETTING_KEYS.DIDOX_API_URL]: {},
 };

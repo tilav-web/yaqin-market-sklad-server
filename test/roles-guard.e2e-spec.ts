@@ -58,7 +58,6 @@ describe('RolesGuard (e2e)', () => {
       repo.create({
         phone,
         roles,
-        isAdmin: roles.includes(Role.Admin),
       }),
     );
     createdUserIds.push(user.id);
