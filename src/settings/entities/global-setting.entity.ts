@@ -38,9 +38,6 @@ export const SETTING_KEYS = {
   SOLIQ_KEY_PATH: 'soliq_key_path', // Serverda saqlangan .pfx E-IMZO kalit yo'li
   SOLIQ_KEY_PASSWORD_ENC: 'soliq_key_password_enc', // AES-256 bilan shifrlangan kalit paroli
   SOLIQ_OPERATOR_TIN: 'soliq_operator_tin', // Operator MChJ STIRi (313296455)
-  // Eski Didox kalitlari (eskirgan / deprecated)
-  DIDOX_USER_KEY: 'didox_user_key',
-  DIDOX_API_URL: 'didox_api_url',
   // ---- Anti-fraud / lokatsiya risk qoidalari ----
   RISK_DELIVERED_MAX_DISTANCE_M: 'risk_delivered_max_distance_m', // "Yetkazildi" bosilgan joy manzildan uzoqligi (metr)
   RISK_EVIDENCE_MAX_ACCURACY_M: 'risk_evidence_max_accuracy_m', // GPS aniqligi bundan yomon bo'lsa masofa qoidasi ishlamaydi (metr)
@@ -81,6 +78,4 @@ export const STRING_SETTING_KEYS: Record<
     pattern: /^\d{9}$/,
     patternHint: '9 xonali raqam',
   },
-  [SETTING_KEYS.DIDOX_USER_KEY]: {},
-  [SETTING_KEYS.DIDOX_API_URL]: {},
 };

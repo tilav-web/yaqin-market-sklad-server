@@ -93,15 +93,6 @@ const DEFAULTS: Record<string, { value: string; description: string }> = {
     value: '313296455',
     description: 'Operator (MChJ) STIRi',
   },
-  [SETTING_KEYS.DIDOX_USER_KEY]: {
-    value: '',
-    description:
-      "Didox API kaliti (user-key) — Soliq ma'lumotlarini avtomatik tekshirish uchun (deprecated)",
-  },
-  [SETTING_KEYS.DIDOX_API_URL]: {
-    value: 'https://api.didox.uz',
-    description: 'Didox API asosiy manzili (deprecated)',
-  },
   [SETTING_KEYS.RISK_DELIVERED_MAX_DISTANCE_M]: {
     value: '300',
     description:
@@ -191,6 +182,16 @@ export class SettingsService implements OnModuleInit {
   ) {}
 
   async onModuleInit() {
+    // Obsolete Didox sozlamalarini bazadan tozalash
+    await this.repo
+      .createQueryBuilder()
+      .delete()
+      .from(GlobalSetting)
+      .where('key IN (:...keys)', {
+        keys: ['didox_user_key', 'didox_api_url'],
+      })
+      .execute();
+
     // Seed defaults if missing
     for (const [key, { value, description }] of Object.entries(DEFAULTS)) {
       const existing = await this.repo.findOne({ where: { key } });
