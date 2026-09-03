@@ -35,6 +35,23 @@ export class SellersService {
     private readonly dataSource: DataSource,
   ) {}
 
+  private readonly stirCache = new Map<
+    string,
+    {
+      data: {
+        stir: string;
+        companyName: string;
+        legalName: string;
+        entityType: string;
+        legalAddress: string;
+        region: string;
+        status: 'active' | 'inactive';
+        vatPayer: boolean;
+      };
+      expiresAt: number;
+    }
+  >();
+
   private extractRegionFromStir(cleanStir: string): {
     name: string;
     city: string;
@@ -45,23 +62,19 @@ export class SellersService {
       '12': { name: 'Andijon viloyati', city: 'Andijon viloyati' },
       '13': { name: 'Buxoro viloyati', city: 'Buxoro viloyati' },
       '14': { name: 'Jizzax viloyati', city: 'Jizzax viloyati' },
-      '15': {
-        name: 'Qashqadaryo viloyati',
-        city: 'Qashqadaryo viloyati',
-      },
+      '15': { name: 'Qashqadaryo viloyati', city: 'Qashqadaryo viloyati' },
       '16': { name: 'Navoiy viloyati', city: 'Navoiy viloyati' },
       '17': { name: 'Namangan viloyati', city: 'Namangan viloyati' },
       '18': { name: 'Samarqand viloyati', city: 'Samarqand viloyati' },
       '19': { name: 'Surxondaryo viloyati', city: 'Surxondaryo viloyati' },
       '20': { name: 'Sirdaryo viloyati', city: 'Sirdaryo viloyati' },
-      '21': { name: 'Toshkent shahri', city: 'Toshkent shahri' },
-      '22': { name: "Farg'ona viloyati", city: "Farg'ona viloyati" },
-      '23': { name: 'Xorazm viloyati', city: 'Xorazm viloyati' },
-      '24': {
+      '21': { name: 'Fargʻona viloyati', city: 'Fargʻona viloyati' },
+      '22': { name: 'Xorazm viloyati', city: 'Xorazm viloyati' },
+      '23': {
         name: "Qoraqalpog'iston Respublikasi",
         city: "Qoraqalpog'iston Respublikasi",
       },
-      '31': {
+      '30': {
         name: 'Qashqadaryo viloyati',
         city: 'Qashqadaryo viloyati',
       },
@@ -93,6 +106,29 @@ export class SellersService {
         "Bunday STIR bo'yicha davlat reyestrida faol tadbirkorlik subyekti topilmadi",
       );
     }
+
+    // 0. Cache tekshiruvi (429 va ortiqcha yuklamani oldini olish)
+    const cached = this.stirCache.get(cleanStir);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.data;
+    }
+
+    const saveAndReturn = (result: {
+      stir: string;
+      companyName: string;
+      legalName: string;
+      entityType: string;
+      legalAddress: string;
+      region: string;
+      status: 'active' | 'inactive';
+      vatPayer: boolean;
+    }) => {
+      this.stirCache.set(cleanStir, {
+        data: result,
+        expiresAt: Date.now() + 24 * 3600 * 1000, // 24 soat kesh
+      });
+      return result;
+    };
 
     // 1. Live Davlat Soliq API integratsiyasi (agar token sozlangan bo'lsa)
     const soliqToken = (
@@ -157,7 +193,7 @@ export class SellersService {
                 : 'inactive';
             const vatPayer = Boolean(data.is_vat || data.vat_reg_code);
 
-            return {
+            return saveAndReturn({
               stir: cleanStir,
               companyName,
               legalName,
@@ -166,12 +202,17 @@ export class SellersService {
               region,
               status,
               vatPayer,
-            };
+            });
           }
         } else if (res.status === 404) {
           throw new BadRequestException(
             'Bunday STIR davlat soliq reyestrida topilmadi',
           );
+        } else if (res.status === 429) {
+          // Soliq API tez-tez so'rov sababli vaqtincha cheklagan bo'lsa, xatolik chiqarmasdan zudlik bilan fallback'ga o'tadi
+          // Tizim hech qachon 429 sababli to'xtab qolmaydi
+        } else if (res.status === 401 || res.status === 403) {
+          // Token eskirgan bo'lsa, tizim qulamaydi va xavfsiz tarzda fallback'ga o'tadi
         }
       } catch (err: unknown) {
         if (err instanceof BadRequestException) throw err;
@@ -181,16 +222,16 @@ export class SellersService {
 
     // 2. Specific registered official records
     if (cleanStir === '313296455') {
-      return {
+      return saveAndReturn({
         stir: '313296455',
         companyName: '"TILAV" MCHJ',
         legalName: '',
         entityType: 'MChJ',
-        legalAddress: 'Qashqadaryo viloyati, Qarshi shahri',
+        legalAddress: 'Qashqadaryo viloyati, Muborak tumani',
         region: 'Qashqadaryo viloyati',
         status: 'active',
         vatPayer: true,
-      };
+      });
     }
 
     // 3. Structural fallback
@@ -200,7 +241,7 @@ export class SellersService {
     const entityType = isLegalEntity ? 'MChJ' : 'YaTT';
     const regionInfo = this.extractRegionFromStir(cleanStir);
 
-    return {
+    return saveAndReturn({
       stir: cleanStir,
       companyName: '',
       legalName: '',
@@ -209,7 +250,7 @@ export class SellersService {
       region: regionInfo.name,
       status: 'active',
       vatPayer: isLegalEntity,
-    };
+    });
   }
 
   getPlatformConfig(): {
