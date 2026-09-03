@@ -66,6 +66,12 @@ export interface AdminDashboardStats {
   gmvTotal: number;
   gmv7d: number;
   pendingApplications: number;
+  commissionRate: number;
+  platformRevenue: number;
+  estimatedTax: number;
+  netProfit: number;
+  platformRevenue7d: number;
+  netProfit7d: number;
 }
 
 @Injectable()
@@ -455,6 +461,33 @@ export class AnalyticsService {
       .where("sa.status = 'pending'")
       .getRawOne<{ cnt: string }>();
 
+    // Read platform commission rate (defaults to 12%)
+    let commPercent = 12;
+    try {
+      const commRow = await this.orders.manager.query(
+        "SELECT value FROM global_settings WHERE key = 'commission_rate_default' LIMIT 1",
+      );
+      if (commRow?.[0]?.value) {
+        commPercent = parseFloat(commRow[0].value) || 12;
+      }
+    } catch {
+      commPercent = 12;
+    }
+
+    const gmvTotal = Number(gmvRows?.gmv ?? 0);
+    const gmv7d = Number(gmv7dRows?.gmv ?? 0);
+
+    const commRate = commPercent / 100;
+    const taxRate = 0.04; // 4% Aylanmadan olinadigan soliq (AOS)
+
+    const platformRevenue = Math.round(gmvTotal * commRate);
+    const estimatedTax = Math.round(platformRevenue * taxRate);
+    const netProfit = platformRevenue - estimatedTax;
+
+    const platformRevenue7d = Math.round(gmv7d * commRate);
+    const estimatedTax7d = Math.round(platformRevenue7d * taxRate);
+    const netProfit7d = platformRevenue7d - estimatedTax7d;
+
     return {
       totalUsers,
       totalSellers,
@@ -462,9 +495,15 @@ export class AnalyticsService {
       totalOrders,
       ordersToday,
       orders7d,
-      gmvTotal: Number(gmvRows?.gmv ?? 0),
-      gmv7d: Number(gmv7dRows?.gmv ?? 0),
+      gmvTotal,
+      gmv7d,
       pendingApplications: Number(pendingRow?.cnt ?? 0),
+      commissionRate: commPercent,
+      platformRevenue,
+      estimatedTax,
+      netProfit,
+      platformRevenue7d,
+      netProfit7d,
     };
   }
 
