@@ -1133,9 +1133,21 @@ export class ProductsService {
 
     const shop = await this.shops.findOne({ where: { id: variant.shopId } });
 
+    const nameStr =
+      (typeof gp?.name === 'object' && gp?.name !== null
+        ? (gp.name as any)?.uz || (gp.name as any)?.ru || (gp.name as any)?.kr
+        : gp?.name) || '';
+    const descStr =
+      (typeof gp?.description === 'object' && gp?.description !== null
+        ? (gp.description as any)?.uz ||
+          (gp.description as any)?.ru ||
+          (gp.description as any)?.kr
+        : gp?.description) || null;
+
     return {
       ...variant,
-      name: gp?.name ?? '',
+      name: nameStr,
+      description: descStr,
       brand: gp?.brand ?? null,
       photos: gp?.photos ?? [],
       unitType: gp?.unitType ?? 'piece',
@@ -1450,9 +1462,20 @@ export class ProductsService {
             })
           : 0;
       const gp = v.globalProduct;
+      const nameStr =
+        (typeof gp?.name === 'object' && gp?.name !== null
+          ? (gp.name as any)?.uz || (gp.name as any)?.ru || (gp.name as any)?.kr
+          : gp?.name) || '';
+      const descStr =
+        (typeof gp?.description === 'object' && gp?.description !== null
+          ? (gp.description as any)?.uz ||
+            (gp.description as any)?.ru ||
+            (gp.description as any)?.kr
+          : gp?.description) || null;
       return {
         ...v,
-        name: gp?.name ?? '',
+        name: nameStr,
+        description: descStr,
         brand: gp?.brand ?? null,
         photos: gp?.photos ?? [],
         unitType: gp?.unitType ?? 'piece',
@@ -1472,7 +1495,7 @@ export class ProductsService {
           phone: shop?.phone ?? null,
           photos: shop?.photos ?? [],
         },
-      } as FeedProduct;
+      } as unknown as FeedProduct;
     });
 
     const nextPage = page * limit < total ? page + 1 : null;
