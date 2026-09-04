@@ -359,18 +359,44 @@ export class SellersService {
       );
     }
 
-    // Special test unattached STIR
-    if (cleanStir === '305999999' || cleanStir === '400000000') {
+    // 1. Bazadagi SellerProfile holatini tekshirish (agar avvalroq admin yoki tizim tomonidan tasdiqlangan bo'lsa)
+    const confirmedProfile = await this.profiles.findOne({
+      where: { stir: cleanStir, komissionerStatus: 'confirmed' },
+    });
+    if (confirmedProfile) {
       return {
-        isAttached: false,
+        isAttached: true,
         stir: cleanStir,
         platformStir: config.platformStir,
         platformName: config.platformName,
-        message: `my3.soliq.uz tizimida platforma (${config.platformStir}) komissioner sifatida topilmadi. Iltimos, Soliq kabinetingizga kirib komissioner qo'shing va qayta bosing.`,
+        attachedAt:
+          confirmedProfile.komissionerConfirmedAt?.toISOString() ||
+          new Date().toISOString(),
+        message: `${config.platformName} sizning soliq kabinetingizda komissioner sifatida muvaffaqiyatli tasdiqlangan!`,
       };
     }
 
-    // Live Soliq API tekshiruvi (agar token faol bo'lsa)
+    // 2. Tizim sozlamalaridagi tasdiqlangan STIRlar ro'yxatini tekshirish (admin/Soliq ro'yxati)
+    const confirmedStirsRaw =
+      this.settingsService.get(SETTING_KEYS.SOLIQ_CONFIRMED_STIRS) || '';
+    const confirmedStirs = confirmedStirsRaw
+      .split(',')
+      .map((s: string) => s.trim().replace(/\D/g, ''))
+      .filter((s: string) => s.length === 9);
+
+    // Operator STIRi yoki tasdiqlangan ro'yxatdagi STIRlar
+    if (cleanStir === config.platformStir || confirmedStirs.includes(cleanStir)) {
+      return {
+        isAttached: true,
+        stir: cleanStir,
+        platformStir: config.platformStir,
+        platformName: config.platformName,
+        attachedAt: new Date().toISOString(),
+        message: `${config.platformName} sizning soliq kabinetingizda komissioner sifatida muvaffaqiyatli tasdiqlandi!`,
+      };
+    }
+
+    // 3. Jonli Soliq API orqali tekshirish (agar sessiya tokeni faol bo'lsa)
     const soliqToken = (
       this.settingsService.get(SETTING_KEYS.SOLIQ_AUTH_TOKEN) ||
       process.env.SOLIQ_AUTH_TOKEN ||
@@ -394,28 +420,34 @@ export class SellersService {
         );
         clearTimeout(timeout);
 
-        if (res.status === 404) {
-          return {
-            isAttached: false,
-            stir: cleanStir,
-            platformStir: config.platformStir,
-            platformName: config.platformName,
-            message: `STIR (${cleanStir}) Davlat Soliq Qo'mitasi bazasida topilmadi.`,
-          };
+        if (res.ok) {
+          const body = (await res.json()) as Record<string, unknown>;
+          if (
+            body?.commissioner_tin === config.platformStir ||
+            body?.is_commissioner_attached === true
+          ) {
+            return {
+              isAttached: true,
+              stir: cleanStir,
+              platformStir: config.platformStir,
+              platformName: config.platformName,
+              attachedAt: new Date().toISOString(),
+              message: `${config.platformName} sizning soliq kabinetingizda komissioner sifatida muvaffaqiyatli tasdiqlandi!`,
+            };
+          }
         }
       } catch {
-        // Soliq API tarmoq xatoligi bo'lsa, xavfsiz davom etadi
+        // Soliq API tarmoq xatosi
       }
     }
 
-    // Verified attachment
+    // 4. Komissioner biriktirilmagan — foydalanuvchiga aniq tushuntirish va ogohlantirish qaytariladi
     return {
-      isAttached: true,
+      isAttached: false,
       stir: cleanStir,
       platformStir: config.platformStir,
       platformName: config.platformName,
-      attachedAt: new Date().toISOString(),
-      message: `${config.platformName} sizning soliq kabinetingizda komissioner sifatida muvaffaqiyatli tasdiqlandi!`,
+      message: `my3.soliq.uz tizimida platforma (${config.platformName}) komissioner sifatida biriktirilmagan. Iltimos, Soliq shaxsiy kabinetingizga (my3.soliq.uz) kiring, "Elektron tijorat" bo'limida platformani (${config.platformStir}) komissioner qilib biriktiring va qaytadan tekshirish tugmasini bosing.`,
     };
   }
 
