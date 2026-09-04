@@ -106,10 +106,34 @@ export class SellersService {
         "Bunday STIR bo'yicha davlat reyestrida faol tadbirkorlik subyekti topilmadi",
       );
     }
+    if (
+      cleanStir === '123456789' ||
+      cleanStir === '987654321' ||
+      cleanStir === '123123123' ||
+      cleanStir === '012345678' ||
+      cleanStir === '999999999' ||
+      cleanStir === '000000000'
+    ) {
+      throw new BadRequestException(
+        "Bunday STIR bo'yicha davlat reyestrida faol tadbirkorlik subyekti topilmadi",
+      );
+    }
+
+    const firstDigit = cleanStir[0];
+    if (!['2', '3', '4', '5', '6'].includes(firstDigit)) {
+      throw new BadRequestException(
+        "STIR formati noto'g'ri. O'zbekistonda yuridik shaxslar STIRi 2 yoki 3 bilan, YaTT STIRi esa 4, 5 yoki 6 bilan boshlanadi.",
+      );
+    }
 
     // 0. Cache tekshiruvi (429 va ortiqcha yuklamani oldini olish)
     const cached = this.stirCache.get(cleanStir);
-    if (cached && cached.expiresAt > Date.now()) {
+    if (
+      cached &&
+      cached.expiresAt > Date.now() &&
+      cached.data.companyName &&
+      cached.data.companyName.trim().length >= 2
+    ) {
       return cached.data;
     }
 
@@ -140,127 +164,131 @@ export class SellersService {
       process.env.PLATFORM_LEGAL_NAME ||
       '"TILAV" MCHJ';
 
-    // 1. Live Davlat Soliq API integratsiyasi (agar token sozlangan bo'lsa)
-    const soliqToken = (
-      this.settingsService.get(SETTING_KEYS.SOLIQ_AUTH_TOKEN) ||
-      process.env.SOLIQ_AUTH_TOKEN ||
-      ''
-    ).trim();
-
-    if (soliqToken) {
-      try {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 6000);
-        const res = await fetch(
-          `https://my.soliq.uz/tin-service/info?tin=${cleanStir}`,
-          {
-            signal: controller.signal,
-            headers: {
-              Authorization: `Bearer ${soliqToken}`,
-              Accept: 'application/json',
-              'User-Agent': 'YaqinMarket/1.0',
-            },
-          },
-        );
-        clearTimeout(timeout);
-
-        if (res.ok) {
-          const contentType = res.headers.get('content-type') || '';
-          if (contentType.includes('application/json')) {
-            const data = (await res.json()) as Record<string, unknown>;
-            const firstDigit = cleanStir[0];
-            const isLegalEntity =
-              firstDigit === '1' || firstDigit === '2' || firstDigit === '3';
-            const regionInfo = this.extractRegionFromStir(cleanStir);
-
-            const str = (v: unknown): string =>
-              typeof v === 'string'
-                ? v
-                : typeof v === 'number'
-                  ? String(v)
-                  : '';
-
-            const companyName =
-              str(data.name) ||
-              str(data.short_name) ||
-              str(data.legal_name) ||
-              (cleanStir === configuredOperatorStir ? configuredOperatorName : '');
-            const legalName =
-              str(data.director) ||
-              str(data.director_name) ||
-              str(data.head) ||
-              str(data.owner) ||
-              '';
-            const entityType =
-              str(data.type) || (isLegalEntity ? 'MChJ' : 'YaTT');
-            const legalAddress = str(data.address) || regionInfo.city;
-            const region = str(data.region) || regionInfo.name;
-            const status =
-              data.status === 1 ||
-              data.state === 'active' ||
-              data.status === undefined
-                ? 'active'
-                : 'inactive';
-            const vatPayer = Boolean(data.is_vat || data.vat_reg_code);
-
-            return saveAndReturn({
-              stir: cleanStir,
-              companyName,
-              legalName,
-              entityType,
-              legalAddress,
-              region,
-              status,
-              vatPayer,
-            });
-          }
-        } else if (res.status === 404) {
-          throw new BadRequestException(
-            'Bunday STIR davlat soliq reyestrida topilmadi',
-          );
-        } else if (res.status === 429) {
-          // Soliq API tez-tez so'rov sababli vaqtincha cheklagan bo'lsa, xatolik chiqarmasdan zudlik bilan fallback'ga o'tadi
-          // Tizim hech qachon 429 sababli to'xtab qolmaydi
-        } else if (res.status === 401 || res.status === 403) {
-          // Token eskirgan bo'lsa, tizim qulamaydi va xavfsiz tarzda fallback'ga o'tadi
-        }
-      } catch (err: unknown) {
-        if (err instanceof BadRequestException) throw err;
-        // Agar Soliq API vaqtincha javob bermasa, pastdagi lokal/ofitsial ma'lumotlarga o'tadi
-      }
-    }
-
-    // 2. Specific registered official records
+    // 1. Agar platforma / operator STIRi kiritilgan bo'lsa
     if (cleanStir === configuredOperatorStir) {
+      const eimzoCert = this.settingsService.getSoliqStatus().certificate;
       return saveAndReturn({
         stir: configuredOperatorStir,
-        companyName: configuredOperatorName,
-        legalName: '',
+        companyName: eimzoCert?.companyName || configuredOperatorName,
+        legalName:
+          eimzoCert?.directorName || "TILOVOV SHAVQIDDIN SAYFIDDIN O'G'LI",
         entityType: 'MChJ',
-        legalAddress: 'Qashqadaryo viloyati, Muborak tumani',
+        legalAddress:
+          eimzoCert?.region || 'Qashqadaryo viloyati, Muborak tumani',
         region: 'Qashqadaryo viloyati',
         status: 'active',
         vatPayer: true,
       });
     }
 
-    // 3. Structural fallback
-    const firstDigit = cleanStir[0];
-    const isLegalEntity =
-      firstDigit === '2' || firstDigit === '3' || firstDigit === '1';
-    const entityType = isLegalEntity ? 'MChJ' : 'YaTT';
-    const regionInfo = this.extractRegionFromStir(cleanStir);
+    // 2. Davlat Soliq API integratsiyasi
+    const soliqToken = (
+      this.settingsService.get(SETTING_KEYS.SOLIQ_AUTH_TOKEN) ||
+      process.env.SOLIQ_AUTH_TOKEN ||
+      ''
+    ).trim();
 
-    return saveAndReturn({
-      stir: cleanStir,
-      companyName: '',
-      legalName: '',
-      entityType,
-      legalAddress: regionInfo.city,
-      region: regionInfo.name,
-      status: 'active',
-      vatPayer: isLegalEntity,
-    });
+    let fetchedData: Record<string, unknown> | null = null;
+    const endpoints = [
+      `https://my.soliq.uz/api/search-tin-api/info?tin=${cleanStir}`,
+      `https://my.soliq.uz/tin-service/info?tin=${cleanStir}`,
+    ];
+
+    for (const url of endpoints) {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 5000);
+        const res = await fetch(url, {
+          signal: controller.signal,
+          headers: {
+            ...(soliqToken ? { Authorization: `Bearer ${soliqToken}` } : {}),
+            Accept: 'application/json',
+            'User-Agent': 'YaqinMarket/1.0',
+          },
+        });
+        clearTimeout(timeout);
+
+        if (res.ok) {
+          const contentType = res.headers.get('content-type') || '';
+          if (contentType.includes('application/json')) {
+            const data = (await res.json()) as Record<string, unknown>;
+            if (
+              data &&
+              (data.name ||
+                data.short_name ||
+                data.legal_name ||
+                data.companyName ||
+                data.company_name)
+            ) {
+              fetchedData = data;
+              break;
+            }
+          }
+        } else if (res.status === 404) {
+          throw new BadRequestException(
+            'Bunday STIR davlat soliq reyestrida topilmadi',
+          );
+        }
+      } catch (err) {
+        if (err instanceof BadRequestException) throw err;
+      }
+    }
+
+    if (fetchedData) {
+      const isLegalEntity = ['2', '3'].includes(firstDigit);
+      const regionInfo = this.extractRegionFromStir(cleanStir);
+      const str = (v: unknown): string =>
+        typeof v === 'string'
+          ? v
+          : typeof v === 'number'
+            ? String(v)
+            : '';
+
+      const companyName =
+        str(fetchedData.name) ||
+        str(fetchedData.short_name) ||
+        str(fetchedData.legal_name) ||
+        str(fetchedData.companyName) ||
+        str(fetchedData.company_name);
+
+      if (companyName && companyName.trim().length >= 2) {
+        const legalName =
+          str(fetchedData.director) ||
+          str(fetchedData.director_name) ||
+          str(fetchedData.head) ||
+          str(fetchedData.owner) ||
+          '';
+        const entityType =
+          str(fetchedData.type) || (isLegalEntity ? 'MChJ' : 'YaTT');
+        const legalAddress = str(fetchedData.address) || regionInfo.city;
+        const region = str(fetchedData.region) || regionInfo.name;
+        const status =
+          fetchedData.status === 1 ||
+          fetchedData.state === 'active' ||
+          fetchedData.status === undefined
+            ? 'active'
+            : 'inactive';
+        const vatPayer = Boolean(
+          fetchedData.is_vat || fetchedData.vat_reg_code,
+        );
+
+        return saveAndReturn({
+          stir: cleanStir,
+          companyName,
+          legalName,
+          entityType,
+          legalAddress,
+          region,
+          status,
+          vatPayer,
+        });
+      }
+    }
+
+    // 3. Agar rasmiy ma'lumot topilmasa yoki soxta STIR bo'lsa:
+    throw new BadRequestException(
+      "Bunday STIR bo'yicha davlat soliq reyestrida faol tadbirkorlik subyekti topilmadi",
+    );
   }
 
   getPlatformConfig(): {
@@ -318,8 +346,21 @@ export class SellersService {
       );
     }
 
+    const firstDigit = cleanStir[0];
+    if (
+      !['2', '3', '4', '5', '6'].includes(firstDigit) ||
+      /^(\d)\1{8}$/.test(cleanStir) ||
+      cleanStir === '123456789' ||
+      cleanStir === '987654321' ||
+      cleanStir === '000000000'
+    ) {
+      throw new BadRequestException(
+        "Bunday STIR davlat soliq reyestrida topilmadi",
+      );
+    }
+
     // Special test unattached STIR
-    if (cleanStir === '305999999' || cleanStir === '400000000' || cleanStir === '000000000') {
+    if (cleanStir === '305999999' || cleanStir === '400000000') {
       return {
         isAttached: false,
         stir: cleanStir,
