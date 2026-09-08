@@ -51,8 +51,11 @@ export class ShopsController {
   nearby(
     @Query('lat', ParseFloatPipe) lat: number,
     @Query('lng', ParseFloatPipe) lng: number,
+    @Query('radius') radius?: string,
+    @Query('districtId') districtId?: string,
   ) {
-    return this.shops.findNearbyShops(lat, lng);
+    const radiusKm = radius !== undefined ? Number(radius) : undefined;
+    return this.shops.findNearbyShops(lat, lng, 50, radiusKm, districtId);
   }
 
   // Public: shop detail (with optional distance calc)

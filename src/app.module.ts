@@ -22,6 +22,7 @@ import { EnvironmentVariables, validateEnv } from './config/configuration';
 import { ContactModule } from './contact/contact.module';
 import { buildTypeOrmOptions } from './database/typeorm.config';
 import { DebtsModule } from './debts/debts.module';
+import { DistrictsModule } from './districts/districts.module';
 import { FiscalModule } from './fiscal/fiscal.module';
 import { HealthModule } from './health/health.module';
 import { NotificationsModule } from './notifications/notifications.module';
@@ -64,6 +65,7 @@ import { UsersModule } from './users/users.module';
     AuthModule,
     AdminAuthModule,
     CategoriesModule,
+    DistrictsModule,
     SellersModule,
     ShopsModule,
     ProductsModule,

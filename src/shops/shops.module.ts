@@ -13,6 +13,7 @@ import {
   ShopsController,
   StaffController,
 } from './shops.controller';
+import { DistrictsModule } from '../districts/districts.module';
 import { RiskModule } from '../risk/risk.module';
 import { SettingsModule } from '../settings/settings.module';
 import { ShopsService } from './shops.service';
@@ -38,6 +39,7 @@ import { SellerBankAccount } from '../sellers/entities/seller-bank-account.entit
     ]),
     ComplaintsModule,
     AuditLogModule,
+    DistrictsModule,
     SettingsModule,
     RiskModule,
   ],

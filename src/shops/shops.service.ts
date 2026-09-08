@@ -17,6 +17,7 @@ import { Order, OrderStatus } from '../orders/entities/order.entity';
 import { GlobalProduct } from '../products/entities/global-product.entity';
 import { ProductVariant } from '../products/entities/product-variant.entity';
 import { Role } from '../auth/role.enum';
+import { DistrictsService } from '../districts/districts.service';
 import { SellerBankAccount } from '../sellers/entities/seller-bank-account.entity';
 import { User } from '../users/entities/user.entity';
 import {
@@ -52,8 +53,8 @@ import { CreateShopDto, UpdateShopDto } from './dto/shop.dto';
 
 const INVITE_TTL_MS = 10 * 60 * 1000; // QR invite valid for 10 minutes (per spec)
 
-// Widest realistic delivery zone — the SQL bounding-box prefilter radius.
-const MAX_DELIVERY_RADIUS_KM = 50;
+// City & metropolitan delivery radius for hyperlocal shopping (e.g. Qarshi pilot)
+const DEFAULT_DELIVERY_RADIUS_KM = 15;
 
 export interface StaffView {
   id: string;
@@ -92,6 +93,7 @@ export class ShopsService {
     private readonly auditLog: AuditLogService,
     private readonly settings: SettingsService,
     private readonly risk: RiskService,
+    private readonly districts: DistrictsService,
   ) {}
 
   findOne(id: string): Promise<Shop | null> {
@@ -203,6 +205,11 @@ export class ShopsService {
       }
     }
 
+    const district = await this.districts.findDistrictByCoords(
+      dto.latitude,
+      dto.longitude,
+    );
+
     return this.shops.save(
       this.shops.create({
         ownerId: userId,
@@ -210,6 +217,7 @@ export class ShopsService {
         address: dto.address,
         latitude: dto.latitude,
         longitude: dto.longitude,
+        districtId: district ? district.id : null,
         description: dto.description ?? null,
         photos: dto.photos ?? [],
         phone: dto.phone ?? null,
@@ -321,6 +329,11 @@ export class ShopsService {
     }
 
     if (coordsChanged) {
+      const district = await this.districts.findDistrictByCoords(
+        shop.latitude,
+        shop.longitude,
+      );
+      shop.districtId = district ? district.id : null;
       shop.pinEvidence = buildEvidence(evidenceDto, {
         deviceId: deviceId ?? null,
         actorUserId: userId,
@@ -796,6 +809,8 @@ export class ShopsService {
     latitude: number,
     longitude: number,
     limit = 50,
+    radiusKm = DEFAULT_DELIVERY_RADIUS_KM,
+    districtId?: string,
   ): Promise<
     Array<
       Shop & {
@@ -806,15 +821,36 @@ export class ShopsService {
       }
     >
   > {
-    // Pre-filter by a generous bounding box in SQL so we never load every shop.
-    const box = boundingBox(latitude, longitude, MAX_DELIVERY_RADIUS_KM);
-    const all = await this.shops.find({
+    let targetDistrictId = districtId;
+    if (!targetDistrictId) {
+      const detected = await this.districts.findDistrictByCoords(
+        latitude,
+        longitude,
+      );
+      if (detected) {
+        targetDistrictId = detected.id;
+      }
+    }
+
+    // Pre-filter by a city/district bounding box in SQL so we only load relevant shops.
+    const box = boundingBox(latitude, longitude, radiusKm);
+    let all = await this.shops.find({
       where: {
         isActive: true,
         latitude: Between(box.latMin, box.latMax),
         longitude: Between(box.lngMin, box.lngMax),
       },
     });
+
+    if (targetDistrictId) {
+      // Scope to the district while keeping unassigned shops nearby
+      const matching = all.filter(
+        (s) => !s.districtId || s.districtId === targetDistrictId,
+      );
+      if (matching.length > 0) {
+        all = matching;
+      }
+    }
     const enriched = all
       .map((s) => {
         const distanceKm = haversineKm(

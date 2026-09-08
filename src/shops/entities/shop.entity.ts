@@ -65,6 +65,10 @@ export class Shop {
   @Column({ type: 'double precision' })
   longitude!: number;
 
+  /** The administrative district/city this shop belongs to (resolved automatically from coords) */
+  @Column({ type: 'uuid', nullable: true })
+  districtId!: string | null;
+
   /**
    * Device fix at the moment this pin was last set — anti-fraud evidence,
    * wired up once `shop_relocated_after_orders` is enabled. Not populated yet.
