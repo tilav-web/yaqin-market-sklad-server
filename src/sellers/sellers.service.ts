@@ -238,11 +238,7 @@ export class SellersService {
       const isLegalEntity = ['2', '3'].includes(firstDigit);
       const regionInfo = this.extractRegionFromStir(cleanStir);
       const str = (v: unknown): string =>
-        typeof v === 'string'
-          ? v
-          : typeof v === 'number'
-            ? String(v)
-            : '';
+        typeof v === 'string' ? v : typeof v === 'number' ? String(v) : '';
 
       const companyName =
         str(fetchedData.name) ||
@@ -355,7 +351,7 @@ export class SellersService {
       cleanStir === '000000000'
     ) {
       throw new BadRequestException(
-        "Bunday STIR davlat soliq reyestrida topilmadi",
+        'Bunday STIR davlat soliq reyestrida topilmadi',
       );
     }
 
@@ -385,7 +381,10 @@ export class SellersService {
       .filter((s: string) => s.length === 9);
 
     // Operator STIRi yoki tasdiqlangan ro'yxatdagi STIRlar
-    if (cleanStir === config.platformStir || confirmedStirs.includes(cleanStir)) {
+    if (
+      cleanStir === config.platformStir ||
+      confirmedStirs.includes(cleanStir)
+    ) {
       return {
         isAttached: true,
         stir: cleanStir,

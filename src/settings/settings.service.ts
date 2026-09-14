@@ -90,7 +90,8 @@ const DEFAULTS: Record<string, { value: string; description: string }> = {
   },
   [SETTING_KEYS.PLATFORM_LEGAL_NAME]: {
     value: '"TILAV" MCHJ',
-    description: 'Operator (MChJ) rasmiy nomi — fiskal cheklar va ofertalar uchun',
+    description:
+      'Operator (MChJ) rasmiy nomi — fiskal cheklar va ofertalar uchun',
   },
   [SETTING_KEYS.PLATFORM_STIR]: {
     value: '313296455',

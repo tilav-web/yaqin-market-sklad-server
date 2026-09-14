@@ -151,3 +151,70 @@ export class ApplyTasnifDto {
   @IsBoolean()
   markingRequired?: boolean;
 }
+
+export class SubmitTaxReportDto {
+  @ApiProperty({
+    example: 'salary_ndfl',
+    enum: ['salary_ndfl', 'vat', 'profit_tax'],
+  })
+  @IsString()
+  reportType!: string;
+
+  @ApiProperty({ example: '2026-08' })
+  @IsString()
+  period!: string;
+
+  @ApiProperty({ example: '2026-09-15' })
+  @IsString()
+  dueDate!: string;
+
+  @ApiProperty({
+    description: "Hisobot parametrlari va hisoblangan ma'lumotlar",
+  })
+  @IsOptional()
+  data?: Record<string, unknown>;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  notes?: string;
+
+  @ApiPropertyOptional({ example: 'my.soliq.uz orqali qabul qilindi' })
+  @IsOptional()
+  @IsString()
+  submissionConfirmation?: string;
+}
+
+export class CalculateSalaryTaxDto {
+  @ApiPropertyOptional({ example: 1155000, description: 'MHTEKM (baza) oylik' })
+  @IsOptional()
+  baseSalary?: number;
+
+  @ApiPropertyOptional({
+    example: 0.25,
+    description: 'Stavka (0.25, 0.5, 1.0)',
+  })
+  @IsOptional()
+  rate?: number;
+}
+
+export class CalculateProfitVatDto {
+  @ApiPropertyOptional({ example: '2026-08' })
+  @IsOptional()
+  @IsString()
+  period?: string;
+
+  @ApiPropertyOptional({
+    example: 1000000,
+    description: "Qo'shimcha xarajatlar (hosting, aloqa va h.k.)",
+  })
+  @IsOptional()
+  additionalExpenses?: number;
+
+  @ApiPropertyOptional({
+    description:
+      "Qo'lda kiritilgan tushum (agar tizimdan tashqari tushum bo'lsa)",
+  })
+  @IsOptional()
+  manualRevenue?: number;
+}

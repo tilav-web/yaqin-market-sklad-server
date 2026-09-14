@@ -21,6 +21,7 @@ import {
   ApplyTasnifDto,
   AssignTaxCategoryDto,
   CreateTaxCategoryDto,
+  SubmitTaxReportDto,
   UpdateTaxCategoryDto,
 } from './dto/fiscal.dto';
 import { FiscalService } from './fiscal.service';
@@ -145,5 +146,53 @@ export class FiscalController {
     @Body() dto: ApplyTasnifDto,
   ) {
     return this.fiscal.applyTasnifSuggestion(globalProductId, dto);
+  }
+
+  /* ─── MCHJ Soliq Hisobotlari & Taqvim ─── */
+
+  /** Soliq taqvimi, yaqinlashayotgan muddatlar va MCHJ holati */
+  @Get('tax-reports/calendar')
+  getTaxCalendar() {
+    return this.fiscal.getTaxCalendar();
+  }
+
+  /** Direktor (yagona xodim) 0.25 stavka oylik va soliqlari hisob-kitobi */
+  @Get('tax-reports/calculate-salary')
+  calculateSalary(
+    @Query('baseSalary') baseSalary?: string,
+    @Query('rate') rate?: string,
+  ) {
+    return this.fiscal.calculateSalaryTax({
+      baseSalary: baseSalary ? parseFloat(baseSalary) : undefined,
+      rate: rate ? parseFloat(rate) : undefined,
+    });
+  }
+
+  /** Oylik/Kvartallik Foyda solig'i va QQS hisob-kitobi */
+  @Get('tax-reports/calculate-profit-vat')
+  calculateProfitVat(
+    @Query('period') period?: string,
+    @Query('additionalExpenses') additionalExpenses?: string,
+    @Query('manualRevenue') manualRevenue?: string,
+  ) {
+    return this.fiscal.calculateProfitAndVat({
+      period,
+      additionalExpenses: additionalExpenses
+        ? parseFloat(additionalExpenses)
+        : undefined,
+      manualRevenue: manualRevenue ? parseFloat(manualRevenue) : undefined,
+    });
+  }
+
+  /** To'ldirilgan hisobotni topshirilgan deb tasdiqlash va saqlash */
+  @Post('tax-reports/submit')
+  submitTaxReport(@Body() dto: SubmitTaxReportDto) {
+    return this.fiscal.submitTaxReport(dto);
+  }
+
+  /** Topshirilgan hisobotlar tarixi va arxivi */
+  @Get('tax-reports/history')
+  getTaxReportHistory() {
+    return this.fiscal.getTaxReportHistory();
   }
 }

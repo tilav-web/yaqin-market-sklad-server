@@ -7,6 +7,7 @@ import { SellerProfile } from '../sellers/entities/seller-profile.entity';
 import { SettingsModule } from '../settings/settings.module';
 import { FiscalReceipt } from './entities/fiscal-receipt.entity';
 import { TaxCategory } from './entities/tax-category.entity';
+import { TaxReport } from './entities/tax-report.entity';
 import {
   FISCAL_PROVIDER,
   NoopFiscalProvider,
@@ -20,6 +21,7 @@ import { TasnifService } from './tasnif.service';
     TypeOrmModule.forFeature([
       FiscalReceipt,
       TaxCategory,
+      TaxReport,
       Order,
       SellerProfile,
       GlobalProduct,

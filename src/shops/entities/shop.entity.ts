@@ -36,6 +36,8 @@ export interface DeliveryZone {
 @Entity({ name: 'shops' })
 @Index(['ownerId'])
 @Index(['isActive'])
+@Index(['latitude', 'longitude'])
+@Index(['isActive', 'latitude', 'longitude'])
 export class Shop {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
@@ -150,9 +152,14 @@ export class Shop {
   @Column({ type: 'boolean', default: true })
   isActive!: boolean;
 
-  /** Set true when shop was deactivated due to overdue debt; cleared when debt is paid */
   @Column({ type: 'boolean', default: false })
   deactivatedByDebt!: boolean;
+
+  @Column({ type: 'boolean', default: false })
+  isPrime!: boolean;
+
+  @Column({ type: 'varchar', length: 64, nullable: true })
+  primeBadgeText!: string | null;
 
   @Column({ type: 'timestamptz', nullable: true })
   ownerOrdersSeenAt!: Date | null;

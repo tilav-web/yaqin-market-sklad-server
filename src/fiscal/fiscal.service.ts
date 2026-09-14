@@ -23,7 +23,18 @@ import {
   FiscalReceiptType,
 } from './entities/fiscal-receipt.entity';
 import { TaxCategory } from './entities/tax-category.entity';
-import { CreateTaxCategoryDto, UpdateTaxCategoryDto } from './dto/fiscal.dto';
+import {
+  TaxReport,
+  TaxReportStatus,
+  TaxReportType,
+} from './entities/tax-report.entity';
+import {
+  CalculateProfitVatDto,
+  CalculateSalaryTaxDto,
+  CreateTaxCategoryDto,
+  SubmitTaxReportDto,
+  UpdateTaxCategoryDto,
+} from './dto/fiscal.dto';
 import { FISCAL_PROVIDER } from './fiscal-provider.interface';
 import type { FiscalProvider } from './fiscal-provider.interface';
 import { toLocalizedText } from '../common/types/localized-text.type';
@@ -55,6 +66,8 @@ export class FiscalService {
     private readonly receipts: Repository<FiscalReceipt>,
     @InjectRepository(TaxCategory)
     private readonly taxCategories: Repository<TaxCategory>,
+    @InjectRepository(TaxReport)
+    private readonly taxReports: Repository<TaxReport>,
     @InjectRepository(Order)
     private readonly orders: Repository<Order>,
     @InjectRepository(SellerProfile)
@@ -639,5 +652,306 @@ export class FiscalService {
     if (dto.markingRequired !== undefined)
       tax.markingRequired = dto.markingRequired;
     return this.taxCategories.save(tax);
+  }
+
+  /* ─── MCHJ Soliq Hisobotlari & Taqvimi ─── */
+
+  async getTaxCalendar() {
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1; // 1-12
+
+    // O'tgan oy (hisobot topshiriladigan davr)
+    let reportingYear = currentYear;
+    let reportingMonth = currentMonth - 1;
+    if (reportingMonth === 0) {
+      reportingMonth = 12;
+      reportingYear -= 1;
+    }
+    const priorPeriodMonth = `${reportingYear}-${String(reportingMonth).padStart(2, '0')}`;
+
+    // Joriy chorak (kvartal)
+    const currentQuarter = Math.ceil(currentMonth / 3);
+    let reportingQuarter = currentQuarter - 1;
+    let reportingQuarterYear = currentYear;
+    if (reportingQuarter === 0) {
+      reportingQuarter = 4;
+      reportingQuarterYear -= 1;
+    }
+    const priorQuarterPeriod = `${reportingQuarterYear}-Q${reportingQuarter}`;
+
+    // Belgilangan oxirgi sanalar (joriy oy bo'yicha)
+    const salaryDueDate = `${currentYear}-${String(currentMonth).padStart(2, '0')}-15`;
+    const vatDueDate = `${currentYear}-${String(currentMonth).padStart(2, '0')}-20`;
+
+    // Foyda solig'i choraklik muddatlari:
+    // Q1 -> 20-aprel, Q2 -> 20-iyul, Q3 -> 20-oktyabr, Q4 (yillik) -> keyingi yil 1-mart
+    let profitDueDate = `${currentYear}-${String(currentMonth).padStart(2, '0')}-20`;
+    if (reportingQuarter === 1) profitDueDate = `${reportingQuarterYear}-04-20`;
+    else if (reportingQuarter === 2)
+      profitDueDate = `${reportingQuarterYear}-07-20`;
+    else if (reportingQuarter === 3)
+      profitDueDate = `${reportingQuarterYear}-10-20`;
+    else if (reportingQuarter === 4)
+      profitDueDate = `${reportingQuarterYear + 1}-03-01`;
+
+    // Mavjud topshirilgan hisobotlarni tekshirish
+    const existingReports = await this.taxReports.find({
+      order: { createdAt: 'DESC' },
+    });
+
+    const findStatus = (
+      type: TaxReportType,
+      period: string,
+      dueStr: string,
+    ) => {
+      const found = existingReports.find(
+        (r) => r.reportType === type && r.period === period,
+      );
+      if (found && found.status === TaxReportStatus.SUBMITTED) {
+        return { status: 'submitted', report: found };
+      }
+      const dueDateObj = new Date(dueStr);
+      const isOverdue =
+        now >
+        new Date(
+          dueDateObj.getFullYear(),
+          dueDateObj.getMonth(),
+          dueDateObj.getDate(),
+          23,
+          59,
+          59,
+        );
+      return {
+        status: isOverdue ? 'overdue' : 'pending',
+        report: found || null,
+      };
+    };
+
+    const salaryCheck = findStatus(
+      TaxReportType.SALARY_NDFL,
+      priorPeriodMonth,
+      salaryDueDate,
+    );
+    const vatCheck = findStatus(
+      TaxReportType.VAT,
+      priorPeriodMonth,
+      vatDueDate,
+    );
+    const profitCheck = findStatus(
+      TaxReportType.PROFIT_TAX,
+      priorQuarterPeriod,
+      profitDueDate,
+    );
+
+    // Kunlar farqini hisoblash
+    const getDaysDiff = (dueStr: string) => {
+      const d = new Date(dueStr + 'T23:59:59');
+      const diffMs = d.getTime() - now.getTime();
+      return Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+    };
+
+    // Operator MCHJ ma'lumotlari
+    const companyInfo = {
+      name: '"TILAV" MCHJ',
+      tin: '313296455',
+      pinfl: '52302035660028',
+      director: "TILOVOV SHAVQIDDIN SAYFIDDIN O'G'LI",
+      taxRegime: "Umumbelgilangan tizim (Foyda solig'i 15% + QQS 12%)",
+    };
+
+    const items = [
+      {
+        id: 'salary_ndfl',
+        type: TaxReportType.SALARY_NDFL,
+        title: 'Xodimlar (Direktor 0.25 st.) oyligi va soliqlari',
+        subtitle: 'JShODS (12%) va Ijtimoiy soliq (12%), INPS (0.1%)',
+        period: priorPeriodMonth,
+        periodLabel: `${priorPeriodMonth} (O'tgan oy)`,
+        dueDate: salaryDueDate,
+        daysRemaining: getDaysDiff(salaryDueDate),
+        status: salaryCheck.status,
+        submittedReport: salaryCheck.report,
+        standardDay: 15,
+        description:
+          "Har oyning 15-sanasidan kechiktirmay topshiriladi. Faoliyat bo'lmasa ham, direktor uchun 0.25 stavka bo'yicha oylik hisob-kitobi taqdim etiladi.",
+      },
+      {
+        id: 'vat',
+        type: TaxReportType.VAT,
+        title: "QQS (Qo'shilgan qiymat solig'i — 12%)",
+        subtitle: "Oylik aylanma va tushumlar bo'yicha QQS hisoboti",
+        period: priorPeriodMonth,
+        periodLabel: `${priorPeriodMonth} (O'tgan oy)`,
+        dueDate: vatDueDate,
+        daysRemaining: getDaysDiff(vatDueDate),
+        status: vatCheck.status,
+        submittedReport: vatCheck.report,
+        standardDay: 20,
+        description:
+          "Har oyning 20-sanasidan kechiktirmay topshiriladi. Elektron hisobvaraq-fakturalar (Didox) va onlayn-kassa cheklari orqali Soliq portalida avtomatik to'ldiriladi.",
+      },
+      {
+        id: 'profit_tax',
+        type: TaxReportType.PROFIT_TAX,
+        title: "Foyda solig'i (Kvartallik — 15%)",
+        subtitle: `${priorQuarterPeriod} chorak natijalari bo'yicha sof foyda hisobi`,
+        period: priorQuarterPeriod,
+        periodLabel: `${priorQuarterPeriod} chorak`,
+        dueDate: profitDueDate,
+        daysRemaining: getDaysDiff(profitDueDate),
+        status: profitCheck.status,
+        submittedReport: profitCheck.report,
+        standardDay: 20,
+        description:
+          'Har chorak yakunidan keyingi oyning 20-sanasigacha (yillik hisobot 1-martgacha). Komissiya tushumlari va chegiriladigan xarajatlar farqidan hisoblanadi.',
+      },
+    ];
+
+    return {
+      today: now.toISOString().slice(0, 10),
+      companyInfo,
+      items,
+      hasOverdue: items.some((i) => i.status === 'overdue'),
+      hasUrgent: items.some(
+        (i) => i.status === 'pending' && i.daysRemaining <= 3,
+      ),
+    };
+  }
+
+  calculateSalaryTax(dto?: CalculateSalaryTaxDto) {
+    const baseSalary =
+      dto?.baseSalary && dto.baseSalary > 0 ? dto.baseSalary : 1155000; // MHTEKM O'zbekiston
+    const rate = dto?.rate && dto.rate > 0 ? dto.rate : 0.25; // 0.25 stavka
+
+    const grossSalary = Math.round(baseSalary * rate);
+    const ndflRate = 0.12; // 12%
+    const ndflTotal = Math.round(grossSalary * ndflRate);
+    const inpsRate = 0.001; // 0.1% Xalq banki (NDFL hisobidan)
+    const inpsAmount = Math.round(grossSalary * inpsRate);
+    const budgetNdfl = ndflTotal - inpsAmount;
+    const socialTaxRate = 0.12; // 12% korxona hisobidan
+    const socialTaxAmount = Math.round(grossSalary * socialTaxRate);
+    const netSalary = grossSalary - ndflTotal; // qo'lga tegadigan
+    const totalCompanyCost = grossSalary + socialTaxAmount; // jami xarajat
+
+    return {
+      baseSalary,
+      rate,
+      grossSalary,
+      ndflTotal,
+      inpsAmount,
+      budgetNdfl,
+      socialTaxAmount,
+      netSalary,
+      totalCompanyCost,
+      employeeCount: 1,
+      position: 'Direktor (Rahbar)',
+      notes:
+        "Mehnat kodeksi bo'yicha 0.25 stavka qonuniy belgilangan. Hujjatlar: buyruq va shtat jadvali.",
+    };
+  }
+
+  async calculateProfitAndVat(dto?: CalculateProfitVatDto) {
+    // 0.25 stavka direktor oyligi xarajati
+    const salary = this.calculateSalaryTax();
+    const monthlySalaryExpense = salary.totalCompanyCost;
+
+    // Platformadagi tushumlarni hisoblash
+    let platformTurnover = dto?.manualRevenue ?? 0;
+    if (!dto?.manualRevenue) {
+      try {
+        const completed = await this.orders
+          .createQueryBuilder('o')
+          .select('SUM(o.total)', 'total')
+          .where("o.status = 'delivered'")
+          .getRawOne();
+        platformTurnover = Number(completed?.total ?? 0);
+      } catch {
+        platformTurnover = 0;
+      }
+    }
+
+    // Platforma komissiya tushumi (taxminan 12%)
+    const commissionPercent = 12;
+    const platformRevenue = Math.round(
+      platformTurnover * (commissionPercent / 100),
+    );
+
+    // QQS 12% hisobi
+    const vatRate = 0.12;
+    const vatAmount = Math.round((platformRevenue * vatRate) / (1 + vatRate));
+    const netRevenueExcludingVat = platformRevenue - vatAmount;
+
+    // Chegiriladigan xarajatlar
+    const isQuarter = dto?.period?.includes('Q');
+    const salaryExpenseTotal = isQuarter
+      ? monthlySalaryExpense * 3
+      : monthlySalaryExpense;
+    const otherExpenses = dto?.additionalExpenses ?? 0;
+    const totalDeductibleExpenses = salaryExpenseTotal + otherExpenses;
+
+    // Soliqqa tortiladigan sof foyda
+    const taxableProfit = Math.max(
+      0,
+      netRevenueExcludingVat - totalDeductibleExpenses,
+    );
+    const profitTaxRate = 0.15; // 15%
+    const profitTaxAmount = Math.round(taxableProfit * profitTaxRate);
+    const netProfitAfterTax =
+      netRevenueExcludingVat - totalDeductibleExpenses - profitTaxAmount;
+
+    return {
+      period: dto?.period || '2026-08',
+      platformTurnover,
+      commissionPercent,
+      platformRevenue,
+      vatRate: 12,
+      vatAmount,
+      netRevenueExcludingVat,
+      expenses: {
+        salaryExpense: salaryExpenseTotal,
+        otherExpenses,
+        totalExpenses: totalDeductibleExpenses,
+      },
+      taxableProfit,
+      profitTaxRate: 15,
+      profitTaxAmount,
+      netProfitAfterTax,
+    };
+  }
+
+  async submitTaxReport(dto: SubmitTaxReportDto) {
+    let report = await this.taxReports.findOne({
+      where: {
+        reportType: dto.reportType as TaxReportType,
+        period: dto.period,
+      },
+    });
+
+    if (!report) {
+      report = this.taxReports.create({
+        reportType: dto.reportType as TaxReportType,
+        period: dto.period,
+        dueDate: dto.dueDate,
+      });
+    }
+
+    report.status = TaxReportStatus.SUBMITTED;
+    report.submittedAt = new Date();
+    report.data = dto.data || {};
+    report.notes = dto.notes || null;
+    report.submissionConfirmation =
+      dto.submissionConfirmation ||
+      `Admin orqali ${new Date().toLocaleDateString('uz-UZ')} da my.soliq.uz ga tasdiqlandi`;
+
+    return this.taxReports.save(report);
+  }
+
+  async getTaxReportHistory() {
+    return this.taxReports.find({
+      order: { createdAt: 'DESC' },
+      take: 50,
+    });
   }
 }
