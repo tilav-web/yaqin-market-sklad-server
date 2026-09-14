@@ -10,6 +10,7 @@ export enum TaxReportType {
   SALARY_NDFL = 'salary_ndfl', // 15-sana: Xodim/direktor JShODS va Ijtimoiy soliq
   VAT = 'vat', // 20-sana: QQS (12%)
   PROFIT_TAX = 'profit_tax', // Har kvartal 20-sana: Foyda solig'i
+  TURNOVER_TAX = 'turnover_tax', // Aylanmadan olinadigan soliq (4%)
 }
 
 export enum TaxReportStatus {

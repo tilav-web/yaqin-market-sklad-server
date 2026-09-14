@@ -918,6 +918,8 @@ export class FiscalService {
       profitTaxRate: 15,
       profitTaxAmount,
       netProfitAfterTax,
+      turnoverTaxRate: 4,
+      turnoverTaxAmount: Math.round(platformRevenue * 0.04),
     };
   }
 
