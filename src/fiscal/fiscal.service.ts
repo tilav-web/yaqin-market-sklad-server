@@ -762,7 +762,7 @@ export class FiscalService {
       tin: '313296455',
       pinfl: '52302035660028',
       director: "TILOVOV SHAVQIDDIN SAYFIDDIN O'G'LI",
-      taxRegime: "Umumbelgilangan tizim (Foyda solig'i 15% + QQS 12%)",
+      taxRegime: 'Soddalashtirilgan tizim (Aylanmadan olinadigan soliq — 4%)',
     };
 
     const items = [
