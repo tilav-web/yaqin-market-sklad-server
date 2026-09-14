@@ -28,10 +28,15 @@ import {
   TaxReportStatus,
   TaxReportType,
 } from './entities/tax-report.entity';
+import * as fs from 'fs';
+import * as path from 'path';
+import { Workbook } from 'exceljs';
+
 import {
   CalculateProfitVatDto,
   CalculateSalaryTaxDto,
   CreateTaxCategoryDto,
+  ExportTaxExcelDto,
   SubmitTaxReportDto,
   UpdateTaxCategoryDto,
 } from './dto/fiscal.dto';
@@ -955,5 +960,96 @@ export class FiscalService {
       order: { createdAt: 'DESC' },
       take: 50,
     });
+  }
+
+  async generate11101Excel(dto: ExportTaxExcelDto): Promise<Buffer> {
+    const candidates = [
+      path.join(__dirname, 'templates', 'template_11101_20.xltx'),
+      path.join(
+        __dirname,
+        '..',
+        '..',
+        'src',
+        'fiscal',
+        'templates',
+        'template_11101_20.xltx',
+      ),
+      path.join(
+        process.cwd(),
+        'src',
+        'fiscal',
+        'templates',
+        'template_11101_20.xltx',
+      ),
+      path.join(
+        process.cwd(),
+        'dist',
+        'fiscal',
+        'templates',
+        'template_11101_20.xltx',
+      ),
+      path.join(process.cwd(), '..', 'template_11101_20.xltx'),
+      path.resolve(
+        '/home/yaqin-market/server/src/fiscal/templates/template_11101_20.xltx',
+      ),
+      path.resolve(
+        '/home/yaqin-market/server/dist/fiscal/templates/template_11101_20.xltx',
+      ),
+    ];
+
+    const templatePath = candidates.find((p) => fs.existsSync(p));
+    if (!templatePath) {
+      throw new BadRequestException('11101_20 Excel shablon fayli topilmadi');
+    }
+
+    const wb = new Workbook();
+    await wb.xlsx.readFile(templatePath);
+
+    const ws = wb.getWorksheet('list01');
+    if (!ws) {
+      throw new BadRequestException("Shablon ichida list01 varag'i topilmadi");
+    }
+
+    const employees =
+      dto.employees && dto.employees.length > 0
+        ? dto.employees
+        : [
+            {
+              name: "TILAVOV SHAVQIDDIN SAYFIDDIN O'G'LI",
+              pinfl: '52302035660028',
+              position: 'Rahbar',
+              rate: 0.25,
+              salary: 288750,
+              ndfl: 34650,
+              inps: 289,
+              social: 34650,
+            },
+          ];
+
+    // Data starts at row 15 (row 14 is a 1.2px separator line)
+    employees.forEach((emp, index) => {
+      const rowIndex = 15 + index;
+      const row = ws.getRow(rowIndex);
+
+      row.getCell(2).value = index + 1; // 1: T/r
+      row.getCell(3).value = emp.name; // 2: F.I.SH
+      row.getCell(4).value = emp.position || 'Xodim'; // 3: Lavozimi
+      row.getCell(5).value = emp.pinfl || ''; // 4: JShShIR
+      row.getCell(6).value = '01.01.2026'; // 5: Tashkil etilgan sana
+      row.getCell(7).value = 1; // 6: 1 - rezident
+      row.getCell(8).value = 1; // 7: 1 - ishlab kelmoqda
+      row.getCell(9).value = 1; // 8: 1 - asosiy mehnat shartnomasi
+      row.getCell(10).value = Number(emp.rate) || 0.25; // 9: stavka
+      row.getCell(11).value = 1; // 10: 1 - doimiy ish o'rni
+      row.getCell(12).value = Math.round(Number(emp.salary) || 0); // 11: jami hisoblangan daromad
+      row.getCell(13).value = Math.round(Number(emp.salary) || 0); // 12: hisobot davrida
+      row.getCell(14).value = Math.round(Number(emp.ndfl) || 0); // 13: JShODS jami
+      row.getCell(15).value = Math.round(Number(emp.ndfl) || 0); // 14: JShODS hisobot davrida
+
+      row.commit();
+    });
+
+    const buffer = await wb.xlsx.writeBuffer();
+    return Buffer.from(buffer);
   }
 }

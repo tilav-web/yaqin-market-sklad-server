@@ -1,12 +1,16 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  IsArray,
   IsBoolean,
+  IsNumber,
   IsOptional,
   IsString,
   IsUUID,
   Matches,
   MaxLength,
+  ValidateNested,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 
 import type { LocalizedInput } from '../../common/types/localized-text.type';
 
@@ -217,4 +221,58 @@ export class CalculateProfitVatDto {
   })
   @IsOptional()
   manualRevenue?: number;
+}
+
+export class TaxEmployeeItemDto {
+  @ApiProperty({ example: "TILAVOV SHAVQIDDIN SAYFIDDIN O'G'LI" })
+  @IsString()
+  name!: string;
+
+  @ApiProperty({ example: '52302035660028' })
+  @IsString()
+  pinfl!: string;
+
+  @ApiPropertyOptional({ example: 'Direktor' })
+  @IsOptional()
+  @IsString()
+  position?: string;
+
+  @ApiProperty({ example: 0.25 })
+  @IsNumber()
+  rate!: number;
+
+  @ApiProperty({ example: 288750 })
+  @IsNumber()
+  salary!: number;
+
+  @ApiProperty({ example: 34650 })
+  @IsNumber()
+  ndfl!: number;
+
+  @ApiPropertyOptional({ example: 289 })
+  @IsOptional()
+  @IsNumber()
+  inps?: number;
+
+  @ApiPropertyOptional({ example: 34650 })
+  @IsOptional()
+  @IsNumber()
+  social?: number;
+}
+
+export class ExportTaxExcelDto {
+  @ApiProperty({ example: 'salary_ndfl' })
+  @IsString()
+  reportType!: string;
+
+  @ApiProperty({ example: '2026-08' })
+  @IsString()
+  period!: string;
+
+  @ApiPropertyOptional({ type: [TaxEmployeeItemDto] })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => TaxEmployeeItemDto)
+  employees?: TaxEmployeeItemDto[];
 }

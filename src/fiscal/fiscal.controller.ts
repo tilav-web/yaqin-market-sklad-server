@@ -8,11 +8,14 @@ import {
   Patch,
   Post,
   Query,
+  Res,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import type { Response } from 'express';
 
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '../auth/role.enum';
+import { sendXlsx } from '../common/xlsx.util';
 import {
   FiscalReceiptStatus,
   FiscalReceiptType,
@@ -21,6 +24,7 @@ import {
   ApplyTasnifDto,
   AssignTaxCategoryDto,
   CreateTaxCategoryDto,
+  ExportTaxExcelDto,
   SubmitTaxReportDto,
   UpdateTaxCategoryDto,
 } from './dto/fiscal.dto';
@@ -194,5 +198,12 @@ export class FiscalController {
   @Get('tax-reports/history')
   getTaxReportHistory() {
     return this.fiscal.getTaxReportHistory();
+  }
+
+  /** Soliq 11101_20 shablonini to'ldirilgan holda Excel (.xlsx) sifatida yuklab olish */
+  @Post('tax-reports/export-excel')
+  async exportTaxExcel(@Body() dto: ExportTaxExcelDto, @Res() res: Response) {
+    const buf = await this.fiscal.generate11101Excel(dto);
+    sendXlsx(res, buf, `soliq_11101_20_${dto.period || 'hisobot'}.xlsx`);
   }
 }
