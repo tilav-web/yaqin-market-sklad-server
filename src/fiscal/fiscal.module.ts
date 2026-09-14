@@ -14,6 +14,7 @@ import {
 } from './fiscal-provider.interface';
 import { FiscalController } from './fiscal.controller';
 import { FiscalService } from './fiscal.service';
+import { SoliqSyncService } from './soliq-sync.service';
 import { TasnifService } from './tasnif.service';
 
 @Module({
@@ -32,10 +33,11 @@ import { TasnifService } from './tasnif.service';
   providers: [
     FiscalService,
     TasnifService,
+    SoliqSyncService,
     // Real OFD/vendor provayder ulanganda FAQAT shu qatorni o'zgartiring
     // (masalan `useClass: RegosFiscalProvider`) — FiscalService o'zi tegilmaydi.
     { provide: FISCAL_PROVIDER, useClass: NoopFiscalProvider },
   ],
-  exports: [FiscalService],
+  exports: [FiscalService, SoliqSyncService],
 })
 export class FiscalModule {}

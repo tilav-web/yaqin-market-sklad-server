@@ -29,6 +29,7 @@ import {
   UpdateTaxCategoryDto,
 } from './dto/fiscal.dto';
 import { FiscalService } from './fiscal.service';
+import { SoliqSyncService } from './soliq-sync.service';
 import { TasnifService } from './tasnif.service';
 
 @ApiBearerAuth()
@@ -39,6 +40,7 @@ export class FiscalController {
   constructor(
     private readonly fiscal: FiscalService,
     private readonly tasnif: TasnifService,
+    private readonly soliqSync: SoliqSyncService,
   ) {}
 
   /* ─── Cheklar ─── */
@@ -205,5 +207,12 @@ export class FiscalController {
   async exportTaxExcel(@Body() dto: ExportTaxExcelDto, @Res() res: Response) {
     const buf = await this.fiscal.generate11101Excel(dto);
     sendXlsx(res, buf, `soliq_11101_20_${dto.period || 'hisobot'}.xlsx`);
+  }
+
+  /** my.soliq.uz bilan E-IMZO kaliti orqali live hisobotlar holatini sinxronlash */
+  @Get('tax-reports/sync-soliq')
+  @Post('tax-reports/sync-soliq')
+  syncSoliq() {
+    return this.soliqSync.syncReportStatuses();
   }
 }

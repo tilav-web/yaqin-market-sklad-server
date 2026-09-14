@@ -713,8 +713,45 @@ export class FiscalService {
       const found = existingReports.find(
         (r) => r.reportType === type && r.period === period,
       );
+      const soliqSync = (found?.data as Record<string, unknown> | undefined)
+        ?.soliqSync as
+        | {
+            reportNumber?: string;
+            packet?: string;
+            status?: 'accepted' | 'error' | 'draft' | 'pending';
+            statusRaw?: string;
+            errorReason?: string | null;
+            lastSyncedAt?: string;
+          }
+        | undefined;
+
       if (found && found.status === TaxReportStatus.SUBMITTED) {
-        return { status: 'submitted', report: found };
+        return {
+          status: 'submitted' as const,
+          report: found,
+          soliqSync,
+        };
+      }
+      if (soliqSync?.status === 'accepted') {
+        return {
+          status: 'submitted' as const,
+          report: found || null,
+          soliqSync,
+        };
+      }
+      if (soliqSync?.status === 'error') {
+        return {
+          status: 'error' as const,
+          report: found || null,
+          soliqSync,
+        };
+      }
+      if (soliqSync?.status === 'draft') {
+        return {
+          status: 'draft' as const,
+          report: found || null,
+          soliqSync,
+        };
       }
       const dueDateObj = new Date(dueStr);
       const isOverdue =
@@ -728,13 +765,24 @@ export class FiscalService {
           59,
         );
       return {
-        status: isOverdue ? 'overdue' : 'pending',
+        status: (isOverdue ? 'overdue' : 'pending') as
+          | 'pending'
+          | 'overdue'
+          | 'submitted'
+          | 'error'
+          | 'draft',
         report: found || null,
+        soliqSync,
       };
     };
 
     const salaryCheck = findStatus(
       TaxReportType.SALARY_NDFL,
+      priorPeriodMonth,
+      salaryDueDate,
+    );
+    const turnoverCheck = findStatus(
+      TaxReportType.TURNOVER_TAX,
       priorPeriodMonth,
       salaryDueDate,
     );
@@ -769,57 +817,129 @@ export class FiscalService {
       {
         id: 'salary_ndfl',
         type: TaxReportType.SALARY_NDFL,
+        packet: '11101_20',
         title: 'Xodimlar (Direktor 0.25 st.) oyligi va soliqlari',
         subtitle: 'JShODS (12%) va Ijtimoiy soliq (12%), INPS (0.1%)',
         period: priorPeriodMonth,
-        periodLabel: `${priorPeriodMonth} (O'tgan oy)`,
+        periodLabel: `${priorPeriodMonth} (Avgust 2026 — O'tgan oy)`,
         dueDate: salaryDueDate,
         daysRemaining: getDaysDiff(salaryDueDate),
         status: salaryCheck.status,
         submittedReport: salaryCheck.report,
+        soliqSync: salaryCheck.soliqSync,
         standardDay: 15,
         description:
-          "Har oyning 15-sanasidan kechiktirmay topshiriladi. Faoliyat bo'lmasa ham, direktor uchun 0.25 stavka bo'yicha oylik hisob-kitobi taqdim etiladi.",
+          "Har oyning 15-sanasidan kechiktirmay topshiriladi. Faoliyat bo'lmasa ham, direktor uchun 0.25 stavka bo'yicha oylik hisob-kitobi taqdim etiladi. Tizim avtomatik Excel (11101_20) generatsiya qilib beradi.",
+      },
+      {
+        id: 'turnover_tax',
+        type: TaxReportType.TURNOVER_TAX,
+        packet: '10104_36',
+        title: 'Aylanmadan olinadigan soliq (4%)',
+        subtitle: `${priorPeriodMonth} oylik aylanma bo'yicha hisob-kitob (Soddalashtirilgan tizim)`,
+        period: priorPeriodMonth,
+        periodLabel: `${priorPeriodMonth} (Avgust 2026 — O'tgan oy)`,
+        dueDate: salaryDueDate,
+        daysRemaining: getDaysDiff(salaryDueDate),
+        status: turnoverCheck.status,
+        submittedReport: turnoverCheck.report,
+        soliqSync: turnoverCheck.soliqSync,
+        standardDay: 15,
+        description:
+          "Har oyning 15-sanasidan kechiktirmay topshiriladi. Soliq portali (my.soliq.uz) da avtomatik qoralama (№ 240491220) shakllantirilgan. Kirib tekshirish va tasdiqlashning o'zi yetarli.",
       },
       {
         id: 'vat',
         type: TaxReportType.VAT,
+        packet: '10001_xx',
         title: "QQS (Qo'shilgan qiymat solig'i — 12%)",
-        subtitle: "Oylik aylanma va tushumlar bo'yicha QQS hisoboti",
+        subtitle:
+          "Soddalashtirilgan tizimda QQS to'lanmaydi (yillik tushum < 1 mlrd)",
         period: priorPeriodMonth,
         periodLabel: `${priorPeriodMonth} (O'tgan oy)`,
         dueDate: vatDueDate,
         daysRemaining: getDaysDiff(vatDueDate),
         status: vatCheck.status,
         submittedReport: vatCheck.report,
+        soliqSync: vatCheck.soliqSync,
         standardDay: 20,
         description:
-          "Har oyning 20-sanasidan kechiktirmay topshiriladi. Elektron hisobvaraq-fakturalar (Didox) va onlayn-kassa cheklari orqali Soliq portalida avtomatik to'ldiriladi.",
+          "MCHJ aylanmadan olinadigan soliq to'lovchisi bo'lgani uchun QQS to'lamaydi. Agar yillik aylanma 1 mlrd so'mdan oshsa, umumiy tizimga o'tiladi.",
       },
       {
         id: 'profit_tax',
         type: TaxReportType.PROFIT_TAX,
+        packet: '10201_xx',
         title: "Foyda solig'i (Kvartallik — 15%)",
-        subtitle: `${priorQuarterPeriod} chorak natijalari bo'yicha sof foyda hisobi`,
+        subtitle: "Soddalashtirilgan tizimda foyda solig'i to'lanmaydi",
         period: priorQuarterPeriod,
         periodLabel: `${priorQuarterPeriod} chorak`,
         dueDate: profitDueDate,
         daysRemaining: getDaysDiff(profitDueDate),
         status: profitCheck.status,
         submittedReport: profitCheck.report,
+        soliqSync: profitCheck.soliqSync,
         standardDay: 20,
         description:
-          'Har chorak yakunidan keyingi oyning 20-sanasigacha (yillik hisobot 1-martgacha). Komissiya tushumlari va chegiriladigan xarajatlar farqidan hisoblanadi.',
+          "MCHJ soddalashtirilgan tizimda (aylanmadan soliq 4%) faoliyat yuritgani uchun foyda solig'i to'lamaydi.",
       },
     ];
+
+    const alerts: Array<{
+      id: string;
+      level: 'error' | 'warning' | 'info';
+      title: string;
+      message: string;
+      reportNumber?: string;
+      packet?: string;
+    }> = [];
+
+    const sepSalary = existingReports.find(
+      (r) =>
+        r.reportType === TaxReportType.SALARY_NDFL &&
+        r.period === `${currentYear}-${String(currentMonth).padStart(2, '0')}`,
+    );
+    const sepSoliqSync = (
+      sepSalary?.data as Record<string, unknown> | undefined
+    )?.soliqSync as
+      | { reportNumber?: string; status?: string; errorReason?: string }
+      | undefined;
+
+    if (sepSoliqSync?.status === 'error' || sepSalary?.data?.soliqSync) {
+      alerts.push({
+        id: 'sep_premature_error',
+        level: 'warning',
+        title: 'Soliq portalida xatolik: Ҳисобот даври тугамаган!',
+        message:
+          "Soliq portaliga 14-sentyabrda yuborilgan 11101_20 hisobot (№ 240894675) 'Sentyabr' oyi deb yuborilgani uchun rad etilgan ('Ҳисобот даври тугамаган'). 15-sentyabrgacha topshirilishi shart bo'lgan hisobot bu — AVGUUST 2026 oyi hisoboti! 'Soliq Excel shabloni (11101_20)' tugmasi orqali Avgust oyi faylini yuklab olib, soliq portalida Avgust oyini tanlab yuboring.",
+        reportNumber: sepSoliqSync?.reportNumber || '240894675',
+        packet: '11101_20',
+      });
+    }
+
+    alerts.push({
+      id: 'turnover_auto_draft',
+      level: 'info',
+      title:
+        'Aylanmadan olinadigan soliq (10104_36) Soliqda avtomat qoralama mavjud',
+      message:
+        'my.soliq.uz portali tomonidan Avgust 2026 uchun 10104_36 hisoboti qoralama (№ 240491220) holatida avtomatik shakllantirilgan. my.soliq.uz ga kirib tekshirib yuborish tugmasini bosish yetarli.',
+      reportNumber: '240491220',
+      packet: '10104_36',
+    });
 
     return {
       today: now.toISOString().slice(0, 10),
       companyInfo,
       items,
-      hasOverdue: items.some((i) => i.status === 'overdue'),
+      alerts,
+      hasOverdue: items.some(
+        (i) => i.status === 'overdue' || i.status === 'error',
+      ),
       hasUrgent: items.some(
-        (i) => i.status === 'pending' && i.daysRemaining <= 3,
+        (i) =>
+          (i.status === 'pending' || i.status === 'draft') &&
+          i.daysRemaining <= 3,
       ),
     };
   }
