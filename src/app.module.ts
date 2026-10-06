@@ -20,6 +20,7 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { ComplaintsModule } from './complaints/complaints.module';
 import { EnvironmentVariables, validateEnv } from './config/configuration';
 import { ContactModule } from './contact/contact.module';
+import { ConversationsModule } from './conversations/conversations.module';
 import { buildTypeOrmOptions } from './database/typeorm.config';
 import { DebtsModule } from './debts/debts.module';
 import { DistrictsModule } from './districts/districts.module';
@@ -89,6 +90,7 @@ import { UsersModule } from './users/users.module';
     AuditLogModule,
     FiscalModule,
     RiskModule,
+    ConversationsModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
