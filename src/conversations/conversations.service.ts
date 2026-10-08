@@ -62,8 +62,10 @@ export class ConversationsService {
       qb.orWhere('c.shopId IN (:...sellerShopIds)', { sellerShopIds });
     }
 
-    qb.orderBy('c.lastMessageAt', 'DESC', 'NULLS LAST')
-      .addOrderBy('c.createdAt', 'DESC');
+    qb.orderBy('c.lastMessageAt', 'DESC', 'NULLS LAST').addOrderBy(
+      'c.createdAt',
+      'DESC',
+    );
 
     const list = await qb.getMany();
 
@@ -77,7 +79,9 @@ export class ConversationsService {
         customerId: c.customerId,
         customerName:
           c.customer.name ||
-          [c.customer.firstName, c.customer.lastName].filter(Boolean).join(' ') ||
+          [c.customer.firstName, c.customer.lastName]
+            .filter(Boolean)
+            .join(' ') ||
           'Foydalanuvchi',
         customerPhone: c.customer.phone,
         customerAvatarUrl: c.customer.avatarUrl,
@@ -99,7 +103,7 @@ export class ConversationsService {
       select: { id: true, name: true, photos: true, ownerId: true },
     });
     if (!shop) {
-      throw new NotFoundException('Do\'kon topilmadi');
+      throw new NotFoundException("Do'kon topilmadi");
     }
 
     let conv = await this.conversations.findOne({
@@ -130,7 +134,9 @@ export class ConversationsService {
       customerId: conv.customerId,
       customerName:
         conv.customer.name ||
-        [conv.customer.firstName, conv.customer.lastName].filter(Boolean).join(' ') ||
+        [conv.customer.firstName, conv.customer.lastName]
+          .filter(Boolean)
+          .join(' ') ||
         'Foydalanuvchi',
       lastMessageText: conv.lastMessageText,
       lastMessageAt: conv.lastMessageAt,
@@ -169,7 +175,7 @@ export class ConversationsService {
       return { conversation, fromShop: true };
     }
 
-    throw new ForbiddenException('Sizda ushbu suhbatga kirish huquqi yo\'q');
+    throw new ForbiddenException("Sizda ushbu suhbatga kirish huquqi yo'q");
   }
 
   async listMessages(
@@ -232,7 +238,12 @@ export class ConversationsService {
     );
 
     // Push notification delivery
-    void this.notifyParticipants(conversation, fromShop, userId, dto.text.trim());
+    void this.notifyParticipants(
+      conversation,
+      fromShop,
+      userId,
+      dto.text.trim(),
+    );
 
     return message;
   }

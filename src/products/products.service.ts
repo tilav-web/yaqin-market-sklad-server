@@ -1211,7 +1211,7 @@ export class ProductsService {
       qb.andWhere('v.shopId != :excludeShopId', { excludeShopId });
     const variants = await qb
       .orderBy('COALESCE(v."discountPrice", v.price)', 'ASC')
-      .take(50)
+      .limit(50)
       .getMany();
 
     return variants.map((v) => {
@@ -1257,7 +1257,7 @@ export class ProductsService {
       .andWhere('v.stock > 0')
       .andWhere('s.isActive = true')
       .orderBy('COALESCE(v."discountPrice", v.price)', 'ASC')
-      .take(50)
+      .limit(50)
       .getMany();
 
     return variants.map((v) => {

@@ -44,6 +44,7 @@ import {
   Shop,
   WorkingHourSlot,
 } from '../shops/entities/shop.entity';
+import { SellerBankAccount } from '../sellers/entities/seller-bank-account.entity';
 import { User, UserStatus } from '../users/entities/user.entity';
 
 // ---------------------------------------------------------------------------
@@ -60,6 +61,7 @@ const AppDataSource = new DataSource({
     Category,
     TaxCategory,
     Shop,
+    SellerBankAccount,
     ShopStaff,
     GlobalProduct,
     ProductVariant,

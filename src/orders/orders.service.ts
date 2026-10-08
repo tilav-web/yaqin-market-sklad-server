@@ -507,6 +507,26 @@ export class OrdersService {
       );
     }
 
+    // Enforce single-shop active order constraint: a customer may only order
+    // from another shop once their active order from a different shop is concluded.
+    const activeOrderOtherShop = await this.orders.findOne({
+      where: {
+        userId,
+        status: In([
+          OrderStatus.New,
+          OrderStatus.Accepted,
+          OrderStatus.Preparing,
+          OrderStatus.Delivering,
+        ]),
+        shopId: Not(dto.shopId),
+      },
+    });
+    if (activeOrderOtherShop) {
+      throw new BadRequestException(
+        "Sizda boshqa do'kondan faol buyurtma mavjud. Avval uni yakunlang yoki kuting.",
+      );
+    }
+
     const address = await this.addresses.findOne({
       where: { id: dto.deliveryAddressId, userId },
     });
