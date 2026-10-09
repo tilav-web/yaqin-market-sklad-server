@@ -4,27 +4,22 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
-import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { customAlphabet } from 'nanoid';
-import {
-  Between,
-  DataSource,
-  In,
-  IsNull,
-  LessThan,
-  Not,
-  Repository,
-} from 'typeorm';
+
+import { OrderAdminService } from './services/order-admin.service';
+import { OrderChatService } from './services/order-chat.service';
+import { OrderLifecycleCronService } from './services/order-lifecycle-cron.service';
+import { OrderReviewsService } from './services/order-reviews.service';
+import { DataSource, In, Not, Repository } from 'typeorm';
 
 import { AuditLogService } from '../audit-log/audit-log.service';
-import { AuditAction } from '../audit-log/entities/admin-audit-log.entity';
 import { Role } from '../auth/role.enum';
 import { ClickService } from '../click/click.service';
 import { ComplaintsService } from '../complaints/complaints.service';
 import { FiscalService } from '../fiscal/fiscal.service';
-import { buildXlsxBuffer } from '../common/xlsx.util';
 import {
   calcDeliveryFee,
   estimateEtaMinutes,
@@ -82,11 +77,6 @@ const orderNumberGen = customAlphabet('ABCDEFGHJKLMNPQRSTUVWXYZ23456789', 8);
 // A new order the shop doesn't accept within this window is auto-cancelled.
 const AUTO_CANCEL_MS = 5 * 60 * 1000;
 
-// A PAID order the shop keeps ignoring past this (counted from the last
-// customer re-request, if any) is force-closed and auto-refunded — a paying
-// customer who walked away from the app must never stay in limbo.
-const PAID_AUTO_CANCEL_MS = 30 * 60 * 1000;
-
 // Nothing further will happen to an order in one of these — changing its
 // payment method afterwards would be meaningless (or, for a paid order,
 // impossible without an actual refund path).
@@ -137,7 +127,63 @@ export class OrdersService {
     private readonly click: ClickService,
     private readonly fiscal: FiscalService,
     private readonly risk: RiskService,
+    @Optional()
+    private readonly reviewsService?: OrderReviewsService,
+    @Optional()
+    private readonly chatService?: OrderChatService,
+    @Optional()
+    private readonly adminService?: OrderAdminService,
+    @Optional()
+    private readonly lifecycleCronService?: OrderLifecycleCronService,
   ) {}
+
+  private getReviewsService(): OrderReviewsService {
+    return (
+      this.reviewsService ??
+      new OrderReviewsService(
+        this.orders,
+        this.reviews,
+        this.shops,
+        this.variants,
+        this.dataSource,
+        this.push,
+        this.risk,
+      )
+    );
+  }
+
+  private getChatService(): OrderChatService {
+    return (
+      this.chatService ??
+      new OrderChatService(
+        this.orders,
+        this.chat,
+        this.staff,
+        this.realtime,
+        this.push,
+      )
+    );
+  }
+
+  private getAdminService(): OrderAdminService {
+    return (
+      this.adminService ?? new OrderAdminService(this.orders, this.auditLog)
+    );
+  }
+
+  private getLifecycleCronService(): OrderLifecycleCronService {
+    return (
+      this.lifecycleCronService ??
+      new OrderLifecycleCronService(
+        this.orders,
+        this.staff,
+        this.dataSource,
+        this.realtime,
+        this.push,
+        this.click,
+      )
+    );
+  }
 
   private static readonly STATUS_LABEL: Record<OrderStatus, string> = {
     [OrderStatus.New]: 'Yangi',
@@ -1552,204 +1598,12 @@ export class OrdersService {
    * autoRefundAbandonedPaidOrders force-close them with an automatic
    * payment/reversal.
    */
-  @Cron(CronExpression.EVERY_MINUTE)
   async autoCancelStaleNewOrders(): Promise<void> {
-    const cutoff = new Date(Date.now() - AUTO_CANCEL_MS);
-    const stale = await this.orders.find({
-      where: {
-        status: OrderStatus.New,
-        createdAt: LessThan(cutoff),
-        paymentStatus: Not(PaymentStatus.Paid),
-      },
-      take: 50,
-    });
-    await this.alertStalePaidOrders(cutoff);
-    await this.autoRefundAbandonedPaidOrders();
-    for (const order of stale) {
-      // Only emit/notify if the transition actually happened (it may be
-      // skipped if the order was accepted between the scan and the lock).
-      const transitioned = await this.dataSource.transaction(
-        async (manager) => {
-          const fresh = await manager.findOne(Order, {
-            where: { id: order.id },
-            lock: { mode: 'pessimistic_write' },
-          });
-          if (!fresh || fresh.status !== OrderStatus.New) return false;
-          await this.restockOrder(manager, fresh.id);
-          fresh.status = OrderStatus.SellerNoResponse;
-          fresh.cancellationReason = "Do'kon 5 daqiqada javob bermadi";
-          fresh.timeline = [
-            ...fresh.timeline,
-            {
-              status: OrderStatus.SellerNoResponse,
-              at: new Date().toISOString(),
-              byUserId: null,
-              note: 'auto-reject-timeout',
-            },
-          ];
-          await manager.save(fresh);
-          return true;
-        },
-      );
-      if (!transitioned) continue;
-      order.status = OrderStatus.SellerNoResponse;
-      this.emitOrderEvent('order:updated', order);
-      if (order.userId) {
-        void this.push.sendToUser(order.userId, {
-          title: `Buyurtma #${order.orderNumber}`,
-          body: "Do'kon 5 daqiqada javob bermadi — boshqa do'konlardan taklif bor",
-          data: { orderId: order.id, kind: 'order:seller_no_response' },
-        });
-      }
-    }
-    if (stale.length > 0)
-      this.logger.log(
-        `${stale.length} stale order(s) moved to SellerNoResponse`,
-      );
+    return this.getLifecycleCronService().autoCancelStaleNewOrders();
   }
 
-  /**
-   * One-time (per 5-min window — a re-request re-arms it) alert pair for a
-   * paid order stuck unaccepted: urgent nudge to the shop + an options push
-   * to the customer (wait / re-request / cancel-with-refund). Anchored on
-   * COALESCE(reRequestedAt, createdAt) so each re-request restarts the clock.
-   */
-  private async alertStalePaidOrders(cutoff: Date): Promise<void> {
-    const stalePaid = await this.orders
-      .createQueryBuilder('o')
-      .leftJoinAndSelect('o.shop', 'shop')
-      .where('o.status = :status', { status: OrderStatus.New })
-      .andWhere('o.paymentStatus = :ps', { ps: PaymentStatus.Paid })
-      .andWhere('o.paidUnacceptedAlertSentAt IS NULL')
-      .andWhere('COALESCE(o.reRequestedAt, o.createdAt) < :cutoff', { cutoff })
-      .take(50)
-      .getMany();
-    if (stalePaid.length === 0) return;
-
-    for (const order of stalePaid) {
-      const staff = await this.staff.find({
-        where: { shopId: order.shopId, isActive: true },
-      });
-      const recipients = [
-        ...new Set([order.shop.ownerId, ...staff.map((s) => s.userId)]),
-      ];
-      void this.push.sendToUsers(recipients, {
-        title: "⚠️ To'langan buyurtma kutmoqda",
-        body: `#${order.orderNumber} — mijoz to'lagan, lekin hali qabul qilinmagan. Zudlik bilan javob bering!`,
-        data: {
-          orderId: order.id,
-          kind: 'order:paid_unaccepted',
-          shopId: order.shopId,
-          forSeller: true,
-        },
-      });
-      if (order.userId) {
-        void this.push.sendToUser(order.userId, {
-          title: `Buyurtma #${order.orderNumber}`,
-          body: "Do'kon hali javob bermadi. Kutishingiz, qayta so'rov yuborishingiz yoki bekor qilib pulni qaytarib olishingiz mumkin",
-          data: { orderId: order.id, kind: 'order:paid_unaccepted_customer' },
-        });
-      }
-    }
-    await this.orders.update(
-      { id: In(stalePaid.map((o) => o.id)) },
-      { paidUnacceptedAlertSentAt: new Date() },
-    );
-    this.logger.warn(
-      `${stalePaid.length} paid order(s) stuck unaccepted past the 5-min window — shop and customer notified`,
-    );
-  }
-
-  /**
-   * Safety net behind the customer's own cancel/re-request buttons: a paid
-   * order the shop has ignored for PAID_AUTO_CANCEL_MS (since the last
-   * re-request) is closed as SellerNoResponse, restocked and auto-refunded.
-   */
-  private async autoRefundAbandonedPaidOrders(): Promise<void> {
-    const cutoff = new Date(Date.now() - PAID_AUTO_CANCEL_MS);
-    const abandoned = await this.orders
-      .createQueryBuilder('o')
-      .where('o.status = :status', { status: OrderStatus.New })
-      .andWhere('o.paymentStatus = :ps', { ps: PaymentStatus.Paid })
-      .andWhere('COALESCE(o.reRequestedAt, o.createdAt) < :cutoff', { cutoff })
-      .take(50)
-      .getMany();
-
-    for (const order of abandoned) {
-      const transitioned = await this.dataSource.transaction(
-        async (manager) => {
-          const fresh = await manager.findOne(Order, {
-            where: { id: order.id },
-            lock: { mode: 'pessimistic_write' },
-          });
-          if (!fresh || fresh.status !== OrderStatus.New) return false;
-          await this.restockOrder(manager, fresh.id);
-          fresh.status = OrderStatus.SellerNoResponse;
-          fresh.cancellationReason =
-            "Do'kon javob bermadi — to'lov avtomatik qaytarildi";
-          fresh.timeline = [
-            ...fresh.timeline,
-            {
-              status: OrderStatus.SellerNoResponse,
-              at: new Date().toISOString(),
-              byUserId: null,
-              note: 'auto-refund-timeout',
-            },
-          ];
-          await manager.save(fresh);
-          return true;
-        },
-      );
-      if (!transitioned) continue;
-
-      order.status = OrderStatus.SellerNoResponse;
-      this.emitOrderEvent('order:updated', order);
-      const refunded = await this.click.refundPaidOrder(order.id);
-      if (order.userId) {
-        void this.push.sendToUser(order.userId, {
-          title: `Buyurtma #${order.orderNumber}`,
-          body: refunded
-            ? "Do'kon javob bermadi — pulingiz qaytarildi (kartaga 1-3 ish kunida tushadi)"
-            : "Do'kon javob bermadi — to'lovni qaytarish boshlandi, tez orada yakunlanadi",
-          data: { orderId: order.id, kind: 'order:seller_no_response' },
-        });
-      }
-      this.logger.warn(
-        `Paid order ${order.id} abandoned by shop — auto-closed, refund ${refunded ? 'done' : 'pending (retry cron)'}`,
-      );
-    }
-  }
-
-  /**
-   * Backstop for reversals that failed at cancel time (Click hiccup, network,
-   * missing payment id later backfilled): any dead paid Click order without
-   * refundedAt gets retried until the money is actually back.
-   */
-  @Cron(CronExpression.EVERY_5_MINUTES)
   async retryPendingRefunds(): Promise<void> {
-    const stuck = await this.orders.find({
-      where: {
-        status: In([
-          OrderStatus.Cancelled,
-          OrderStatus.SellerNoResponse,
-          OrderStatus.SellerRejected,
-        ]),
-        paymentMethod: PaymentMethod.ClickOnline,
-        paymentStatus: PaymentStatus.Paid,
-        refundedAt: IsNull(),
-      },
-      take: 20,
-    });
-    for (const order of stuck) {
-      const refunded = await this.click.refundPaidOrder(order.id);
-      if (refunded && order.userId) {
-        void this.push.sendToUser(order.userId, {
-          title: `Buyurtma #${order.orderNumber}`,
-          body: "To'lovingiz qaytarildi — pul kartangizga 1-3 ish kunida tushadi",
-          data: { orderId: order.id, kind: 'order:refunded' },
-        });
-      }
-    }
+    return this.getLifecycleCronService().retryPendingRefunds();
   }
 
   private async restockOrder(
@@ -1959,387 +1813,52 @@ export class OrdersService {
     return this.orders.save(order);
   }
 
-  /**
-   * Customer rates products from a delivered order (1–5 stars + optional text).
-   * Per business rule, customers rate **products only** — the shop rating is
-   * derived automatically from the average of all its product reviews.
-   *
-   * Re-submitting for an already-reviewed variant overwrites the prior review.
-   */
+  /** Customer rates products from a delivered order (delegated to OrderReviewsService). */
   async createReviews(
     userId: string,
     orderId: string,
     items: { productVariantId: string; stars: number; text?: string }[],
   ): Promise<{ reviewedVariantIds: string[] }> {
-    const order = await this.orders.findOne({
-      where: { id: orderId },
-      relations: { items: true, shop: true },
-    });
-    if (!order) throw new NotFoundException('Buyurtma topilmadi');
-    if (order.userId !== userId) throw new ForbiddenException();
-    if (order.status !== OrderStatus.Delivered) {
-      throw new BadRequestException(
-        'Faqat yetkazilgan buyurtmani baholash mumkin',
-      );
-    }
-
-    const orderedVariantIds = new Set(
-      order.items.map((i) => i.productVariantId),
-    );
-    for (const r of items) {
-      if (!orderedVariantIds.has(r.productVariantId)) {
-        throw new BadRequestException("Mahsulot ushbu buyurtmada yo'q");
-      }
-    }
-
-    await this.dataSource.transaction(async (manager) => {
-      for (const r of items) {
-        const existing = await manager.findOne(Review, {
-          where: {
-            userId,
-            orderId,
-            target: ReviewTarget.Product,
-            productVariantId: r.productVariantId,
-          },
-        });
-        if (existing) {
-          existing.stars = r.stars;
-          existing.text = r.text ?? null;
-          await manager.save(existing);
-        } else {
-          await manager.save(
-            manager.create(Review, {
-              userId,
-              orderId,
-              target: ReviewTarget.Product,
-              productVariantId: r.productVariantId,
-              stars: r.stars,
-              text: r.text ?? null,
-            }),
-          );
-        }
-      }
-    });
-
-    // Roll up ratings for every affected variant + the shop.
-    const affectedVariantIds = [
-      ...new Set(items.map((i) => i.productVariantId)),
-    ];
-    for (const variantId of affectedVariantIds) {
-      await this.recomputeVariantRating(variantId);
-    }
-    await this.recomputeShopRating(order.shopId);
-
-    const myReviews = await this.reviews.find({
-      where: { orderId, userId, target: ReviewTarget.Product },
-      select: { productVariantId: true },
-    });
-    return {
-      reviewedVariantIds: myReviews.map((rv) => rv.productVariantId as string),
-    };
+    return this.getReviewsService().createReviews(userId, orderId, items);
   }
 
-  /**
-   * Customer rates the courier who confirmed delivery (target='courier') —
-   * separate from product reviews. Courier is resolved from
-   * Order.deliveredByUserId (set when the shop side taps "Yetkazildi"); if
-   * the customer self-confirmed, there's no courier to attribute this to.
-   */
+  /** Customer rates the courier who confirmed delivery (delegated to OrderReviewsService). */
   async rateCourier(
     userId: string,
     orderId: string,
     stars: number,
     text?: string,
   ): Promise<void> {
-    const order = await this.orders.findOne({ where: { id: orderId } });
-    if (!order) throw new NotFoundException('Buyurtma topilmadi');
-    if (order.userId !== userId) throw new ForbiddenException();
-    if (order.status !== OrderStatus.Delivered) {
-      throw new BadRequestException(
-        'Faqat yetkazilgan buyurtmani baholash mumkin',
-      );
-    }
-    if (!order.deliveredByUserId) {
-      throw new BadRequestException(
-        'Bu buyurtmada baholash uchun kuryer aniqlanmagan',
-      );
-    }
-    const courierUserId = order.deliveredByUserId;
-
-    await this.upsertPartyReview(
-      userId,
-      orderId,
-      ReviewTarget.Courier,
-      stars,
-      text,
-      { courierUserId },
-    );
-    await this.recomputeCourierRating(courierUserId);
-    void this.risk.onCourierRated({ orderId, courierUserId, stars });
+    return this.getReviewsService().rateCourier(userId, orderId, stars, text);
   }
 
-  /** Customer rates the shop/delivery experience (target='shop') — separate from per-product reviews. */
+  /** Customer rates the shop/delivery experience (delegated to OrderReviewsService). */
   async rateShop(
     userId: string,
     orderId: string,
     stars: number,
     text?: string,
   ): Promise<void> {
-    const order = await this.orders.findOne({ where: { id: orderId } });
-    if (!order) throw new NotFoundException('Buyurtma topilmadi');
-    if (order.userId !== userId) throw new ForbiddenException();
-    if (order.status !== OrderStatus.Delivered) {
-      throw new BadRequestException(
-        'Faqat yetkazilgan buyurtmani baholash mumkin',
-      );
-    }
-
-    await this.upsertPartyReview(
-      userId,
-      orderId,
-      ReviewTarget.Shop,
-      stars,
-      text,
-      { shopId: order.shopId },
-    );
-    await this.recomputeShopServiceRating(order.shopId);
+    return this.getReviewsService().rateShop(userId, orderId, stars, text);
   }
 
-  private async upsertPartyReview(
-    userId: string,
-    orderId: string,
-    target: ReviewTarget.Courier | ReviewTarget.Shop,
-    stars: number,
-    text: string | undefined,
-    extra: { courierUserId?: string; shopId?: string },
-  ): Promise<void> {
-    const existing = await this.reviews.findOne({
-      where: { userId, orderId, target },
-    });
-    if (existing) {
-      existing.stars = stars;
-      existing.text = text ?? null;
-      await this.reviews.save(existing);
-    } else {
-      await this.reviews.save(
-        this.reviews.create({
-          userId,
-          orderId,
-          target,
-          stars,
-          text: text ?? null,
-          ...extra,
-        }),
-      );
-    }
-  }
-
-  /** Courier rating is computed dynamically from Review rows with target='courier'. */
-  private async recomputeCourierRating(_courierUserId: string): Promise<void> {
-    // Dynamic review queries calculate this on demand without mutating User table
-  }
-
-  /** Recompute a shop's service/delivery rating from Review rows with target='shop' — distinct from product-based ratingAverage. */
-  private async recomputeShopServiceRating(shopId: string): Promise<void> {
-    const agg = await this.reviews
-      .createQueryBuilder('r')
-      .select('COALESCE(AVG(r.stars), 0)', 'avg')
-      .addSelect('COUNT(*)', 'cnt')
-      .where('r.target = :target', { target: ReviewTarget.Shop })
-      .andWhere('r.shopId = :shopId', { shopId })
-      .getRawOne<{ avg: string; cnt: string }>();
-    await this.shops.update(shopId, {
-      serviceRatingAverage: Math.round(Number(agg?.avg ?? 0) * 100) / 100,
-      serviceRatingCount: Number(agg?.cnt ?? 0),
-    });
-  }
-
-  /** Recompute a variant's cached rating from its reviews (SQL aggregation). */
-  private async recomputeVariantRating(variantId: string): Promise<void> {
-    const agg = await this.reviews
-      .createQueryBuilder('r')
-      .select('COALESCE(AVG(r.stars), 0)', 'avg')
-      .addSelect('COUNT(*)', 'cnt')
-      .where('r.productVariantId = :variantId', { variantId })
-      .getRawOne<{ avg: string; cnt: string }>();
-    await this.variants.update(variantId, {
-      ratingAverage: Math.round(Number(agg?.avg ?? 0) * 100) / 100,
-      ratingCount: Number(agg?.cnt ?? 0),
-    });
-  }
-
-  /** Shop rating = average of all reviews across the shop's variants (SQL). */
-  private async recomputeShopRating(shopId: string): Promise<void> {
-    const agg = await this.reviews
-      .createQueryBuilder('r')
-      .innerJoin('product_variants', 'v', 'v.id = r.productVariantId')
-      .select('COALESCE(AVG(r.stars), 0)', 'avg')
-      .addSelect('COUNT(*)', 'cnt')
-      .where('v.shopId = :shopId', { shopId })
-      .getRawOne<{ avg: string; cnt: string }>();
-    await this.shops.update(shopId, {
-      ratingAverage: Math.round(Number(agg?.avg ?? 0) * 100) / 100,
-      ratingCount: Number(agg?.cnt ?? 0),
-    });
-  }
-
-  // --- In-order chat -------------------------------------------------------
-
-  /** Verify the user is a party to the order and return { order, fromShop }. */
-  private async authorizeChat(userId: string, orderId: string) {
-    const order = await this.orders.findOne({
-      where: { id: orderId },
-      relations: { shop: true },
-    });
-    if (!order) throw new NotFoundException('Buyurtma topilmadi');
-    const isCustomer = order.userId === userId;
-    let isShop = order.shop.ownerId === userId;
-    // Staff with the chat permission represent the shop side too.
-    if (!isCustomer && !isShop) {
-      const member = await this.staff.findOne({
-        where: { shopId: order.shopId, userId, isActive: true },
-      });
-      if (!member?.permissions?.includes('orders.chat'))
-        throw new ForbiddenException();
-      isShop = true;
-    }
-    return { order, fromShop: isShop };
-  }
-
+  /** In-order chat message listing (delegated to OrderChatService). */
   async listMessages(userId: string, orderId: string): Promise<ChatMessage[]> {
-    await this.authorizeChat(userId, orderId);
-    return this.chat.find({
-      where: { orderId },
-      order: { createdAt: 'ASC' },
-      take: 200,
-    });
+    return this.getChatService().listMessages(userId, orderId);
   }
 
+  /** Send in-order chat message (delegated to OrderChatService). */
   async sendMessage(
     userId: string,
     orderId: string,
     text: string,
   ): Promise<ChatMessage> {
-    const { order, fromShop } = await this.authorizeChat(userId, orderId);
-    const message = await this.chat.save(
-      this.chat.create({
-        orderId,
-        senderUserId: userId,
-        fromShop,
-        text: text.trim(),
-      }),
-    );
-    // Deliver live to both parties.
-    if (order.userId)
-      this.realtime.emitToUser(order.userId, 'chat:message', message);
-    this.realtime.emitToShop(order.shopId, 'chat:message', message);
-    // Push the other party (excluding the sender).
-    void this.notifyChat(order, fromShop, userId, text.trim());
-    return message;
+    return this.getChatService().sendMessage(userId, orderId, text);
   }
 
-  /** Push a new chat message to the receiving side (customer ↔ shop staff). */
-  private async notifyChat(
-    order: Pick<Order, 'id' | 'orderNumber' | 'userId' | 'shopId'> & {
-      shop: Pick<Shop, 'ownerId'>;
-    },
-    fromShop: boolean,
-    senderUserId: string,
-    text: string,
-  ): Promise<void> {
-    const payload = {
-      title: `#${order.orderNumber} — yangi xabar`,
-      body: text.length > 80 ? `${text.slice(0, 80)}…` : text,
-      data: { kind: 'chat', orderId: order.id, shopId: order.shopId },
-    };
-    if (fromShop) {
-      // Shop → customer.
-      if (order.userId) void this.push.sendToUser(order.userId, payload);
-    } else {
-      // Customer → shop owner + staff who can chat (minus the sender).
-      const staff = await this.staff.find({
-        where: { shopId: order.shopId, isActive: true },
-      });
-      const recipients = [
-        order.shop.ownerId,
-        ...staff
-          .filter((s) => s.permissions?.includes('orders.chat'))
-          .map((s) => s.userId),
-      ].filter((id) => id && id !== senderUserId);
-      void this.push.sendToUsers([...new Set(recipients)], payload);
-    }
-  }
-
-  /**
-   * Reminds customers to rate delivered orders. Runs every 4 hours.
-   * Targets orders delivered 2–24 hours ago that still have unreviewed
-   * items. Previously this fired 4–48h after delivery — well past the
-   * default 24h complaint window (SETTLEMENT_HOURS), so a customer nudged
-   * to rate their order often couldn't file a complaint about it anymore
-   * even if the reminder made them realise something was wrong. 2h leaves
-   * the reminder itself meaningful (order/courier are fresh); by 24h the
-   * complaint window is closing, so this stops before then.
-   */
-  @Cron('0 */4 * * *')
+  /** Reminds customers to rate delivered orders (delegated to OrderReviewsService). */
   async sendReviewReminders(): Promise<void> {
-    const now = Date.now();
-    const from = new Date(now - 24 * 60 * 60 * 1000);
-    const to = new Date(now - 2 * 60 * 60 * 1000);
-
-    const delivered = await this.orders.find({
-      where: {
-        status: OrderStatus.Delivered,
-        updatedAt: Between(from, to),
-        reviewReminderSentAt: IsNull(),
-      },
-      relations: { items: true },
-      take: 200,
-    });
-    if (delivered.length === 0) return;
-
-    // For each order check if all items have been reviewed.
-    const orderIds = delivered.map((o) => o.id);
-    const existingReviews = await this.reviews.find({
-      where: { orderId: In(orderIds), target: ReviewTarget.Product },
-    });
-    const reviewedPairs = new Set(
-      existingReviews.map((r) => `${r.orderId}:${r.productVariantId}`),
-    );
-
-    const reminded = new Set<string>();
-    const remindedOrderIds: string[] = [];
-    for (const order of delivered) {
-      if (!order.userId) continue;
-      const hasUnreviewed = order.items.some(
-        (it) => !reviewedPairs.has(`${order.id}:${it.productVariantId}`),
-      );
-      if (!hasUnreviewed) continue;
-      // At most one reminder push per user per run — other eligible orders
-      // for the same user get picked up (and marked sent) on a later run.
-      if (reminded.has(order.userId)) continue;
-      reminded.add(order.userId);
-      remindedOrderIds.push(order.id);
-
-      void this.push.sendToUser(order.userId, {
-        title: 'Buyurtmangizni baholang',
-        body: `#${order.orderNumber} buyurtmangiz haqida fikr qoldiring — bu do'konni rivojlantiradi!`,
-        data: {
-          kind: 'review_reminder',
-          orderId: order.id,
-          deepLink: `/orders/${order.id}`,
-        },
-      });
-    }
-    if (remindedOrderIds.length > 0) {
-      // Persist so this same order never triggers a repeat reminder — the
-      // previous version had no persisted flag and re-sent the same "please
-      // rate your order" push every 4h for up to ~44h (≈11 times).
-      await this.orders.update(
-        { id: In(remindedOrderIds) },
-        { reviewReminderSentAt: new Date() },
-      );
-      this.logger.log(`Sent review reminders to ${reminded.size} user(s)`);
-    }
+    return this.getReviewsService().sendReviewReminders();
   }
 
   // ─── Yetkazib berish marshruti (SPEC.md §27) ──────────────────────────────
@@ -2434,58 +1953,7 @@ export class OrdersService {
     };
   }
 
-  // ─── Admin: platforma bo'ylab buyurtmalarni ko'rish ──────────────────────
-
-  private adminOrdersFilterQuery(opts: {
-    search?: string;
-    status?: OrderStatus;
-    channel?: OrderChannel;
-    paymentMethod?: PaymentMethod;
-    paymentStatus?: PaymentStatus;
-    shopId?: string;
-    dateFrom?: string;
-    dateTo?: string;
-  }) {
-    const qb = this.orders
-      .createQueryBuilder('o')
-      .leftJoinAndSelect('o.shop', 'shop')
-      .leftJoinAndSelect('o.user', 'user')
-      .orderBy('o.createdAt', 'DESC');
-
-    if (opts.status) qb.andWhere('o.status = :status', { status: opts.status });
-    if (opts.channel)
-      qb.andWhere('o.channel = :channel', { channel: opts.channel });
-    if (opts.paymentMethod)
-      qb.andWhere('o.paymentMethod = :paymentMethod', {
-        paymentMethod: opts.paymentMethod,
-      });
-    if (opts.paymentStatus)
-      qb.andWhere('o.paymentStatus = :paymentStatus', {
-        paymentStatus: opts.paymentStatus,
-      });
-    if (opts.shopId) qb.andWhere('o.shopId = :shopId', { shopId: opts.shopId });
-    // Uzbekistan has a fixed UTC+5 offset (no DST) — parse the admin's
-    // YYYY-MM-DD as Tashkent-local midnight, not UTC midnight, so "bugun"
-    // matches what a Tashkent-based admin actually means by that date.
-    if (opts.dateFrom)
-      qb.andWhere('o.createdAt >= :dateFrom', {
-        dateFrom: new Date(`${opts.dateFrom}T00:00:00+05:00`),
-      });
-    if (opts.dateTo)
-      qb.andWhere('o.createdAt < :dateTo', {
-        dateTo: new Date(
-          new Date(`${opts.dateTo}T00:00:00+05:00`).getTime() +
-            24 * 3600 * 1000,
-        ),
-      });
-    if (opts.search) {
-      qb.andWhere(
-        '(o.orderNumber ILIKE :q OR shop.name ILIKE :q OR user.phone ILIKE :q OR user.name ILIKE :q)',
-        { q: `%${opts.search}%` },
-      );
-    }
-    return qb;
-  }
+  // ─── Admin: platforma bo'ylab buyurtmalarni ko'rish (delegated to OrderAdminService) ──────
 
   async adminListOrders(opts: {
     search?: string;
@@ -2499,15 +1967,8 @@ export class OrdersService {
     limit?: number;
     offset?: number;
   }): Promise<{ items: Order[]; total: number }> {
-    const qb = this.adminOrdersFilterQuery(opts);
-    const limit = Math.min(opts.limit ?? 30, 100);
-    const offset = Math.max(opts.offset ?? 0, 0);
-    const [items, total] = await qb.skip(offset).take(limit).getManyAndCount();
-    return { items, total };
+    return this.getAdminService().adminListOrders(opts);
   }
-
-  /** Same filters as adminListOrders, but every matching row (capped) for an .xlsx export. */
-  private static readonly EXPORT_ROW_CAP = 5000;
 
   async adminExportOrders(opts: {
     search?: string;
@@ -2519,155 +1980,32 @@ export class OrdersService {
     dateFrom?: string;
     dateTo?: string;
   }): Promise<Buffer> {
-    const qb = this.adminOrdersFilterQuery(opts);
-    const rows = await qb.take(OrdersService.EXPORT_ROW_CAP).getMany();
-    return buildXlsxBuffer(
-      'Buyurtmalar',
-      [
-        { header: 'Buyurtma raqami', key: 'orderNumber', width: 16 },
-        { header: "Do'kon", key: 'shopName', width: 24 },
-        { header: 'Mijoz', key: 'customerName', width: 20 },
-        { header: 'Telefon', key: 'customerPhone', width: 16 },
-        { header: 'Holat', key: 'status', width: 14 },
-        { header: "To'lov usuli", key: 'paymentMethod', width: 14 },
-        { header: "To'lov holati", key: 'paymentStatus', width: 14 },
-        { header: 'Summa', key: 'total', width: 12 },
-        { header: 'Komissiyasiz', key: 'commissionExempt', width: 12 },
-        { header: 'Sana', key: 'createdAt', width: 20 },
-      ],
-      rows.map((o) => ({
-        orderNumber: o.orderNumber,
-        shopName: o.shop?.name ?? '',
-        customerName: o.user?.name ?? '',
-        customerPhone: o.user?.phone ?? '',
-        status: o.status,
-        paymentMethod: o.paymentMethod,
-        paymentStatus: o.paymentStatus,
-        total: o.total,
-        commissionExempt: o.commissionExempt ? 'ha' : "yo'q",
-        createdAt: o.createdAt.toISOString(),
-      })),
-    );
+    return this.getAdminService().adminExportOrders(opts);
   }
 
-  /**
-   * Admin review queue — there was previously NO admin surface for reviews
-   * at all (only the seller's own product-review list existed). `maxStars`
-   * is what makes this useful for spotting fraud fallout: a low-star
-   * courier/shop review is a customer signal the risk module also reacts to
-   * (RiskService.onCourierRated), but an admin needs to actually read it.
-   */
   async adminListReviews(opts: {
     target?: ReviewTarget;
     maxStars?: number;
     limit?: number;
     offset?: number;
-  }): Promise<{
-    items: (Review & {
-      customerName: string | null;
-      targetName: string | null;
-    })[];
-    total: number;
-  }> {
-    const qb = this.reviews
-      .createQueryBuilder('r')
-      .leftJoinAndSelect('r.user', 'user')
-      .leftJoinAndSelect('r.courier', 'courier')
-      .leftJoinAndSelect('r.shop', 'shop')
-      .orderBy('r.createdAt', 'DESC')
-      .take(Math.min(opts.limit ?? 30, 100))
-      .skip(Math.max(opts.offset ?? 0, 0));
-    if (opts.target) qb.andWhere('r.target = :target', { target: opts.target });
-    if (opts.maxStars != null)
-      qb.andWhere('r.stars <= :maxStars', { maxStars: opts.maxStars });
-    const [items, total] = await qb.getManyAndCount();
-
-    const variantIds = [
-      ...new Set(
-        items
-          .filter(
-            (r) => r.target === ReviewTarget.Product && r.productVariantId,
-          )
-          .map((r) => r.productVariantId as string),
-      ),
-    ];
-    const variants = variantIds.length
-      ? await this.variants
-          .createQueryBuilder('v')
-          .innerJoinAndSelect('v.globalProduct', 'gp')
-          .where('v.id IN (:...ids)', { ids: variantIds })
-          .select(['v.id', 'gp.name'])
-          .getMany()
-      : [];
-    const variantNameMap = new Map(
-      variants.map((v) => [
-        v.id,
-        v.globalProduct?.name
-          ? typeof v.globalProduct.name === 'object'
-            ? v.globalProduct.name?.uz || ''
-            : v.globalProduct.name
-          : null,
-      ]),
-    );
-
-    return {
-      items: items.map((r) => ({
-        ...r,
-        customerName: r.user?.name || r.user?.phone || null,
-        targetName:
-          r.target === ReviewTarget.Product
-            ? r.productVariantId
-              ? (variantNameMap.get(r.productVariantId) ?? null)
-              : null
-            : r.target === ReviewTarget.Courier
-              ? r.courier?.name || r.courier?.phone || null
-              : (r.shop?.name ?? null),
-      })),
-      total,
-    };
+  }) {
+    return this.getReviewsService().adminListReviews(opts);
   }
 
   async adminGetOrder(id: string): Promise<Order> {
-    const order = await this.orders.findOne({
-      where: { id },
-      relations: { items: { productVariant: true }, shop: true, user: true },
-    });
-    if (!order) throw new NotFoundException('Buyurtma topilmadi');
-    return order;
+    return this.getAdminService().adminGetOrder(id);
   }
 
-  /**
-   * Admin: mark/unmark a 0%-commission order (SPEC §10.3). Only meaningful
-   * before the order reaches `Delivered` — settlement runs once, at that
-   * transition (see settleDeliveredOrder), so toggling this after delivery
-   * can't retroactively undo commission already recorded.
-   */
   async adminSetCommissionExempt(
     id: string,
     exempt: boolean,
     adminUserId: string,
   ): Promise<Order> {
-    const order = await this.orders.findOne({ where: { id } });
-    if (!order) throw new NotFoundException('Buyurtma topilmadi');
-    if (order.status === OrderStatus.Delivered) {
-      throw new BadRequestException(
-        "Buyurtma allaqachon yetkazilgan — komissiya hisoblab bo'lingan, endi bu belgi ta'sir qilmaydi",
-      );
-    }
-    // Update only this one column — updateStatus() re-reads the full entity
-    // under a pessimistic_write lock and saves it back wholesale, so a
-    // concurrent findOne-mutate-save here would risk clobbering whatever
-    // status/timeline change that transaction just committed.
-    await this.orders.update(id, { commissionExempt: exempt });
-    void this.auditLog.record({
+    return this.getAdminService().adminSetCommissionExempt(
+      id,
+      exempt,
       adminUserId,
-      action: exempt
-        ? AuditAction.OrderCommissionExempted
-        : AuditAction.OrderCommissionExemptRemoved,
-      targetType: 'order',
-      targetId: id,
-    });
-    return this.orders.findOneOrFail({ where: { id } });
+    );
   }
 
   /**

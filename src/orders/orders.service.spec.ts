@@ -346,7 +346,9 @@ describe('OrdersService', () => {
 
     it("boshqa do'kondan faol buyurtma mavjud bo'lsa BadRequestException", async () => {
       shops.findOne.mockResolvedValue(makeShop());
-      orders.findOne.mockResolvedValueOnce({ id: 'active-other-order' } as never);
+      orders.findOne.mockResolvedValueOnce({
+        id: 'active-other-order',
+      } as never);
       await expect(service.create(USER_ID, dto)).rejects.toThrow(
         "Sizda boshqa do'kondan faol buyurtma mavjud",
       );

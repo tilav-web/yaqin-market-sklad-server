@@ -32,6 +32,10 @@ import {
   SellerOrdersController,
 } from './orders.controller';
 import { OrdersService } from './orders.service';
+import { OrderAdminService } from './services/order-admin.service';
+import { OrderChatService } from './services/order-chat.service';
+import { OrderLifecycleCronService } from './services/order-lifecycle-cron.service';
+import { OrderReviewsService } from './services/order-reviews.service';
 
 @Module({
   imports: [
@@ -68,7 +72,19 @@ import { OrdersService } from './orders.service';
     AdminOrdersController,
     AdminReviewsController,
   ],
-  providers: [OrdersService],
-  exports: [OrdersService],
+  providers: [
+    OrdersService,
+    OrderReviewsService,
+    OrderChatService,
+    OrderAdminService,
+    OrderLifecycleCronService,
+  ],
+  exports: [
+    OrdersService,
+    OrderReviewsService,
+    OrderChatService,
+    OrderAdminService,
+    OrderLifecycleCronService,
+  ],
 })
 export class OrdersModule {}
