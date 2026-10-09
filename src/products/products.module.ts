@@ -26,6 +26,8 @@ import {
   SellerProductsExtraController,
 } from './products.controller';
 import { ProductsService } from './products.service';
+import { ProductCatalogAdminService } from './services/product-catalog-admin.service';
+import { ProductInventoryService } from './services/product-inventory.service';
 
 @Module({
   imports: [
@@ -54,7 +56,17 @@ import { ProductsService } from './products.service';
     AdminGlobalCatalogController,
     ExcelController,
   ],
-  providers: [ProductsService, ExcelService, AdminCatalogImportService],
-  exports: [ProductsService],
+  providers: [
+    ProductsService,
+    ProductInventoryService,
+    ProductCatalogAdminService,
+    ExcelService,
+    AdminCatalogImportService,
+  ],
+  exports: [
+    ProductsService,
+    ProductInventoryService,
+    ProductCatalogAdminService,
+  ],
 })
 export class ProductsModule {}
