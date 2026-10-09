@@ -10,6 +10,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { customAlphabet } from 'nanoid';
 
 import { OrderAdminService } from './services/order-admin.service';
+import { OrderChatCacheService } from './services/order-chat-cache.service';
 import { OrderChatService } from './services/order-chat.service';
 import { OrderLifecycleCronService } from './services/order-lifecycle-cron.service';
 import { OrderReviewsService } from './services/order-reviews.service';
@@ -132,6 +133,8 @@ export class OrdersService {
     @Optional()
     private readonly chatService?: OrderChatService,
     @Optional()
+    private readonly chatCacheService?: OrderChatCacheService,
+    @Optional()
     private readonly adminService?: OrderAdminService,
     @Optional()
     private readonly lifecycleCronService?: OrderLifecycleCronService,
@@ -152,6 +155,10 @@ export class OrdersService {
     );
   }
 
+  private getChatCacheService(): OrderChatCacheService {
+    return this.chatCacheService ?? new OrderChatCacheService(this.redis);
+  }
+
   private getChatService(): OrderChatService {
     return (
       this.chatService ??
@@ -161,6 +168,7 @@ export class OrdersService {
         this.staff,
         this.realtime,
         this.push,
+        this.getChatCacheService(),
       )
     );
   }
@@ -1853,8 +1861,13 @@ export class OrdersService {
   }
 
   /** In-order chat message listing (delegated to OrderChatService). */
-  async listMessages(userId: string, orderId: string): Promise<ChatMessage[]> {
-    return this.getChatService().listMessages(userId, orderId);
+  async listMessages(
+    userId: string,
+    orderId: string,
+    before?: string,
+    limit?: number,
+  ): Promise<ChatMessage[]> {
+    return this.getChatService().listMessages(userId, orderId, before, limit);
   }
 
   /** Send in-order chat message (delegated to OrderChatService). */

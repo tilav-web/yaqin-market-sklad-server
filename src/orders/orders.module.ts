@@ -33,6 +33,7 @@ import {
 } from './orders.controller';
 import { OrdersService } from './orders.service';
 import { OrderAdminService } from './services/order-admin.service';
+import { OrderChatCacheService } from './services/order-chat-cache.service';
 import { OrderChatService } from './services/order-chat.service';
 import { OrderLifecycleCronService } from './services/order-lifecycle-cron.service';
 import { OrderReviewsService } from './services/order-reviews.service';
@@ -76,6 +77,7 @@ import { OrderReviewsService } from './services/order-reviews.service';
     OrdersService,
     OrderReviewsService,
     OrderChatService,
+    OrderChatCacheService,
     OrderAdminService,
     OrderLifecycleCronService,
   ],
@@ -83,6 +85,7 @@ import { OrderReviewsService } from './services/order-reviews.service';
     OrdersService,
     OrderReviewsService,
     OrderChatService,
+    OrderChatCacheService,
     OrderAdminService,
     OrderLifecycleCronService,
   ],

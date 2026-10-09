@@ -245,8 +245,15 @@ export class OrdersController {
   listMessages(
     @CurrentUser() user: JwtPayload,
     @Param('id', ParseUUIDPipe) id: string,
+    @Query('before') before?: string,
+    @Query('limit') limit?: number,
   ) {
-    return this.orders.listMessages(user.sub, id);
+    return this.orders.listMessages(
+      user.sub,
+      id,
+      before,
+      limit ? Number(limit) : undefined,
+    );
   }
 
   @Post(':id/messages')

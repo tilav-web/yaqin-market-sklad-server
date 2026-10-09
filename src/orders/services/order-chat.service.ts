@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { FindOptionsWhere, LessThan, Repository } from 'typeorm';
 
 import { PushService } from '../../push/push.service';
 import { RealtimeGateway } from '../../realtime/realtime.gateway';
@@ -12,6 +12,7 @@ import { ShopStaff } from '../../shops/entities/shop-staff.entity';
 import { Shop } from '../../shops/entities/shop.entity';
 import { ChatMessage } from '../entities/chat-message.entity';
 import { Order, OrderStatus } from '../entities/order.entity';
+import { OrderChatCacheService } from './order-chat-cache.service';
 
 @Injectable()
 export class OrderChatService {
@@ -24,6 +25,7 @@ export class OrderChatService {
     private readonly staff: Repository<ShopStaff>,
     private readonly realtime: RealtimeGateway,
     private readonly push: PushService,
+    private readonly cache: OrderChatCacheService,
   ) {}
 
   /** Verify the user is a party to the order and return { order, fromShop }. */
@@ -47,13 +49,44 @@ export class OrderChatService {
     return { order, fromShop: isShop };
   }
 
-  async listMessages(userId: string, orderId: string): Promise<ChatMessage[]> {
+  async listMessages(
+    userId: string,
+    orderId: string,
+    before?: string,
+    limit: number = 50,
+  ): Promise<ChatMessage[]> {
     await this.authorizeChat(userId, orderId);
-    return this.chat.find({
-      where: { orderId },
+
+    // 1. If loading latest without cursor, check Redis cache first
+    if (!before) {
+      const cached = await this.cache.getRecentMessages(orderId);
+      if (cached && cached.length > 0) {
+        return cached;
+      }
+    }
+
+    // 2. Query Postgres (Cursor pagination or cache miss)
+    const take = Math.min(Math.max(limit, 1), 100);
+    const where: FindOptionsWhere<ChatMessage> = { orderId };
+    if (before) {
+      const beforeDate = new Date(before);
+      if (!isNaN(beforeDate.getTime())) {
+        where.createdAt = LessThan(beforeDate);
+      }
+    }
+
+    const messages = await this.chat.find({
+      where,
       order: { createdAt: 'ASC' },
-      take: 200,
+      take,
     });
+
+    // 3. If cache miss for latest messages, populate Redis cache
+    if (!before && messages.length > 0) {
+      void this.cache.seedRecentMessages(orderId, messages);
+    }
+
+    return messages;
   }
 
   async sendMessage(
@@ -70,6 +103,8 @@ export class OrderChatService {
         text: text.trim(),
       }),
     );
+    // Write-through to Redis cache
+    void this.cache.pushMessage(orderId, message);
     // Deliver live to both parties.
     if (order.userId)
       this.realtime.emitToUser(order.userId, 'chat:message', message);
@@ -174,6 +209,9 @@ export class OrderChatService {
         text,
       }),
     );
+
+    // Write-through to Redis cache
+    void this.cache.pushMessage(order.id, message);
 
     // Deliver live to customer and shop staff
     if (order.userId) {

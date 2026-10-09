@@ -140,6 +140,26 @@ export class RealtimeGateway implements OnGatewayConnection {
       client.on('leave:order', (orderId: unknown) => {
         if (typeof orderId === 'string') void client.leave(`order:${orderId}`);
       });
+
+      // Customer or shop staff typing indicator
+      client.on('typing:order', (data: unknown) => {
+        if (
+          typeof data === 'object' &&
+          data !== null &&
+          'orderId' in data &&
+          typeof (data as { orderId: unknown }).orderId === 'string'
+        ) {
+          const { orderId, isTyping } = data as {
+            orderId: string;
+            isTyping: boolean;
+          };
+          client.to(`order:${orderId}`).emit('chat:typing', {
+            orderId,
+            userId: payload.sub,
+            isTyping: Boolean(isTyping),
+          });
+        }
+      });
     } catch {
       client.disconnect(true);
     }
