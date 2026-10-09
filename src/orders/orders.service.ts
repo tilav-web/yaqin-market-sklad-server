@@ -820,6 +820,11 @@ export class OrdersService {
     this.emitOrderEvent('order:new', created);
     void this.notifyNewOrder(shop, created);
     if (lowAlerts.length > 0) void this.notifyLowStock(shop, lowAlerts);
+    void this.getChatService()
+      .postStatusMessage(created, OrderStatus.New)
+      .catch((err) =>
+        this.logger.error(`Initial order chat message failed: ${err.message}`),
+      );
     return created;
   }
 
@@ -1405,6 +1410,11 @@ export class OrdersService {
     }
 
     this.emitOrderEvent('order:updated', saved);
+    void this.getChatService()
+      .postStatusMessage(saved, nextStatus, note)
+      .catch((err) =>
+        this.logger.error(`Status order chat message failed: ${err.message}`),
+      );
     // Notify the customer when the shop advances the order; notify the shop
     // when the customer confirms delivery or cancels.
     // Shop-side actor (owner OR staff) → notify the customer; customer confirming
@@ -1854,6 +1864,17 @@ export class OrdersService {
     text: string,
   ): Promise<ChatMessage> {
     return this.getChatService().sendMessage(userId, orderId, text);
+  }
+
+  /** Automatically posts an order status system message into the chat. */
+  async postStatusChatMessage(
+    order: Pick<Order, 'id' | 'orderNumber' | 'userId' | 'shopId'> & {
+      shop?: Pick<Shop, 'ownerId'>;
+    },
+    status: OrderStatus,
+    note?: string,
+  ): Promise<ChatMessage | null> {
+    return this.getChatService().postStatusMessage(order, status, note);
   }
 
   /** Reminds customers to rate delivered orders (delegated to OrderReviewsService). */
