@@ -163,10 +163,13 @@ export class OrderChatService {
       shopOwnerId = dbOrder?.shop?.ownerId;
     }
 
+    const senderUserId = shopOwnerId || order.userId;
+    if (!senderUserId) return null;
+
     const message = await this.chat.save(
       this.chat.create({
         orderId: order.id,
-        senderUserId: shopOwnerId || order.userId,
+        senderUserId,
         fromShop: true,
         text,
       }),
