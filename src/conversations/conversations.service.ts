@@ -9,7 +9,10 @@ import { Repository } from 'typeorm';
 import { PushService } from '../push/push.service';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { Shop } from '../shops/entities/shop.entity';
-import { ShopStaff } from '../shops/entities/shop-staff.entity';
+import {
+  computePermissionsForRoles,
+  ShopStaff,
+} from '../shops/entities/shop-staff.entity';
 import { User } from '../users/entities/user.entity';
 import { SendConversationMessageDto } from './dto/send-conversation-message.dto';
 import { Conversation } from './entities/conversation.entity';
@@ -45,11 +48,17 @@ export class ConversationsService {
     });
     const staffMemberships = await this.staff.find({
       where: { userId, isActive: true },
-      select: { shopId: true },
     });
+    const chatStaffShopIds = staffMemberships
+      .filter((m) =>
+        computePermissionsForRoles(m.roles || [], m.permissions || []).includes(
+          'orders.chat',
+        ),
+      )
+      .map((s) => s.shopId);
     const sellerShopIds = [
       ...ownedShops.map((s) => s.id),
-      ...staffMemberships.map((s) => s.shopId),
+      ...chatStaffShopIds,
     ];
 
     const qb = this.conversations
@@ -269,6 +278,23 @@ export class ConversationsService {
       },
       { isRead: true },
     );
+
+    const readPayload = {
+      conversationId,
+      readByUserId: userId,
+      fromShop,
+      readAt: new Date().toISOString(),
+    };
+    this.realtime.emitToUser(
+      conversation.customerId,
+      'conversation:read',
+      readPayload,
+    );
+    this.realtime.emitToShop(
+      conversation.shopId,
+      'conversation:read',
+      readPayload,
+    );
   }
 
   private async notifyParticipants(
@@ -311,9 +337,14 @@ export class ConversationsService {
         const staffMembers = await this.staff.find({
           where: { shopId: conversation.shopId, isActive: true },
         });
+        const chatStaffMembers = staffMembers.filter((m) =>
+          computePermissionsForRoles(m.roles || [], m.permissions || []).includes(
+            'orders.chat',
+          ),
+        );
         const recipients = [
           conversation.shop.ownerId,
-          ...staffMembers.map((s) => s.userId),
+          ...chatStaffMembers.map((s) => s.userId),
         ].filter((id) => id && id !== senderUserId);
 
         await this.push.sendToUsers([...new Set(recipients)], payload);
