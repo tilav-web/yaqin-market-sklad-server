@@ -10,7 +10,7 @@ const MAX_RECENT_MESSAGES = 50;
 export class OrderChatCacheService {
   private readonly logger = new Logger(OrderChatCacheService.name);
 
-  constructor(private readonly redis: RedisService) { }
+  constructor(private readonly redis: RedisService) {}
 
   private getCacheKey(orderId: string): string {
     return `chat:order:${orderId}:recent`;
@@ -28,7 +28,9 @@ export class OrderChatCacheService {
 
       return raw.map((item) => JSON.parse(item) as ChatMessage);
     } catch (err: unknown) {
-      this.logger.warn(`Failed to read chat cache for order ${orderId}: ${err}`);
+      this.logger.warn(
+        `Failed to read chat cache for order ${orderId}: ${err}`,
+      );
       return null;
     }
   }
@@ -48,7 +50,9 @@ export class OrderChatCacheService {
         .expire(key, CACHE_TTL_SEC)
         .exec();
     } catch (err: unknown) {
-      this.logger.warn(`Failed to push chat message to cache for order ${orderId}: ${err}`);
+      this.logger.warn(
+        `Failed to push chat message to cache for order ${orderId}: ${err}`,
+      );
     }
   }
 
@@ -73,7 +77,9 @@ export class OrderChatCacheService {
         .expire(key, CACHE_TTL_SEC)
         .exec();
     } catch (err: unknown) {
-      this.logger.warn(`Failed to seed chat cache for order ${orderId}: ${err}`);
+      this.logger.warn(
+        `Failed to seed chat cache for order ${orderId}: ${err}`,
+      );
     }
   }
 
@@ -84,7 +90,9 @@ export class OrderChatCacheService {
     try {
       await this.redis.client.del(this.getCacheKey(orderId));
     } catch (err: unknown) {
-      this.logger.warn(`Failed to invalidate chat cache for order ${orderId}: ${err}`);
+      this.logger.warn(
+        `Failed to invalidate chat cache for order ${orderId}: ${err}`,
+      );
     }
   }
 }

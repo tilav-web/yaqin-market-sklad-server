@@ -56,10 +56,7 @@ export class ConversationsService {
         ),
       )
       .map((s) => s.shopId);
-    const sellerShopIds = [
-      ...ownedShops.map((s) => s.id),
-      ...chatStaffShopIds,
-    ];
+    const sellerShopIds = [...ownedShops.map((s) => s.id), ...chatStaffShopIds];
 
     const qb = this.conversations
       .createQueryBuilder('c')
@@ -83,17 +80,17 @@ export class ConversationsService {
       return {
         id: c.id,
         shopId: c.shopId,
-        shopName: c.shop.name,
-        shopPhotos: c.shop.photos,
+        shopName: c.shop?.name ?? '',
+        shopPhotos: c.shop?.photos ?? [],
         customerId: c.customerId,
         customerName:
-          c.customer.name ||
-          [c.customer.firstName, c.customer.lastName]
+          c.customer?.name ||
+          [c.customer?.firstName, c.customer?.lastName]
             .filter(Boolean)
             .join(' ') ||
           'Foydalanuvchi',
-        customerPhone: c.customer.phone,
-        customerAvatarUrl: c.customer.avatarUrl,
+        customerPhone: c.customer?.phone ?? '',
+        customerAvatarUrl: c.customer?.avatarUrl ?? null,
         lastMessageText: c.lastMessageText,
         lastMessageAt: c.lastMessageAt,
         unreadCount: isSellerSide ? c.unreadCountShop : c.unreadCountCustomer,
@@ -138,12 +135,12 @@ export class ConversationsService {
     return {
       id: conv.id,
       shopId: conv.shopId,
-      shopName: conv.shop.name,
-      shopPhotos: conv.shop.photos,
+      shopName: conv.shop?.name ?? '',
+      shopPhotos: conv.shop?.photos ?? [],
       customerId: conv.customerId,
       customerName:
-        conv.customer.name ||
-        [conv.customer.firstName, conv.customer.lastName]
+        conv.customer?.name ||
+        [conv.customer?.firstName, conv.customer?.lastName]
           .filter(Boolean)
           .join(' ') ||
         'Foydalanuvchi',
@@ -338,9 +335,10 @@ export class ConversationsService {
           where: { shopId: conversation.shopId, isActive: true },
         });
         const chatStaffMembers = staffMembers.filter((m) =>
-          computePermissionsForRoles(m.roles || [], m.permissions || []).includes(
-            'orders.chat',
-          ),
+          computePermissionsForRoles(
+            m.roles || [],
+            m.permissions || [],
+          ).includes('orders.chat'),
         );
         const recipients = [
           conversation.shop.ownerId,
